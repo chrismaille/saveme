@@ -1,0 +1,46 @@
+.saveme-status-dot {
+    font-size: 1.1em;
+}
+
+.saveme-status-idle {
+    color: #2ec27e;
+}
+
+.saveme-status-running {
+    color: #3584e4;
+}
+
+.saveme-status-paused,
+.saveme-status-disabled {
+    color: #9a9996;
+}
+
+.saveme-status-waiting-source,
+.saveme-status-waiting-destination,
+.saveme-status-offline {
+    color: #e5a50a;
+}
+
+.saveme-status-error,
+.saveme-status-needs-auth,
+.saveme-status-delete-guard {
+    color: #e01b24;
+}
+
+.saveme-mono {
+    font-family: monospace;
+}
+
+.saveme-log-view {
+    font-family: monospace;
+    font-size: 0.9em;
+}
+
+.saveme-dim {
+    opacity: 0.75;
+}
+
+.saveme-url {
+    font-family: monospace;
+    font-size: 0.9em;
+}

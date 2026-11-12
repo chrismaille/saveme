@@ -1,0 +1,92 @@
+/* SaveMe extension styles */
+
+.saveme-header {
+    spacing: 8px;
+    padding: 4px 6px;
+}
+
+.saveme-title {
+    font-weight: bold;
+    font-size: 1.05em;
+}
+
+.saveme-job-row {
+    spacing: 4px;
+    padding: 6px 4px;
+}
+
+.saveme-job-top {
+    spacing: 6px;
+}
+
+.saveme-job-name {
+    font-weight: bold;
+}
+
+.saveme-job-status {
+    font-size: 0.85em;
+    opacity: 0.85;
+}
+
+.saveme-job-detail {
+    font-size: 0.8em;
+    opacity: 0.7;
+}
+
+.saveme-job-message {
+    font-size: 0.8em;
+    color: #ffb74d;
+}
+
+.saveme-actions {
+    spacing: 4px;
+    padding-top: 2px;
+}
+
+.saveme-action-button {
+    padding: 2px 4px;
+    border-radius: 4px;
+}
+
+.saveme-action-button:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+.saveme-dot {
+    font-size: 0.9em;
+}
+
+.saveme-status-idle {
+    color: #66bb6a;
+}
+
+.saveme-status-running {
+    color: #42a5f5;
+}
+
+.saveme-status-paused,
+.saveme-status-disabled {
+    color: #9e9e9e;
+}
+
+.saveme-status-waiting-source,
+.saveme-status-waiting-destination,
+.saveme-status-offline {
+    color: #ffa726;
+}
+
+.saveme-status-error,
+.saveme-status-needs-auth,
+.saveme-status-delete-guard {
+    color: #ef5350;
+}
+
+.saveme-empty {
+    padding: 12px;
+    text-align: center;
+    opacity: 0.8;
+}
+
+.saveme-footer {
+    spacing: 4px;
+}

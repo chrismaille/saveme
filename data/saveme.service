@@ -1,0 +1,14 @@
+[Unit]
+Description=SaveMe sync and backup daemon
+Documentation=https://github.com/chrismaille/save_me
+After=graphical-session.target
+
+[Service]
+Type=dbus
+BusName=io.github.chrismaille.SaveMe.Daemon
+ExecStart=/usr/bin/saveme-daemon
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

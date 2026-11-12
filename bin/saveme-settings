@@ -1,0 +1,2 @@
+#!/bin/sh
+exec gjs -m "$(dirname "$0")/../app/main.js" "$@"

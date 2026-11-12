@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=SaveMe Daemon
+Comment=Background sync and backup daemon
+Exec=saveme-daemon
+Icon=io.github.chrismaille.SaveMe
+NoDisplay=true
+DBusActivatable=true
+StartupNotify=false

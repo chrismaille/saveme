@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=SaveMe
+GenericName=Sync and Backup
+Comment=Real-time one-way sync and versioned backups
+Exec=saveme-settings
+Icon=io.github.chrismaille.SaveMe
+Terminal=false
+Categories=Utility;FileTools;
+Keywords=sync;backup;cloud;drive;dropbox;onedrive;
+StartupNotify=true

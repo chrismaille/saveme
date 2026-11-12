@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=SaveMe Daemon
+Comment=Start the SaveMe background daemon at login
+Exec=saveme-daemon
+Icon=io.github.chrismaille.SaveMe
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

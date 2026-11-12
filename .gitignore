@@ -1,0 +1,26 @@
+# Build and development artifacts
+build/
+dist/
+debian/.debhelper/
+debian/debhelper-build-stamp
+debian/files
+debian/*.substvars
+debian/*.debhelper
+debian/saveme/
+
+# Development tools (downloaded, not versioned)
+tools/rclone
+tools/rclone-*
+tools/*.zip
+
+# Translations
+*.mo
+
+# IDE
+.idea/
+*.iml
+
+# OS / editor noise
+.DS_Store
+*~
+*.swp
