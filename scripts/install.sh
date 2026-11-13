@@ -2,13 +2,11 @@
 # SaveMe installer / updater / uninstaller.
 #
 # Local checkout:
-#   ./scripts/install.sh                  # install or repair
-#   ./scripts/install.sh --update         # update, preserving user data
+#   ./scripts/install.sh                  # install or update
 #   ./scripts/install.sh --uninstall --purge --yes
 #
 # Published:
 #   curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/master/scripts/install.sh | sh
-#   curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/master/scripts/install.sh | sh -s -- --update
 #   curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/master/scripts/install.sh | sh -s -- --uninstall --purge --yes
 #
 # Run as your desktop user, not with sudo. The script calls sudo only for apt.
@@ -24,7 +22,6 @@ YES=0
 DRY_RUN=0
 WITH_EXTENSION=0
 START_DAEMON=1
-FORCE=0
 FORCE_REMOTE=0
 VERSION=""
 DEB_OVERRIDE=""
@@ -41,19 +38,15 @@ SaveMe installer
 
 Usage:
   install.sh [options]
-  install.sh --update [options]
   install.sh --uninstall [options]
 
-Actions:
-  --install            Install or repair SaveMe (default)
-  --update             Update an installed SaveMe, preserving user data
-  --uninstall          Remove SaveMe (daemon, extension and package)
+The default action installs or updates SaveMe automatically. User data is
+preserved. Use --uninstall to remove it.
 
 Options:
   --purge              With --uninstall: also remove config, tokens, logs and history
   --yes                Do not prompt for confirmation
   --dry-run            Print the plan without changing anything
-  --force              Reinstall even when the version is unchanged
   --with-extension     Install/update the GNOME Shell extension (optional)
   --no-extension       Do not install or update the GNOME Shell extension
   --app-only           Alias for --no-extension (default)
@@ -68,8 +61,7 @@ Options:
 
 Examples:
   ./scripts/install.sh
-  ./scripts/install.sh --update
-  ./scripts/install.sh --update --version 1.0.0 --no-extension
+  ./scripts/install.sh --with-extension
   ./scripts/install.sh --dry-run
   ./scripts/install.sh --uninstall --purge --yes
 EOF
@@ -77,13 +69,10 @@ EOF
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --install) ACTION="install"; shift ;;
-        --update) ACTION="update"; shift ;;
         --uninstall) ACTION="uninstall"; shift ;;
         --purge) PURGE=1; shift ;;
         --yes|-y) YES=1; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
-        --force) FORCE=1; shift ;;
         --no-extension|--app-only) WITH_EXTENSION=0; shift ;;
         --with-extension) WITH_EXTENSION=1; shift ;;
         --no-start) START_DAEMON=0; shift ;;
@@ -442,12 +431,10 @@ install_extension() {
 
 do_install() {
     current="$(package_version)"
-    if [ "$ACTION" = "update" ] && [ -z "$current" ]; then
-        say "SaveMe is not installed. Use --install first."
-        exit 1
-    fi
-    if [ "$ACTION" = "install" ] && [ -n "$current" ]; then
-        say "SaveMe $current is already installed; repairing/updating it."
+    if [ -n "$current" ]; then
+        say "SaveMe $current is installed; updating."
+    else
+        say "SaveMe is not installed; installing."
     fi
 
     if ! pick_local_deb; then
@@ -491,14 +478,8 @@ do_install() {
     fi
 
     target="$(target_version)"
-    if [ "$ACTION" = "update" ] && [ "$DRY_RUN" -eq 0 ] &&
-        [ -n "$current" ] && [ -n "$target" ] && [ "$current" = "$target" ] &&
-        [ "$FORCE" -ne 1 ]; then
-        say "SaveMe is already at $current. Use --force to reinstall."
-        return 0
-    fi
 
-    say "SaveMe $ACTION"
+    say "SaveMe install/update"
     say "  package:   $DEB"
     if [ -n "$current" ]; then
         say "  installed: $current"

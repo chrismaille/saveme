@@ -43,8 +43,9 @@ run_plan() {
     sh "$ROOT_DIR/scripts/install.sh" --dry-run "$@"
 }
 
-OUTPUT="$(run_plan --install --no-extension --deb "$FAKE_DEB")"
-printf '%s\n' "$OUTPUT" | grep -q 'SaveMe install'
+OUTPUT="$(run_plan --no-extension --deb "$FAKE_DEB")"
+printf '%s\n' "$OUTPUT" | grep -q 'SaveMe install/update'
+printf '%s\n' "$OUTPUT" | grep -q 'is installed; updating'
 printf '%s\n' "$OUTPUT" | grep -q 'extension: skipped'
 if printf '%s\n' "$OUTPUT" | grep -q 'shell-extension.zip'; then
     echo "app-only install must not download the extension" >&2
@@ -52,20 +53,11 @@ if printf '%s\n' "$OUTPUT" | grep -q 'shell-extension.zip'; then
 fi
 printf '%s\n' "$OUTPUT" | grep -q 'apt-get install -y --reinstall'
 
-OUTPUT="$(run_plan --install --deb "$FAKE_DEB")"
+OUTPUT="$(run_plan --deb "$FAKE_DEB")"
 printf '%s\n' "$OUTPUT" | grep -q 'extension: skipped'
 
-OUTPUT="$(run_plan --update --no-extension --deb "$FAKE_DEB")"
-printf '%s\n' "$OUTPUT" | grep -q 'SaveMe update'
-printf '%s\n' "$OUTPUT" | grep -q 'installed: 1.0.0'
-printf '%s\n' "$OUTPUT" | grep -q 'extension: skipped'
-
-if SAVEME_FAKE_NOT_INSTALLED=1 sh "$ROOT_DIR/scripts/install.sh" --update \
-    --dry-run --no-extension --deb "$FAKE_DEB" >"$TMP_DIR/update-missing.log" 2>&1; then
-    echo "--update must require an existing installation" >&2
-    exit 1
-fi
-grep -q 'not installed' "$TMP_DIR/update-missing.log"
+OUTPUT="$(SAVEME_FAKE_NOT_INSTALLED=1 run_plan --deb "$FAKE_DEB")"
+printf '%s\n' "$OUTPUT" | grep -q 'is not installed; installing'
 
 for path in "$XDG_STATE_HOME/saveme/logs" "$XDG_STATE_HOME/saveme/tmp" \
     "$XDG_STATE_HOME/saveme/filters" "$XDG_CACHE_HOME/saveme" \
@@ -85,7 +77,7 @@ OUTPUT="$(sh "$ROOT_DIR/scripts/install.sh" --uninstall --purge --yes --dry-run 
     --no-extension)"
 printf '%s\n' "$OUTPUT" | grep -q 'including user configuration'
 
-if sh "$ROOT_DIR/scripts/install.sh" --install --purge --dry-run \
+if sh "$ROOT_DIR/scripts/install.sh" --purge --dry-run \
     --no-extension >/dev/null 2>&1; then
     echo "--purge must require --uninstall" >&2
     exit 1

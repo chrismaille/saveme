@@ -25,15 +25,13 @@ Os artefatos ficam em `dist/`:
 Com um checkout local:
 
 ```bash
-./scripts/install.sh                 # instalar ou reparar (app + daemon + CLI)
-./scripts/install.sh --update        # atualizar preservando dados
+./scripts/install.sh                  # instalar ou atualizar (app + daemon + CLI)
 ./scripts/install.sh --with-extension # incluir/atualizar a extensão GNOME
 ```
 
 O script:
 
-- verifica a versão instalada e, em `--update`, recusa versões iguais sem
-  `--force`;
+- detecta se o SaveMe já está instalado e atualiza automaticamente;
 - para o app e o daemon existentes (`systemctl --user` + `pkill`);
 - reinstala/atualiza o `.deb` com `apt-get install --reinstall`;
 - instala a extensão somente com `--with-extension` (ou `--extension PATH`);
@@ -44,7 +42,6 @@ Use `--dry-run` para ver exatamente o que será feito:
 
 ```bash
 ./scripts/install.sh --dry-run
-./scripts/install.sh --update --dry-run
 ```
 
 O log completo da instalação fica em:
@@ -59,9 +56,7 @@ script anexa ao log o `systemctl status` e o `journalctl` do serviço.
 Opções úteis:
 
 ```bash
-./scripts/install.sh --install          # instalar/reparar (padrão)
-./scripts/install.sh --update           # atualizar uma instalação existente
-./scripts/install.sh --force            # reinstalar a mesma versão
+./scripts/install.sh                    # instalar ou atualizar (padrão)
 ./scripts/install.sh --with-extension   # instalar/atualizar a extensão GNOME
 ./scripts/install.sh --no-extension     # app-only (padrão)
 ./scripts/install.sh --app-only         # alias de --no-extension
@@ -76,7 +71,7 @@ Quando o repositório e os releases estiverem publicados:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/master/scripts/install.sh | sh
-curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/master/scripts/install.sh | sh -s -- --update
+curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/master/scripts/install.sh | sh -s -- --with-extension
 ```
 
 O script baixa `saveme_<arch>.deb` e, quando `--with-extension` é usado, o zip
