@@ -55,7 +55,7 @@ Opções úteis:
 Quando o repositório e os releases estiverem publicados:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/master/scripts/install.sh | sh
 ```
 
 O script baixa `saveme_<arch>.deb` e o zip da extensão do release mais recente,
@@ -136,7 +136,7 @@ Com o script (recomendado):
 Ou, quando publicado:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/main/scripts/uninstall.sh | sh -s -- --purge --yes
+curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/master/scripts/uninstall.sh | sh -s -- --purge --yes
 ```
 
 O script para o daemon, desabilita `saveme.service`, remove a extensão, apaga

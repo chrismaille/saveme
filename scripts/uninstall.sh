@@ -5,7 +5,7 @@
 #   ./scripts/uninstall.sh --purge --yes
 #
 # Published:
-#   curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/main/scripts/uninstall.sh | sh -s -- --purge --yes
+#   curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/master/scripts/uninstall.sh | sh -s -- --purge --yes
 
 set -eu
 
@@ -23,10 +23,19 @@ if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/install.sh" ]; then
 fi
 
 REPO="${SAVEME_REPO:-chrismaille/save_me}"
-URL="https://raw.githubusercontent.com/$REPO/main/scripts/install.sh"
 TMP="$(mktemp)"
 trap 'rm -f "$TMP"' EXIT INT TERM
 
-echo "Downloading $URL"
-curl -fsSL "$URL" -o "$TMP"
+for branch in main master; do
+    URL="https://raw.githubusercontent.com/$REPO/$branch/scripts/install.sh"
+    if curl -fsSL "$URL" -o "$TMP" 2>/dev/null; then
+        break
+    fi
+done
+
+if [ ! -s "$TMP" ]; then
+    echo "Cannot download install.sh from $REPO." >&2
+    exit 1
+fi
+
 sh "$TMP" --uninstall "$@"

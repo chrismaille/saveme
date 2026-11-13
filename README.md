@@ -53,7 +53,7 @@ Shell extension and starts the daemon again. Use `--dry-run` to see the plan.
 After the GitHub releases are published, the one-liner is:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/master/scripts/install.sh | sh
 ```
 
 Full instructions: [docs/INSTALL.md](docs/INSTALL.md).
