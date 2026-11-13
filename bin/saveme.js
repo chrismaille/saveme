@@ -3,13 +3,13 @@
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 import system from 'system';
-import {Logger} from '../src/log.js';
-import {ConfigStore} from '../src/config.js';
-import {StateStore} from '../src/state.js';
-import {VolumeResolver} from '../src/volumes.js';
-import {Rclone} from '../src/rclone.js';
-import {JobRunner} from '../src/runner.js';
-import {RecursiveWatcher, WatcherLimitError, getInotifyLimit} from '../src/watcher.js';
+import {Logger} from '../src/adapters/system/logger.js';
+import {ConfigStore} from '../src/adapters/persistence/config-repository.js';
+import {StateStore} from '../src/adapters/persistence/state-repository.js';
+import {VolumeResolver} from '../src/adapters/gio/volume-catalog.js';
+import {RcloneTransferEngine as Rclone} from '../src/adapters/rclone/transfer-engine.js';
+import {createJobRunner} from '../src/composition/runner.js';
+import {RecursiveWatcher, WatcherLimitError, getInotifyLimit} from '../src/adapters/gio/watcher.js';
 import {ChangeQueue} from '../src/queue.js';
 import {
     JOB_TYPES,
@@ -96,7 +96,7 @@ function makeContext(options) {
         configPath: rcloneConfigFile(),
         logger,
     });
-    const runner = new JobRunner({rclone, volumes, logger, state, config});
+    const runner = createJobRunner({rclone, volumes, logger, state});
     return {logger, config, state, volumes, rclone, runner};
 }
 

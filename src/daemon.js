@@ -3,20 +3,25 @@ import GLib from 'gi://GLib';
 import GLibUnix from 'gi://GLibUnix';
 import GObject from 'gi://GObject';
 import system from 'system';
-import {ConfigStore} from './config.js';
-import {StateStore} from './state.js';
-import {VolumeResolver} from './volumes.js';
-import {Rclone, findRclone, isSuccessExit, exitCodeMessage} from './rclone.js';
+import {ConfigStore} from './adapters/persistence/config-repository.js';
+import {StateStore} from './adapters/persistence/state-repository.js';
+import {VolumeResolver} from './adapters/gio/volume-catalog.js';
 import {
-    JobRunner,
+    RcloneTransferEngine as Rclone,
+    exitCodeMessage,
+    findRclone,
+    isSuccessExit,
+} from './adapters/rclone/transfer-engine.js';
+import {
     backupCurrentFor,
     joinRclonePath,
     versionsRootFor,
     parseVersionTimestamp,
 } from './runner.js';
+import {createJobRunner, createRestoreService} from './composition/runner.js';
 import {JobManager} from './supervisor.js';
 import {RemoteAuthManager} from './auth.js';
-import {Logger, readTextTail} from './log.js';
+import {Logger, readTextTail} from './adapters/system/logger.js';
 import {DAEMON_INTERFACE} from './dbus.js';
 import {
     DAEMON_APP_ID,
@@ -41,10 +46,6 @@ function getPid() {
 
 function validateVersionName(name) {
     return parseVersionTimestamp(name) !== null && !name.includes('/');
-}
-
-function validateRelativePath(path) {
-    return !String(path).split('/').some(part => part === '..');
 }
 
 export class DaemonApi {
@@ -152,6 +153,7 @@ export const SaveMeDaemonApplication = GObject.registerClass({
         this._volumes = null;
         this._rclone = null;
         this._runner = null;
+        this._restore = null;
         this._manager = null;
         this._auth = null;
         this._dbus = null;
@@ -199,13 +201,13 @@ export const SaveMeDaemonApplication = GObject.registerClass({
             this._logger.error(`rclone unavailable: ${e.message}`);
         }
 
-        this._runner = new JobRunner({
+        this._runner = createJobRunner({
             rclone: this._rclone,
             volumes: this._volumes,
             logger: this._logger,
             state: this._state,
-            config: this._config,
         });
+        this._restore = createRestoreService({rclone: this._rclone});
         this._manager = new JobManager({
             config: this._config,
             state: this._state,
@@ -632,32 +634,10 @@ export const SaveMeDaemonApplication = GObject.registerClass({
         const job = this._config.getJob(payload.jobId);
         if (!job)
             throw new Error(`Job not found: ${payload.jobId}`);
-        if (!payload.target)
-            throw new Error('Restore target is required.');
-        if (!validateRelativePath(payload.target) || !validateRelativePath(payload.path || ''))
-            throw new Error('Invalid restore path.');
-        const dest = this._resolveJobDestination(job);
-        let source;
-        if (payload.version) {
-            if (!validateVersionName(payload.version))
-                throw new Error('Invalid version name.');
-            const root = versionsRootFor(job, dest);
-            source = joinPath(root, payload.version);
-        } else {
-            source = job.type === 'backup' ? backupCurrentFor(job, dest) : dest;
-        }
-        if (payload.path)
-            source = `${String(source).replace(/\/+$/, '')}/${String(payload.path).replace(/^\/+/, '')}`;
-        const args = ['copy', source, payload.target, '--create-empty-src-dirs'];
-        if (payload.dryRun)
-            args.push('--dry-run');
-        const result = this._rclone.runCapture(args);
-        if (!isSuccessExit(result.exitCode)) {
-            throw new Error(result.stderr.trim() ||
-                `Restore failed: ${exitCodeMessage(result.exitCode)}`);
-        }
+        const destination = this._resolveJobDestination(job);
+        const result = this._restore.restore({job, destination, payload});
         this._emitSnapshot(true);
-        return JSON.stringify({ok: true, dryRun: Boolean(payload.dryRun), source});
+        return JSON.stringify(result);
     }
 
     beginRemoteAuth(provider, name, optionsJson) {

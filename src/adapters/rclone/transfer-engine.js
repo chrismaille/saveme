@@ -1,7 +1,7 @@
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
-import {isExecutable} from './util.js';
-import {bundledRclone, projectRclone} from './paths.js';
+import {isExecutable} from '../../util.js';
+import {bundledRclone, projectRclone} from '../../paths.js';
 import {
     emptyRcloneStats,
     exitCodeMessage,
@@ -9,7 +9,7 @@ import {
     mergeStats,
     parseRcloneLine,
     publicStats,
-} from './domain/rclone-log.js';
+} from '../../domain/rclone-log.js';
 
 export {exitCodeMessage, isSuccessExit};
 
@@ -32,7 +32,7 @@ export function findRclone() {
     return null;
 }
 
-export class Rclone {
+export class RcloneTransferEngine {
     constructor({binary = null, configPath, logger}) {
         this.binary = binary || findRclone();
         if (!this.binary)

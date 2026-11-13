@@ -72,6 +72,13 @@ coverage: setup
 	python3 scripts/coverage.py build/coverage/coverage.lcov \
 		--root "$(CURDIR)" --strip-prefix build/coverage \
 		--include src/domain --min-lines 95 --min-branches 95 --min-functions 95
+	python3 scripts/coverage.py build/coverage/coverage.lcov \
+		--root "$(CURDIR)" --strip-prefix build/coverage \
+		--include src/application --min-lines 95 --min-branches 85 --min-functions 95
+	python3 scripts/coverage.py build/coverage/coverage.lcov \
+		--root "$(CURDIR)" --strip-prefix build/coverage \
+		--include src/adapters --exclude src/adapters/rclone \
+		--min-lines 90 --min-branches 85 --min-functions 90
 
 e2e: setup
 	SAVEME_RCLONE=$(abspath $(RCLONE)) sh scripts/run-e2e.sh

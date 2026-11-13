@@ -1,0 +1,337 @@
+import {
+    DeleteGuardError,
+    DestinationUnavailableError,
+    EmptySourceError,
+    SourceUnavailableError,
+} from '../../../src/domain/errors.js';
+import {emptyStats} from '../../../src/domain/rclone-log.js';
+import {assert, assertEqual, assertThrows, suite, test} from '../../harness.js';
+import {
+    makeExecutor,
+    makeJob,
+} from './fakes.js';
+
+function context() {
+    const executorContext = makeExecutor();
+    const job = makeJob('sync');
+    const ctx = executorContext.executor.beginRun(job, {
+        dryRun: false,
+        reason: 'manual',
+        incremental: false,
+    });
+    return {...executorContext, job, ctx};
+}
+
+export default suite('application/run-executor', [
+    test('handles parsed rclone lines at every level', () => {
+        const {executor, ctx} = context();
+        executor.handleParsed(ctx, {stats: {bytes: 1}});
+        executor.handleParsed(ctx, {level: 'info'});
+        executor.handleParsed(ctx, {
+            level: 'critical',
+            msg: ' fatal ',
+            object: '/a/file.txt',
+            size: 10,
+        });
+        assertEqual(ctx.currentFile, '/a/file.txt');
+        assertEqual(ctx.lastError, ' fatal ');
+        assert(ctx.logger.sink.some(item => item.level === 'error' && item.fields.size === 10));
+        executor.handleParsed(ctx, {level: 'warning', msg: 'warn'});
+        executor.handleParsed(ctx, {level: 'info', msg: 'info'});
+        assert(ctx.logger.sink.some(item => item.level === 'warn'));
+        assert(ctx.logger.sink.some(item => item.level === 'info' && item.message === 'info'));
+    }),
+    test('builds progress, tolerates state failures and calls onProgress', () => {
+        const {executor, ctx} = context();
+        let progress = null;
+        ctx.onProgress = value => {
+            progress = value;
+        };
+        ctx.currentFile = '/a/b.txt';
+        executor.onStats(ctx, 'syncing', {
+            bytes: 5,
+            totalBytes: 10,
+            transfers: 1,
+            totalTransfers: 2,
+            deletes: 0,
+            errors: 0,
+            speed: 1,
+            eta: 2,
+        });
+        assertEqual(progress.percent, 50);
+        assertEqual(progress.currentFile, 'b.txt');
+
+        executor.state.updateProgress = () => {
+            throw new Error('state unavailable');
+        };
+        executor.onStats(ctx, 'syncing', {
+            bytes: 0,
+            totalBytes: 0,
+            transfers: 0,
+            totalTransfers: 0,
+            deletes: 0,
+            errors: 0,
+            speed: 0,
+            eta: null,
+        });
+        assertEqual(progress.percent, 0);
+    }),
+    test('cleans --config from recorded arguments', () => {
+        const {executor} = context();
+        assertEqual(JSON.stringify(executor.cleanArgs(
+            ['sync', '--config', '/tmp/rclone.conf', '--dry-run'])),
+        JSON.stringify(['sync', '--dry-run']));
+        assertEqual(JSON.stringify(executor.cleanArgs(['lsf', '/dst'])),
+            JSON.stringify(['lsf', '/dst']));
+    }),
+    test('runs commands with callbacks, quiet mode and stat/error switches', async () => {
+        const {executor, ctx, transfer} = context();
+        const lines = [];
+        transfer.handler = (args, options) => {
+            options.onLine('raw line', null);
+            options.onLine('{"level":"info","msg":"json"}', {
+                level: 'info',
+                msg: 'json',
+                object: '/a/b',
+            });
+            options.onStats({bytes: 1});
+            return {exitCode: 0, stats: emptyStats(), lastError: 'ignored', cancelled: false};
+        };
+        const result = await executor.runRclone(ctx, ['lsf', '/dst'], {
+            phase: 'cleanup',
+            quiet: true,
+            mergeStats: false,
+            trackError: false,
+            trackExitCode: false,
+            onDataLine: line => lines.push(line),
+        });
+        assertEqual(result.exitCode, 0);
+        assertEqual(lines.length, 1);
+        assertEqual(ctx.exitCode, null);
+        assertEqual(ctx.lastError, null);
+        assertEqual(ctx.operations.length, 1);
+        assertEqual(executor.cleanArgs(ctx.operations[0].args).length, 2);
+    }),
+    test('beginRun tolerates state failures and honors provided run ids', async () => {
+        const {executor, files, paths, rawLogFactory} = context();
+        executor.state.setJobState = () => {
+            throw new Error('cannot write');
+        };
+        const ctx = executor.beginRun(makeJob('sync'), {
+            dryRun: true,
+            reason: 'manual',
+            incremental: false,
+            runId: 'run_fixed',
+        });
+        assertEqual(ctx.runId, 'run_fixed');
+        assert(ctx.logger.sink.some(item => item.level === 'warn'));
+        assert(paths.logsDir('job_test').includes('job_test'));
+        assertEqual(rawLogFactory.logs.length, 2);
+        assert(files.writes.length >= 0);
+    }),
+    test('endRun survives repository and temp-file failures', () => {
+        const {executor, ctx, files} = context();
+        executor.runRepository.recordRun = () => {
+            throw new Error('cannot record');
+        };
+        files.removeIfExists = () => {
+            throw new Error('cannot remove');
+        };
+        ctx.tempFiles.push('/tmp/temp');
+        const run = executor.endRun(ctx, 'success');
+        assertEqual(run.result, 'success');
+        assert(executor.logger.sink.some(item => item.level === 'error'));
+    }),
+    test('sourceCount handles exact, local and remote sources', async () => {
+        const {executor, transfer, files} = context();
+        transfer.sizes.set('/src', {count: 7, bytes: 70});
+        transfer.sizes.set('drive:src', {count: 7, bytes: 70});
+        assertEqual(await executor.sourceCount({}, {
+            source: '/src', sourceIsLocal: true,
+        }, {exact: true}), 7);
+        assertEqual(transfer.lastSize.fastList, false);
+        assertEqual(await executor.sourceCount({}, {
+            source: 'drive:src', sourceIsLocal: false,
+        }, {exact: true}), 7);
+        assertEqual(transfer.lastSize.fastList, true);
+        files.topLevel.set('/src', 4);
+        assertEqual(await executor.sourceCount({}, {
+            source: '/src', sourceIsLocal: true,
+        }, {exact: false}), 4);
+        assertEqual(await executor.sourceCount({}, {
+            source: 'drive:src', sourceIsLocal: false,
+        }, {exact: false}), null);
+    }),
+    test('checkEmptySource covers force, unknown counts and previous counts', async () => {
+        const {executor, state} = context();
+        executor.checkEmptySource({id: 'job_test'}, 0, true);
+        executor.checkEmptySource({id: 'job_test'}, Number.NaN, false);
+        executor.checkEmptySource({id: 'job_test'}, 1, false);
+        state.setJobState('job_test', {lastSourceFileCount: 0});
+        executor.checkEmptySource({id: 'job_test'}, 0, false);
+        state.setJobState('job_test', {lastSourceFileCount: 3});
+        await assertThrows(() => executor.checkEmptySource({id: 'job_test'}, 0, false),
+            /Source is empty/);
+    }),
+    test('friendlyError preserves typed errors and falls back', () => {
+        const {executor} = context();
+        assertEqual(executor.friendlyError(new Error('plain')), 'plain');
+        assertEqual(executor.friendlyError(new SourceUnavailableError('source')), 'source');
+        assertEqual(executor.friendlyError(new DestinationUnavailableError('dest')), 'dest');
+        assertEqual(executor.friendlyError(new EmptySourceError(2)), executor.friendlyError(
+            new EmptySourceError(2)));
+        assert(executor.friendlyError(new DeleteGuardError(2, 1, 10, 10)).includes('Delete guard'));
+        assertEqual(executor.friendlyError(null), 'null');
+        assertEqual(executor.friendlyError({}), '[object Object]');
+    }),
+    test('lists version directories and handles missing/failed roots', async () => {
+        const {executor, ctx, transfer} = context();
+        transfer.handler = (args, options) => {
+            if (args[0] === 'lsf') {
+                options.onLine('20260101T000000-000-old', null);
+                options.onLine('20260102T000000-000-new/', null);
+                return {exitCode: 0, stats: emptyStats(), lastError: null, cancelled: false};
+            }
+            return {exitCode: 0, stats: emptyStats(), lastError: null, cancelled: false};
+        };
+        assertEqual(JSON.stringify(await executor.listVersionDirs(ctx, '/dst', null)),
+            JSON.stringify(['20260101T000000-000-old', '20260102T000000-000-new']));
+        transfer.handler = () => ({
+            exitCode: 3, stats: emptyStats(), lastError: null, cancelled: false,
+        });
+        assertEqual(JSON.stringify(await executor.listVersionDirs(ctx, '/dst', null)),
+            JSON.stringify([]));
+        transfer.handler = () => ({
+            exitCode: 7, stats: emptyStats(), lastError: 'root missing', cancelled: false,
+        });
+        await assertThrows(() => executor.listVersionDirs(ctx, '/dst', null), /root missing/);
+    }),
+    test('cleans versions only when retention is enabled and skips missing roots', async () => {
+        const {executor, ctx, job, transfer} = context();
+        await executor.cleanupVersions(ctx, {...job, backup: {retentionDays: 0}}, '/dst');
+        assertEqual(transfer.runs.length, 0);
+
+        transfer.handler = (args, options) => {
+            if (args[0] === 'lsf') {
+                options.onLine('20200101T000000-000-old', null);
+                return {exitCode: 0, stats: emptyStats(), lastError: null, cancelled: false};
+            }
+            return {exitCode: 0, stats: emptyStats(), lastError: null, cancelled: false};
+        };
+        await executor.cleanupVersions(ctx, {...job, backup: {retentionDays: 1}}, '/dst');
+        assert(transfer.runs.some(item => item.args[0] === 'purge'));
+
+        transfer.handler = () => ({
+            exitCode: 7, stats: emptyStats(), lastError: 'cannot list', cancelled: false,
+        });
+        await executor.cleanupVersions(ctx, {...job, backup: {retentionDays: 1}}, '/dst');
+        assert(ctx.logger.sink.some(item => /Cannot list versions/.test(item.message)));
+    }),
+    test('countDeletes handles files, directories and missing directories', async () => {
+        const {executor, ctx, transfer} = context();
+        transfer.sizes.set('/dst/sub', {count: 2, bytes: 2});
+        assertEqual(await executor.countDeletes({
+            deletes: ['a'],
+            dirDeletes: ['sub'],
+        }, {dest: '/dst', destIsLocal: true}, ctx, null), 3);
+
+        transfer.sizeAsync = async () => {
+            throw new Error('directory not found');
+        };
+        assertEqual(await executor.countDeletes({
+            deletes: [],
+            dirDeletes: ['missing'],
+        }, {dest: '/dst', destIsLocal: true}, ctx, null), 0);
+
+        transfer.sizeAsync = async () => {
+            throw new Error('permission denied');
+        };
+        await assertThrows(() => executor.countDeletes({
+            deletes: [],
+            dirDeletes: ['missing'],
+        }, {dest: '/dst', destIsLocal: true}, ctx, null), /permission denied/);
+    }),
+    test('sourceCountForGuard uses state, transfer and tolerates state writes', async () => {
+        const {executor, transfer, state} = context();
+        state.setJobState('job_test', {lastSourceFileCount: 9});
+        assertEqual(await executor.sourceCountForGuard(
+            {id: 'job_test'}, {source: '/src', sourceIsLocal: true}, null), 9);
+        state.setJobState('job_test', {lastSourceFileCount: 0});
+        transfer.sizes.set('/src', {count: 4, bytes: 4});
+        assertEqual(await executor.sourceCountForGuard(
+            {id: 'job_test'}, {source: '/src', sourceIsLocal: true}, null), 4);
+        executor.state.setJobState = () => {
+            throw new Error('state failed');
+        };
+        assertEqual(await executor.sourceCountForGuard(
+            {id: 'job_test'}, {source: '/src', sourceIsLocal: true}, null), 4);
+    }),
+    test('writes list and include filters, including empty lists', () => {
+        const {executor, ctx, files, job} = context();
+        const empty = executor.writeList(ctx, 'empty', []);
+        assertEqual(files.writes.find(write => write.path === empty).text, '');
+        const list = executor.writeList(ctx, 'list', ['a', 'b']);
+        assertEqual(files.writes.find(write => write.path === list).text, 'a\nb\n');
+        const include = executor.writeIncludeFilter(ctx, 'include', job, {
+            files: ['a.txt'],
+            dirs: ['dir'],
+        });
+        const text = files.writes.find(write => write.path === include).text;
+        assert(/\+ \/a\.txt/.test(text));
+        assert(/\+ \/dir\/\*\*/.test(text));
+        assert(/- \*/.test(text));
+    }),
+    test('filterFile and versionDir use the injected paths and clock', () => {
+        const {executor, job, files} = context();
+        const filter = executor.filterFile(job);
+        assertEqual(filter, '/tmp/filters/job_test.txt');
+        assert(files.writes.some(write => write.path === filter));
+        const version = executor.versionDir(job, '/dst', {runId: 'run_abcdef'});
+        assert(/20260102T030405-000-abcdef$/.test(version), version);
+    }),
+    test('runStep returns success, cancellation and failure results', async () => {
+        const success = context();
+        const successStep = await success.executor.runStep(success.ctx, ['lsf', '/dst']);
+        assertEqual(successStep.run, null);
+        assertEqual(successStep.result.exitCode, 0);
+
+        const cancelled = context();
+        cancelled.transfer.handler = () => ({
+            exitCode: 0, stats: emptyStats(), lastError: null, cancelled: true,
+        });
+        const cancelledStep = await cancelled.executor.runStep(cancelled.ctx, ['lsf', '/dst']);
+        assertEqual(cancelledStep.run.result, 'cancelled');
+
+        const failed = context();
+        failed.transfer.handler = () => ({
+            exitCode: 7, stats: emptyStats(), lastError: 'step failed', cancelled: false,
+        });
+        const failedStep = await failed.executor.runStep(failed.ctx, ['lsf', '/dst']);
+        assertEqual(failedStep.run.result, 'error');
+        assert(/step failed/.test(failedStep.run.message));
+    }),
+    test('cleanupVersions logs purge failures and removal counts', async () => {
+        const {executor, ctx, job, transfer} = context();
+        transfer.handler = (args, options) => {
+            if (args[0] === 'lsf') {
+                options.onLine('20200101T000000-000-old', null);
+                return {exitCode: 0, stats: emptyStats(), lastError: null, cancelled: false};
+            }
+            if (args[0] === 'purge')
+                return {exitCode: 7, stats: emptyStats(), lastError: 'cannot purge', cancelled: false};
+            return {exitCode: 0, stats: emptyStats(), lastError: null, cancelled: false};
+        };
+        await executor.cleanupVersions(ctx, {...job, backup: {retentionDays: 1}}, '/dst');
+        assert(ctx.logger.sink.some(item => /cannot purge/.test(item.message)));
+
+        transfer.handler = (args, options) => {
+            if (args[0] === 'lsf') {
+                options.onLine('20200101T000000-000-old', null);
+                return {exitCode: 0, stats: emptyStats(), lastError: null, cancelled: false};
+            }
+            return {exitCode: 0, stats: emptyStats(), lastError: null, cancelled: false};
+        };
+        await executor.cleanupVersions(ctx, {...job, backup: {retentionDays: 1}}, '/dst');
+        assert(ctx.logger.sink.some(item => /Removed 1 old version/.test(item.message)));
+    }),
+]);

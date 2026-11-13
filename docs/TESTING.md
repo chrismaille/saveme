@@ -35,6 +35,9 @@ python3 scripts/coverage.py build/coverage/coverage.lcov ...
 | Camada | Linha | Branch | Como validar |
 |---|---:|---:|---|
 | Domínio puro (`src/domain/`) | 95% | 95% | `make coverage` (gate) |
+| Aplicação (`src/application/`) | 95% | 85% | `make coverage` (gate) |
+| Adapters Gio/persistência/system (`src/adapters/`, exceto rclone) | 90% | 85% | `make coverage` (gate) |
+| Adapter rclone | integração/E2E | integração/E2E | `make e2e` + `make coverage` informativo |
 | Núcleo legado (config, jobs, queue, paths, state, util) | 95% | 90% | testes unitários |
 | Runner, watcher, rclone, volumes | 95% | 90% | integração + falhas simuladas |
 | Daemon, supervisor, auth, D-Bus | 90% | 85% | E2E em D-Bus privado |
@@ -44,18 +47,22 @@ python3 scripts/coverage.py build/coverage/coverage.lcov ...
 
 **95% em tudo, incluindo UI, extensão e APIs de nuvem, não é uma meta
 realista nem útil neste stack.** O GJS lcov conta cada branch de `??`, `||`,
-optional chaining e caminhos defensivos de GI/GTK; a UI e os provedores mudam
-fora do nosso controle. A meta é 95% de linha e 95% de branch no domínio,
-95% de linha e 90% de branch no núcleo legado, 90/85 no daemon e cobertura
-comportamental E2E nas superfícies visuais.
+optional chaining, `await`, parâmetros default e caminhos defensivos de GI/GTK;
+a UI e os provedores mudam fora do nosso controle. A meta é 95% de linha e 95%
+de branch no domínio, 95% de linha e 85% de branch na aplicação, 90/85 nos
+adapters e no daemon, e cobertura comportamental E2E nas superfícies visuais.
 
-Estado atual (unit + integration + E2E de daemon): **75,8% de linha e 59,8% de
-branch** nos arquivos `src/` executados. O domínio puro está em **100% de linha,
-99,2% de branch e 100% de funções**. O gate de 95/95 do domínio roda no
-`make coverage`. O GJS lcov marca cada `extends Error` de `errors.js` como um
-branch não tomável; o arquivo tem 100% de linha/funções e o agregado do domínio
-continua acima de 95% de branch. Os maiores vazios globais ainda são `auth.js`,
-`daemon.js`, `supervisor.js`, `rclone.js` e caminhos de erro do runner.
+Estado atual (unit + integration + E2E de daemon):
+
+- domínio puro: **98,9% linha / 98,1% branch / 100% funções**;
+- aplicação: **99,4% linha / 87,5% branch / 100% funções**;
+- adapters: **94,7% linha / 100% branch / 100% funções** (Gio, persistência e
+  system; o adapter rclone é coberto por integração/E2E);
+- `src/` global: **84,2% linha / 69,1% branch**.
+
+Os gates de domínio, aplicação e adapters Gio/persistência/system rodam no
+`make coverage`. O adapter rclone é um wrapper de subprocesso e é validado por
+integração/E2E, não por branch coverage.
 
 ## Simulação de backup e restore
 
@@ -90,6 +97,10 @@ Cobre:
 - testes Python do próprio Omega lint;
 - domínio puro: layout de backup, retenção, delete guard, change batcher,
   comandos rclone, parser de log, jobs e transições de estado;
+- application services com fakes de transfer/filesystem/state/clock:
+  full e incremental sync, full e incremental backup, delete guard,
+  cancelamento, retries, restore e limpeza de versões;
+- adapters Gio: filesystem, raw log, relógio, paths e run repository;
 - property-based tests para paths de backup, retenção e delete guard;
 - utilidades, configuração e validação de jobs;
 - fila/debounce do watcher;

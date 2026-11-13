@@ -12,7 +12,9 @@ import {
     isRemoteDescriptor,
     jobDefaults,
     jobRemoteNames,
+    localPathFor,
     normalizeJobFields,
+    remotePathFor,
     validateJobFields,
 } from './domain/job.js';
 
@@ -24,6 +26,8 @@ export {
     isLocalDescriptor,
     isRemoteDescriptor,
     jobRemoteNames,
+    localPathFor,
+    remotePathFor,
 };
 
 export function defaultJob(input = {}) {
@@ -53,25 +57,6 @@ export function descriptorFromString(text, {remotes = [], volumes = null} = {}) 
         remotes,
         makeLocal: volumes ? path => volumes.makeDescriptor(path) : null,
     });
-}
-
-export function localPathFor(descriptor, volumes) {
-    if (!isLocalDescriptor(descriptor))
-        return null;
-    if (volumes) {
-        try {
-            return volumes.resolve(descriptor);
-        } catch (_) {
-            // Fall through to the last known path.
-        }
-    }
-    return descriptor.path || null;
-}
-
-export function remotePathFor(descriptor) {
-    if (!isRemoteDescriptor(descriptor))
-        return null;
-    return descriptor.path ? `${descriptor.remote}:${descriptor.path}` : `${descriptor.remote}:`;
 }
 
 export function validateJob(job, {remotes = [], volumes = null, checkPaths = false} = {}) {

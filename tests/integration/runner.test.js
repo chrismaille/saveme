@@ -1,10 +1,11 @@
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
-import {Logger} from '../../src/log.js';
-import {Rclone, findRclone} from '../../src/rclone.js';
-import {StateStore} from '../../src/state.js';
-import {VolumeResolver} from '../../src/volumes.js';
-import {JobRunner, backupCurrentFor, versionsRootFor} from '../../src/runner.js';
+import {Logger} from '../../src/adapters/system/logger.js';
+import {RcloneTransferEngine as Rclone, findRclone} from '../../src/adapters/rclone/transfer-engine.js';
+import {StateStore} from '../../src/adapters/persistence/state-repository.js';
+import {VolumeResolver} from '../../src/adapters/gio/volume-catalog.js';
+import {backupCurrentFor, versionsRootFor} from '../../src/runner.js';
+import {createJobRunner} from '../../src/composition/runner.js';
 import {JOB_TYPES, defaultJob} from '../../src/jobs.js';
 import {uniqueId} from '../../src/util.js';
 import {
@@ -34,7 +35,7 @@ function createContext() {
     const state = new StateStore({logger});
     state.load();
     const volumes = new VolumeResolver();
-    const runner = new JobRunner({rclone, volumes, logger, state});
+    const runner = createJobRunner({rclone, volumes, logger, state});
     return {root, source, dest, logger, rclone, state, volumes, runner};
 }
 

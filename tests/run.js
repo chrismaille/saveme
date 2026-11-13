@@ -16,6 +16,15 @@ import rcloneLogSuite from './unit/domain/rclone-log.test.js';
 import jobSuite from './unit/domain/job.test.js';
 import runStateSuite from './unit/domain/run-state.test.js';
 import errorsSuite from './unit/domain/errors.test.js';
+import syncServiceSuite from './unit/application/sync-service.test.js';
+import backupServiceSuite from './unit/application/backup-service.test.js';
+import restoreServiceSuite from './unit/application/restore-service.test.js';
+import runCoordinatorSuite from './unit/application/run-coordinator.test.js';
+import runExecutorSuite from './unit/application/run-executor.test.js';
+import jobTargetSuite from './unit/application/job-target.test.js';
+import changePlannerSuite from './unit/application/change-planner.test.js';
+import fileSystemAdapterSuite from './unit/adapters/file-system.test.js';
+import systemAdapterSuite from './unit/adapters/system.test.js';
 import runnerSuite from './integration/runner.test.js';
 import watcherSuite from './integration/watcher.test.js';
 
@@ -41,6 +50,15 @@ const suites = [
     jobSuite,
     runStateSuite,
     errorsSuite,
+    syncServiceSuite,
+    backupServiceSuite,
+    restoreServiceSuite,
+    runCoordinatorSuite,
+    runExecutorSuite,
+    jobTargetSuite,
+    changePlannerSuite,
+    fileSystemAdapterSuite,
+    systemAdapterSuite,
     runnerSuite,
     watcherSuite,
 ];

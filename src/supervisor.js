@@ -1,7 +1,7 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import {ChangeQueue} from './queue.js';
-import {RecursiveWatcher, WatcherLimitError} from './watcher.js';
+import {RecursiveWatcher, WatcherLimitError} from './adapters/gio/watcher.js';
 import {localPathFor, remotePathFor, TRIGGER_MODES} from './jobs.js';
 import {uniqueId} from './util.js';
 import {

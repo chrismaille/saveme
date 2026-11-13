@@ -31,3 +31,11 @@ export class DeleteGuardError extends Error {
         this.percent = percent;
     }
 }
+
+export class VolumeUnavailableError extends Error {
+    constructor(descriptor) {
+        super(`Volume not mounted: ${descriptor.volumeUuid || descriptor.path}`);
+        this.name = 'VolumeUnavailableError';
+        this.descriptor = descriptor;
+    }
+}

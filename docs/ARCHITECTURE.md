@@ -86,6 +86,15 @@ app/                  SaveMe Settings (GTK4/Adwaita)
 src/                  daemon e bibliotecas compartilhadas internas
   domain/             regras puras, sem gi:// (backup, retenção, delete guard,
                       change batching, comandos rclone, parser de log, erros)
+  ports/              contratos runtime dos ports (transfer, fs, clock, state…)
+  adapters/           implementações GI/rclone/JSON/system
+    rclone/           transfer engine
+    gio/              filesystem, raw log, watcher, volumes
+    persistence/      config, state e runs
+    system/           clock, logger, paths
+  application/        SyncService, BackupService, RestoreService,
+                      RunCoordinator, RunExecutor, change planner
+  composition/        montagem do runner para daemon e CLI
   main.js
   application.js
   config.js
@@ -94,8 +103,7 @@ src/                  daemon e bibliotecas compartilhadas internas
   scheduler.js
   watcher.js
   queue.js
-  runner.js
-  rclone.js
+  runner.js           fachada fina sobre RunCoordinator
   auth.js
   volumes.js
   restore.js
@@ -114,10 +122,12 @@ debian/               empacotamento .deb
 Makefile
 ```
 
-Durante a Fase 2, `jobs.js`, `runner.js`, `queue.js`, `rclone.js` e `util.js`
-permanecem como fachadas que reexportam as funções puras de `src/domain/`.
-A migração para ports/adapters e a remoção dessas fachadas acontecem na
-Fase 3.
+Durante a Fase 3, `jobs.js`, `runner.js`, `queue.js` e `util.js` continuam como
+fachadas. A lógica de execução foi movida para `application/`; `runner.js`
+apenas delega ao `RunCoordinator`. O motor rclone foi movido para
+`adapters/rclone/transfer-engine.js`; os demais adapters concretos ficam em
+`adapters/` e são montados por `composition/runner.js`. A Fase 4 move o
+supervisor, o daemon e o D-Bus para a mesma estrutura.
 
 ## 5. Configuração, estado e logs
 
@@ -218,6 +228,13 @@ Implementação em `src/watcher.js` usando `Gio.FileMonitor`.
 - Reconciliação completa periódica (24 h) corrige eventos perdidos.
 
 ## 9. Runner e rclone
+
+A execução é dividida em `application/SyncService`, `BackupService`,
+`RestoreService` e `RunCoordinator`. O `JobRunner` é uma fachada fina; os
+serviços dependem de ports (`TransferEngine`, `FileSystem`, `StateRepository`,
+`RunRepository`, `Clock`, `Paths`) e nunca de `Gio`/`rclone` diretamente. A
+montagem concreta fica em `composition/runner.js`; os adapters ficam em
+`adapters/rclone` e `adapters/gio`.
 
 Cada execução é um subprocesso `rclone` com argv (nunca shell). Flags comuns:
 
@@ -335,6 +352,10 @@ Para remotes, o caminho equivalente é
 - Unitários (GJS): config, validação de job, overlap, paths, volumes (mocks),
   fila/debounce, parser de JSON do rclone, montagem de argv, retenção,
   classificação de exit codes.
+- Application: SyncService/BackupService/RestoreService com fakes de transfer,
+  filesystem, state, clock e paths; cobre full/incremental, dry-run, delete
+  guard, cancelamento, retenção e restore.
+- Adapters: filesystem Gio, raw log, clock, paths e run repository.
 - Integração com rclone local em diretórios temporários:
   - sync inicial, upsert, rename, delete;
   - backup com versões e retenção;

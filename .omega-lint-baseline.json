@@ -4,6 +4,5 @@
   "subprocess-ownership:app/window.js:Gio.Subprocess": 3,
   "subprocess-ownership:extension/extension.js:Gio.Subprocess": 1,
   "subprocess-ownership:src/auth.js:Gio.Subprocess": 1,
-  "subprocess-ownership:src/daemon.js:Gio.Subprocess": 2,
-  "subprocess-ownership:src/rclone.js:Gio.Subprocess": 2
+  "subprocess-ownership:src/daemon.js:Gio.Subprocess": 2
 }

@@ -1,4 +1,4 @@
-import {versionTimestamp} from './time.js';
+import {parseVersionTimestamp, versionTimestamp} from './time.js';
 
 export function backupRootFor(job, dest) {
     if (job.destination.kind === 'remote') {
@@ -52,4 +52,12 @@ export function versionName(date, runId = '') {
 
 export function versionDirFor(versionsRoot, runId, date = new Date()) {
     return `${versionsRoot}/${versionName(date, runId)}`;
+}
+
+export function isValidVersionName(name) {
+    return parseVersionTimestamp(name) !== null && !String(name).includes('/');
+}
+
+export function isSafeRelativePath(path) {
+    return !String(path).split('/').some(part => part === '..');
 }

@@ -120,6 +120,25 @@ export function descriptorFromString(text, {
     return makeLocal ? makeLocal(value) : {kind: 'local', path: value};
 }
 
+export function localPathFor(descriptor, volumes) {
+    if (!isLocalDescriptor(descriptor))
+        return null;
+    if (volumes) {
+        try {
+            return volumes.resolve(descriptor);
+        } catch (_) {
+            // Fall through to the last known path.
+        }
+    }
+    return descriptor.path || null;
+}
+
+export function remotePathFor(descriptor) {
+    if (!isRemoteDescriptor(descriptor))
+        return null;
+    return descriptor.path ? `${descriptor.remote}:${descriptor.path}` : `${descriptor.remote}:`;
+}
+
 export function remotePathsOverlap(a, b) {
     if (a.remote !== b.remote)
         return false;
