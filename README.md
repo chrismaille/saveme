@@ -62,7 +62,11 @@ Full instructions: [docs/INSTALL.md](docs/INSTALL.md).
 
 ```bash
 make setup          # download the pinned rclone for development
+make setup-lint     # create .venv + install Node lint tools
+make lint           # pre-commit on every file, staged or not
 make test           # unit + integration tests
+make tests          # unit + daemon E2E + extension E2E
+make verify         # lint + tests
 make doctor         # check rclone, paths and volumes
 make run ARGS="status"
 make extension      # build the extension zip
@@ -73,8 +77,11 @@ Requirements:
 
 - Ubuntu 26.04 / GNOME 50
 - GJS 1.88+, GTK 4.22+, libadwaita 1.9+
+- Python 3.11+ and Node.js 22+ for lint
 - rclone 1.76+ (bundled with the SaveMe package; the Ubuntu archive version is
   too old)
+
+Lint details, hooks and the Omega architecture rules: [docs/LINTING.md](docs/LINTING.md).
 
 ## Documentation
 
@@ -82,6 +89,7 @@ Requirements:
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — technical decisions
 - [docs/INSTALL.md](docs/INSTALL.md) — install, CLI, uninstall
 - [docs/TESTING.md](docs/TESTING.md) — automated and manual test matrix
+- [docs/LINTING.md](docs/LINTING.md) — pre-commit, linters and Omega rules
 
 ## Status
 

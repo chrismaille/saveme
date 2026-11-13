@@ -28,3 +28,7 @@ tools/*.zip
 # Python
 __pycache__/
 *.pyc
+
+# Lint tooling
+.venv/
+node_modules/

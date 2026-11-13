@@ -10,7 +10,6 @@ import {VolumeUnavailableError} from './volumes.js';
 import {isSuccessExit, exitCodeMessage} from './rclone.js';
 import {
     atomicWriteText,
-    canonicalPath,
     ensureDir,
     joinPath,
     nowIso,
@@ -699,7 +698,7 @@ export class JobRunner {
             if (exists && (kind === 'delete' || kind === 'dir-delete'))
                 kind = kind === 'delete' ? 'upsert' : 'dir-upsert';
             if (kind === 'upsert') {
-                let type = null;
+                let type;
                 try {
                     type = file.query_file_type(Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, null);
                 } catch (_) {
@@ -712,7 +711,7 @@ export class JobRunner {
                 continue;
             }
             if (kind === 'dir-upsert') {
-                let type = null;
+                let type;
                 try {
                     type = file.query_file_type(Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, null);
                 } catch (_) {

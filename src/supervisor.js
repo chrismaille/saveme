@@ -152,8 +152,8 @@ export class JobSupervisor {
     }
 
     _checkAvailability() {
-        let source = null;
-        let dest = null;
+        let source;
+        let dest;
         try {
             source = this.job.source.kind === 'local'
                 ? this._resolveLocal(this.job.source)

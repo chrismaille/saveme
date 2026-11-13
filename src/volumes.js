@@ -1,5 +1,4 @@
 import Gio from 'gi://Gio';
-import GLib from 'gi://GLib';
 import {canonicalPath, isPathInside, joinPath} from './util.js';
 
 export class VolumeUnavailableError extends Error {
@@ -117,7 +116,7 @@ export class VolumeResolver {
     }
 
     disconnect() {
-        for (const {signal, id} of this._handlers)
+        for (const {id} of this._handlers)
             this._monitor.disconnect(id);
         this._handlers = [];
     }

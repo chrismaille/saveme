@@ -12,18 +12,6 @@ export const TRIGGER_MODES = {
     MANUAL: 'manual',
 };
 
-export const JOB_STATUS = {
-    IDLE: 'idle',
-    RUNNING: 'running',
-    PAUSED: 'paused',
-    WAITING_SOURCE: 'waiting-source',
-    WAITING_DESTINATION: 'waiting-destination',
-    OFFLINE: 'offline',
-    ERROR: 'error',
-    NEEDS_AUTH: 'needs-auth',
-    DISABLED: 'disabled',
-};
-
 export function defaultJob(input = {}) {
     const base = {
         id: uniqueId('job_'),
@@ -232,14 +220,6 @@ export function jobRemoteNames(job) {
     if (job.destination?.kind === 'remote')
         names.add(job.destination.remote);
     return [...names];
-}
-
-export function jobSourceLabel(job, volumes = null) {
-    return descriptorDisplay(job.source, volumes);
-}
-
-export function jobDestinationLabel(job, volumes = null) {
-    return descriptorDisplay(job.destination, volumes);
 }
 
 export function cloneJob(job) {

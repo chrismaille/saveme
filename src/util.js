@@ -64,7 +64,7 @@ export function readJson(path, fallback = null) {
     try {
         return JSON.parse(text);
     } catch (e) {
-        throw new Error(`Invalid JSON in ${path}: ${e.message}`);
+        throw new Error(`Invalid JSON in ${path}: ${e.message}`, {cause: e});
     }
 }
 
@@ -138,10 +138,6 @@ export function versionTimestamp(date = new Date()) {
         `T${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
 }
 
-export function uuid() {
-    return GLib.uuid_string_random();
-}
-
 export function uniqueId(prefix = '') {
     const random = Math.random().toString(36).slice(2, 8);
     return `${prefix}${Date.now().toString(36)}_${random}`;
@@ -165,18 +161,6 @@ export function humanBytes(value) {
         unit++;
     }
     return `${n.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
-}
-
-export function formatDuration(milliseconds) {
-    const total = Math.max(0, Math.floor(milliseconds / 1000));
-    const hours = Math.floor(total / 3600);
-    const minutes = Math.floor((total % 3600) / 60);
-    const seconds = total % 60;
-    if (hours > 0)
-        return `${hours}h ${minutes}m`;
-    if (minutes > 0)
-        return `${minutes}m ${seconds}s`;
-    return `${seconds}s`;
 }
 
 export function deepClone(value) {
@@ -205,25 +189,10 @@ export function toNumber(value, fallback = 0) {
     return Number.isFinite(n) ? n : fallback;
 }
 
-export function toBool(value, fallback = false) {
-    if (typeof value === 'boolean')
-        return value;
-    if (value === 'true' || value === '1' || value === 1)
-        return true;
-    if (value === 'false' || value === '0' || value === 0)
-        return false;
-    return fallback;
-}
-
 export function basename(path) {
     return GLib.path_get_basename(path);
 }
 
 export function dirname(path) {
     return GLib.path_get_dirname(path);
-}
-
-export function truncate(value, length = 120) {
-    const text = String(value ?? '');
-    return text.length <= length ? text : `${text.slice(0, length - 1)}…`;
 }

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "bin/saveme.js",
+    "bin/saveme-daemon.js",
+    "app/main.js",
+    "extension/extension.js",
+    "tests/run.js",
+    "tests/e2e/run.js"
+  ],
+  "project": [
+    "**/*.js",
+    "!build/**",
+    "!dist/**",
+    "!tools/**",
+    "!node_modules/**",
+    "!.venv/**"
+  ],
+  "ignoreExportsUsedInFile": true,
+  "ignoreDependencies": [
+    "gi",
+    "resource",
+    "system"
+  ]
+}

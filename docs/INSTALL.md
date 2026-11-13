@@ -122,7 +122,6 @@ problemas. Também é possível abrir direto:
 saveme-settings --view debug
 ```
 
-
 ## CLI
 
 ```bash
@@ -177,7 +176,6 @@ O que cada etapa remove:
 `apt purge` não remove dados do usuário; use `saveme uninstall --purge --yes`
 antes. Se a extensão tiver sido instalada pelo extensions.gnome.org e o comando
 não conseguir removê-la, remova pelo app **Extensões** do GNOME.
-
 
 ## Solução de problemas
 

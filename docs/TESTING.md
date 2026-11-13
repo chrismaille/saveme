@@ -3,11 +3,18 @@
 ## Camadas automatizadas
 
 ```bash
-make test            # unitários + integração com rclone local
+make lint            # pre-commit em todos os arquivos (Omega incluso)
+make test            # unitários GJS + testes Python do Omega
 make coverage        # GJS lcov + resumo de linha/branch/função
 make e2e             # daemon + D-Bus + sync real-time + backup/restore
 make e2e-extension   # GNOME Shell headless + extensão ACTIVE + sync
+make tests           # test + e2e + e2e-extension
+make verify          # lint + tests
 ```
+
+Detalhes dos linters e das regras de arquitetura: [LINTING.md](LINTING.md).
+`make architecture` não existe; as regras de arquitetura são o hook
+`omega-lint` dentro do `make lint`.
 
 O E2E de daemon roda em `dbus-run-session`, com XDG temporário, daemon real,
 D-Bus real, rclone real e arquivos reais. O E2E da extensão sobe um GNOME Shell
@@ -67,22 +74,25 @@ Próximos cenários:
 ## Automatizados
 
 ```bash
-make test
+make verify
 ```
-
 
 Cobre:
 
-- utilidades, configuração e validação de jobs
-- fila/debounce do watcher
-- sync completo, sync incremental, dry-run
-- backup com versões e retenção
-- guarda de deleção (full e incremental)
-- origem vazia/ausente
-- filtros padrão
-- watcher real com criação, alteração, rename e delete
+- lint completo, incluindo ESLint, Stylelint, ShellCheck, Ruff, Vulture, Knip,
+  Markdownlint, validação de `.desktop` e regras do Omega;
+- testes Python do próprio Omega lint;
+- utilidades, configuração e validação de jobs;
+- fila/debounce do watcher;
+- sync completo, sync incremental, dry-run;
+- backup com versões e retenção;
+- guarda de deleção (full e incremental);
+- origem vazia/ausente;
+- filtros padrão;
+- watcher real com criação, alteração, rename e delete;
+- E2E do daemon e da extensão.
 
-O CI roda os mesmos testes em `.github/workflows/ci.yml`.
+O CI roda os mesmos componentes em `.github/workflows/ci.yml`.
 
 ## Manual — antes de publicar
 

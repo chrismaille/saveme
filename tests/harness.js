@@ -14,20 +14,13 @@ export function assertEqual(actual, expected, message = 'assertEqual') {
     }
 }
 
-export function assertDeepEqual(actual, expected, message = 'assertDeepEqual') {
-    const a = JSON.stringify(actual);
-    const b = JSON.stringify(expected);
-    if (a !== b)
-        throw new Error(`${message}: expected ${b}, got ${a}`);
-}
-
 export async function assertThrows(fn, pattern = null, message = 'assertThrows') {
     try {
         await fn();
     } catch (e) {
         if (pattern && !pattern.test(e.message)) {
             throw new Error(`${message}: error message ${JSON.stringify(e.message)} ` +
-                `does not match ${pattern}`);
+                `does not match ${pattern}`, {cause: e});
         }
         return e;
     }

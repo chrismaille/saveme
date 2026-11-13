@@ -338,10 +338,14 @@ Para remotes, o caminho equivalente é
 - D-Bus: daemon em `dbus-run-session`, chamadas reais, sinais e persistência.
 - Watcher: criação/alteração/rename/delete reais com `Gio.FileMonitor`,
   incluindo escrita atômica e temp files.
-- Extensão: teste manual no GNOME 50 e, se viável, `gnome-shell --headless`;
+- Extensão: teste manual no GNOME 50 e `make e2e-extension` headless;
   a lógica pura (cliente D-Bus, formatação) fica testável fora do Shell.
-- CI: Ubuntu 26.04, rclone pinado, `make test`, lint de sintaxe e build do zip
-  e do `.deb`.
+- Lint: `make lint` roda pre-commit em todos os arquivos, com ESLint (GJS),
+  Stylelint (GTK/St), ShellCheck, Ruff, Vulture, Knip, Markdownlint,
+  `desktop-file-validate` e as regras de arquitetura do Omega.
+  Ver [LINTING.md](LINTING.md).
+- CI: Ubuntu 26.04, rclone pinado, `make lint`, `make test`, `make coverage`,
+  `make e2e`, build do zip e do `.deb`.
 - Matriz manual antes do release: instalação limpa, três provedores, disco
   removível, offline, suspend/resume, reboot, restore.
 

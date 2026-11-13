@@ -202,15 +202,6 @@ function remoteTypeLabel(type) {
     }[type] || type;
 }
 
-function jobSubtitle(job, volumes) {
-    const state = job.state || {};
-    let text = `${typeLabel(job.type)} · ${statusLabel(state.status)}`;
-    if (state.lastRunAt)
-        text += ` · last run ${formatWhen(state.lastRunAt)}`;
-    text += ` · ${descriptorDisplay(job.source, volumes)} → ${descriptorDisplay(job.destination, volumes)}`;
-    return text;
-}
-
 class JobsPage {
     constructor(window) {
         this.window = window;
@@ -1511,7 +1502,7 @@ export const SaveMeWindow = GObject.registerClass({
             }).present();
             return;
         }
-        let base = null;
+        let base;
         try {
             base = localPathFor(job.destination, this.volumes);
         } catch (e) {
@@ -1542,7 +1533,7 @@ export const SaveMeWindow = GObject.registerClass({
             }).present();
             return;
         }
-        let path = null;
+        let path;
         try {
             path = localPathFor(descriptor, this.volumes);
         } catch (e) {

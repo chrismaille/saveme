@@ -1,0 +1,24 @@
+{
+  "name": "saveme-dev",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Development-only lint tooling for SaveMe",
+  "scripts": {
+    "lint": "npm run lint:js && npm run lint:css && npm run lint:dead && npm run lint:md",
+    "lint:js": "eslint .",
+    "lint:css": "stylelint \"**/*.css\"",
+    "lint:dead": "knip",
+    "lint:md": "markdownlint-cli2 \"**/*.md\""
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.14.0",
+    "eslint-plugin-no-only-tests": "3.4.0",
+    "eslint-plugin-unused-imports": "4.4.1",
+    "knip": "5.88.1",
+    "markdownlint-cli2": "0.18.1",
+    "stylelint": "16.26.1",
+    "stylelint-config-standard": "39.0.1"
+  }
+}

@@ -1,7 +1,7 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import {logsDir, runsDir, stateFile} from './paths.js';
-import {atomicWriteJson, ensureDir, mergeDeep, nowIso, readJson} from './util.js';
+import {atomicWriteJson, ensureDir, mergeDeep, readJson} from './util.js';
 
 export const STATE_VERSION = 1;
 

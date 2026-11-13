@@ -1,0 +1,104 @@
+minimum_pre_commit_version: "4.0.0"
+
+exclude: |
+  (?x)^(
+    build/|
+    dist/|
+    tools/|
+    \.venv/|
+    node_modules/|
+    \.idea/
+  )
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-json
+      - id: check-yaml
+      - id: check-toml
+      - id: check-xml
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-symlinks
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+      - id: debug-statements
+      - id: requirements-txt-fixer
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.5
+    hooks:
+      - id: ruff
+        args: [--fix]
+        types_or: [python]
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1-1
+    hooks:
+      - id: shellcheck
+        args: [--severity=warning]
+
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.38.0
+    hooks:
+      - id: yamllint
+        args: [-c, .yamllint.yml]
+
+  - repo: local
+    hooks:
+      - id: eslint
+        name: eslint (GJS)
+        language: system
+        entry: node_modules/.bin/eslint
+        files: \.(js|mjs|cjs)$
+        exclude: ^(build|dist|tools|node_modules|\.venv)/
+
+      - id: stylelint
+        name: stylelint (GTK/St CSS)
+        language: system
+        entry: node_modules/.bin/stylelint
+        files: \.css$
+
+      - id: knip
+        name: knip (JavaScript dead code)
+        language: system
+        entry: node_modules/.bin/knip
+        pass_filenames: false
+        always_run: true
+
+      - id: markdownlint
+        name: markdownlint
+        language: system
+        entry: node_modules/.bin/markdownlint-cli2
+        files: \.md$
+
+      - id: vulture
+        name: vulture (Python dead code)
+        language: python
+        entry: vulture
+        additional_dependencies:
+          - vulture==2.16
+        args: [scripts, tests/python, --min-confidence=80]
+        pass_filenames: false
+        always_run: true
+
+      - id: desktop-file-validate
+        name: desktop-file-validate
+        language: system
+        entry: desktop-file-validate
+        files: ^data/.*\.desktop$
+
+      - id: omega-lint
+        name: omega-lint (architecture rules)
+        language: system
+        entry: python3 scripts/omega_lint.py
+        pass_filenames: false
+        always_run: true

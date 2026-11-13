@@ -13,12 +13,42 @@ endif
 
 TOOLS_DIR := tools
 RCLONE := $(TOOLS_DIR)/rclone
+VENV := .venv
+PRE_COMMIT ?= $(VENV)/bin/pre-commit
+PYTHON ?= python3
 
-.PHONY: all setup test coverage e2e e2e-extension doctor run extension deb install uninstall clean
+.PHONY: all setup setup-lint test tests coverage e2e e2e-extension lint verify doctor run extension deb install uninstall clean
 
 all: test
 
 setup: $(RCLONE)
+
+setup-lint:
+	@if [ ! -x "$(PRE_COMMIT)" ]; then \
+		$(PYTHON) -m venv $(VENV); \
+		$(VENV)/bin/pip install --upgrade pip; \
+		$(VENV)/bin/pip install -r requirements-dev.txt; \
+	fi
+	@if [ ! -x node_modules/.bin/eslint ]; then \
+		if [ -f package-lock.json ]; then npm ci; else npm install; fi; \
+	fi
+
+lint: setup-lint
+	git ls-files --cached --others --exclude-standard -z | \
+		while IFS= read -r -d '' file; do \
+			[ -e "$$file" ] && printf '%s\0' "$$file"; \
+		done | \
+		xargs -0 -r $(PRE_COMMIT) run --show-diff-on-failure --files
+
+test: setup
+	sh -n scripts/install.sh
+	sh -n scripts/uninstall.sh
+	$(PYTHON) -m unittest discover -s tests/python -p 'test_*.py'
+	SAVEME_RCLONE=$(abspath $(RCLONE)) gjs -m tests/run.js
+
+tests: test e2e e2e-extension
+
+verify: lint tests
 
 $(RCLONE):
 	mkdir -p $(TOOLS_DIR)
@@ -28,11 +58,6 @@ $(RCLONE):
 	mv $(TOOLS_DIR)/rclone-v$(RCLONE_VERSION)-linux-$(RCLONE_ARCH)/rclone $(RCLONE)
 	chmod +x $(RCLONE)
 	rm -rf $(TOOLS_DIR)/rclone.zip $(TOOLS_DIR)/rclone-v$(RCLONE_VERSION)-linux-$(RCLONE_ARCH)
-
-test: setup
-	sh -n scripts/install.sh
-	sh -n scripts/uninstall.sh
-	SAVEME_RCLONE=$(abspath $(RCLONE)) gjs -m tests/run.js
 
 coverage: setup
 	rm -rf build/coverage

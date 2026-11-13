@@ -5,7 +5,6 @@ import {RecursiveWatcher} from '../../src/watcher.js';
 import {sleep} from '../../src/util.js';
 import {
     assert,
-    assertEqual,
     cleanup,
     suite,
     tempDir,

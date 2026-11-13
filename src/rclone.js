@@ -203,11 +203,9 @@ export class Rclone {
 
         if (timeoutId) {
             GLib.source_remove(timeoutId);
-            timeoutId = null;
         }
         if (forceId) {
             GLib.source_remove(forceId);
-            forceId = null;
         }
         if (cancelHandler)
             cancellable.disconnect(cancelHandler);
@@ -320,7 +318,7 @@ export class Rclone {
         try {
             return JSON.parse(result.stdout);
         } catch (e) {
-            throw new Error(`Invalid rclone config dump: ${e.message}`);
+            throw new Error(`Invalid rclone config dump: ${e.message}`, {cause: e});
         }
     }
 
@@ -338,7 +336,7 @@ export class Rclone {
         try {
             return JSON.parse(result.stdout);
         } catch (e) {
-            throw new Error(`Invalid rclone size output: ${e.message}`);
+            throw new Error(`Invalid rclone size output: ${e.message}`, {cause: e});
         }
     }
 

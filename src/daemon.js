@@ -23,10 +23,9 @@ import {
     DAEMON_OBJECT_PATH,
     configDir,
     rcloneConfigFile,
-    runsDir,
     stateDir,
 } from './paths.js';
-import {descriptorDisplay, jobRemoteNames, localPathFor, remotePathFor} from './jobs.js';
+import {jobRemoteNames, localPathFor, remotePathFor} from './jobs.js';
 import {ensureDir, joinPath, nowIso, uniqueId} from './util.js';
 
 const VERSION = '1.0.0-dev';
@@ -408,7 +407,7 @@ export const SaveMeDaemonApplication = GObject.registerClass({
             ...job,
             state: this._state.getJobState(job.id),
         }));
-        let rcloneInfo = null;
+        let rcloneInfo;
         try {
             const version = this._rclone.getVersion();
             rcloneInfo = {
@@ -557,11 +556,11 @@ export const SaveMeDaemonApplication = GObject.registerClass({
             return JSON.stringify([]);
         if (!isSuccessExit(result.exitCode))
             throw new Error(result.stderr.trim() || exitCodeMessage(result.exitCode));
-        let raw = [];
+        let raw;
         try {
             raw = JSON.parse(result.stdout || '[]');
         } catch (e) {
-            throw new Error(`Invalid rclone lsjson output: ${e.message}`);
+            throw new Error(`Invalid rclone lsjson output: ${e.message}`, {cause: e});
         }
         const entries = raw.map(entry => ({
             name: entry.Name || entry.Path || '',
@@ -610,11 +609,11 @@ export const SaveMeDaemonApplication = GObject.registerClass({
             return JSON.stringify([]);
         if (!isSuccessExit(result.exitCode))
             throw new Error(result.stderr.trim() || exitCodeMessage(result.exitCode));
-        let raw = [];
+        let raw;
         try {
             raw = JSON.parse(result.stdout || '[]');
         } catch (e) {
-            throw new Error(`Invalid rclone lsjson output: ${e.message}`);
+            throw new Error(`Invalid rclone lsjson output: ${e.message}`, {cause: e});
         }
         const entries = raw.map(entry => ({
             name: entry.Name || entry.Path || '',
@@ -697,7 +696,7 @@ export const SaveMeDaemonApplication = GObject.registerClass({
     }
 
     doctorJson() {
-        let rcloneInfo = null;
+        let rcloneInfo;
         try {
             const version = this._rclone.getVersion();
             rcloneInfo = {

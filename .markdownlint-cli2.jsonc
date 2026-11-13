@@ -1,0 +1,10 @@
+{
+  "globs": ["**/*.md"],
+  "ignores": [
+    "build/**",
+    "dist/**",
+    "node_modules/**",
+    "tools/**",
+    ".venv/**"
+  ]
+}

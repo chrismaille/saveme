@@ -7,7 +7,7 @@ import {Logger} from '../src/log.js';
 import {ConfigStore} from '../src/config.js';
 import {StateStore} from '../src/state.js';
 import {VolumeResolver} from '../src/volumes.js';
-import {Rclone, findRclone, exitCodeMessage} from '../src/rclone.js';
+import {Rclone} from '../src/rclone.js';
 import {JobRunner} from '../src/runner.js';
 import {RecursiveWatcher, WatcherLimitError, getInotifyLimit} from '../src/watcher.js';
 import {ChangeQueue} from '../src/queue.js';

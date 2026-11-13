@@ -96,23 +96,6 @@ export class Logger {
     }
 }
 
-export function appendText(path, text) {
-    ensureDir(GLib.path_get_dirname(path), 0o700);
-    const file = Gio.File.new_for_path(path);
-    const stream = file.append_to(Gio.FileCreateFlags.NONE, null);
-    try {
-        file.set_attribute_uint32('unix::mode', 0o600,
-            Gio.FileQueryInfoFlags.NONE, null);
-    } catch (_) {
-        // Best effort.
-    }
-    const data = Gio.DataOutputStream.new(stream);
-    data.put_string(text, null);
-    data.flush(null);
-    data.close(null);
-    stream.close(null);
-}
-
 export function readTextTail(path, maxLines = 400) {
     const file = Gio.File.new_for_path(path);
     if (!file.query_exists(null))

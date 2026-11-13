@@ -109,6 +109,8 @@ run_sudo() {
     fi
     say "+ sudo $*"
     tmp="$(mktemp)"
+    # The temp file belongs to the unprivileged user; sudo only runs the command.
+    # shellcheck disable=SC2024
     sudo "$@" >"$tmp" 2>&1
     status=$?
     if [ -s "$tmp" ]; then
