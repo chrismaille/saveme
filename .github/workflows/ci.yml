@@ -39,4 +39,5 @@ jobs:
           path: |
             dist/*.deb
             dist/*.shell-extension.zip
+            dist/SHA256SUMS
           if-no-files-found: error

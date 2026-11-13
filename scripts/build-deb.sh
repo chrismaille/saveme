@@ -132,4 +132,16 @@ chmod 755 "$STAGE/DEBIAN/postrm"
 mkdir -p "$ROOT_DIR/dist"
 OUT="$ROOT_DIR/dist/saveme_${VERSION}_${ARCH}.deb"
 dpkg-deb --build --root-owner-group "$STAGE" "$OUT"
+
+STABLE="$ROOT_DIR/dist/saveme_${ARCH}.deb"
+cp "$OUT" "$STABLE"
+
+(
+    cd "$ROOT_DIR/dist"
+    sha256sum "saveme_${VERSION}_${ARCH}.deb" "saveme_${ARCH}.deb" \
+        "saveme@chrismaille.github.io.shell-extension.zip" > SHA256SUMS
+)
+
 echo "Built $OUT"
+echo "Stable asset: $STABLE"
+echo "Checksums: $ROOT_DIR/dist/SHA256SUMS"

@@ -341,6 +341,12 @@ recursão e facilita o browse/restore. Para remotes, o caminho equivalente é
 - `make deb` gera `dist/saveme_<versão>_<arch>.deb` com daemon, app, CLI,
   rclone pinado, systemd, D-Bus, autostart, ícone e licenças.
 - `make extension` gera o zip do EGO em `dist/`.
+- `scripts/install.sh` instala/sobrescreve via apt, para o daemon, reinstala a
+  extensão e reinicia o daemon. `--dry-run` mostra o plano.
+- `scripts/uninstall.sh` remove daemon, extensão, pacote e, com `--purge`,
+  configuração/tokens/logs.
+- `dist/saveme_<arch>.deb` e `SHA256SUMS` são os nomes estáveis usados pelo
+  instalador `curl | sh` nos releases do GitHub.
 - `.deb`:
   - `/usr/bin/saveme`, `saveme-daemon`, `saveme-settings`
   - `/usr/lib/saveme/` (código GJS + rclone pinado)

@@ -16,43 +16,64 @@ make deb
 Os artefatos ficam em `dist/`:
 
 - `saveme_<versão>_<arch>.deb`
+- `saveme_<arch>.deb` (nome estável para releases)
 - `saveme@chrismaille.github.io.shell-extension.zip`
+- `SHA256SUMS`
 
-## 2. Instalar o daemon e o app
+## 2. Instalação automática
+
+Com um checkout local:
+
+```bash
+./scripts/install.sh
+```
+
+O script:
+
+- para o daemon existente (`systemctl --user` + `pkill`);
+- reinstala/atualiza o `.deb` com `apt-get install --reinstall`;
+- reinstala a extensão com `gnome-extensions install --force`;
+- tenta habilitar a extensão;
+- inicia o daemon;
+- roda `saveme doctor` no final.
+
+Use `--dry-run` para ver exatamente o que será feito:
+
+```bash
+./scripts/install.sh --dry-run
+```
+
+Opções úteis:
+
+```bash
+./scripts/install.sh --no-extension     # só daemon/app/CLI
+./scripts/install.sh --no-start         # não inicia o daemon agora
+./scripts/install.sh --deb PATH         # usa um .deb específico
+./scripts/install.sh --extension PATH   # usa um zip específico
+```
+
+Quando o repositório e os releases estiverem publicados:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/main/scripts/install.sh | sh
+```
+
+O script baixa `saveme_<arch>.deb` e o zip da extensão do release mais recente,
+verifica `SHA256SUMS` quando disponível e instala como o seu usuário (ele chama
+`sudo` apenas para o `apt`). **Não rode o script com `sudo`.**
+
+## 3. Instalação manual
+
+Se preferir:
 
 ```bash
 sudo apt install ./dist/saveme_*.deb
-```
 
-O pacote instala:
-
-- `/usr/bin/saveme` — CLI
-- `/usr/bin/saveme-daemon` — daemon
-- `/usr/bin/saveme-settings` — app GTK4/Adwaita
-- `/usr/lib/saveme/` — código e rclone
-- autostart em `/etc/xdg/autostart/saveme-daemon.desktop`
-- unidade systemd de usuário `saveme.service`
-- serviço D-Bus `io.github.chrismaille.SaveMe.Daemon`
-- zip da extensão em `/usr/share/saveme/extension.zip`
-
-## 3. Instalar a extensão GNOME
-
-A extensão é distribuída separadamente para evitar conflito com o
-extensions.gnome.org.
-
-Opção A — extensions.gnome.org:
-
-1. Abra a página da extensão no EGO.
-2. Instale e habilite.
-
-Opção B — zip local:
-
-```bash
 gnome-extensions install --force /usr/share/saveme/extension.zip
 gnome-extensions enable saveme@chrismaille.github.io
 ```
 
-Em Wayland, se a extensão não aparecer imediatamente, faça logout/login.
+Em Wayland, a extensão recém-instalada só é carregada após logout/login.
 
 ## 4. Iniciar o daemon
 
@@ -106,7 +127,22 @@ saveme run <job-id>
 
 ## Desinstalar
 
-Ordem recomendada:
+Com o script (recomendado):
+
+```bash
+./scripts/uninstall.sh --purge --yes
+```
+
+Ou, quando publicado:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/main/scripts/uninstall.sh | sh -s -- --purge --yes
+```
+
+O script para o daemon, desabilita `saveme.service`, remove a extensão, apaga
+configuração/tokens/logs com `--purge` e remove o pacote com `apt-get`.
+
+Alternativa manual:
 
 ```bash
 # 1. Para o daemon, remove a extensão e, opcionalmente, os dados do usuário

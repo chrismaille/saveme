@@ -39,19 +39,21 @@ backups survive Shell restarts, logout and UI crashes.
 
 ## Install
 
-Build and install the `.deb`:
+From a local checkout:
 
 ```bash
 make test
 make deb
-sudo apt install ./dist/saveme_*.deb
+./scripts/install.sh
 ```
 
-Then install the GNOME Shell extension from extensions.gnome.org, or locally:
+The installer stops an existing daemon, reinstalls the `.deb`, updates the GNOME
+Shell extension and starts the daemon again. Use `--dry-run` to see the plan.
+
+After the GitHub releases are published, the one-liner is:
 
 ```bash
-gnome-extensions install --force /usr/share/saveme/extension.zip
-gnome-extensions enable saveme@chrismaille.github.io
+curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/main/scripts/install.sh | sh
 ```
 
 Full instructions: [docs/INSTALL.md](docs/INSTALL.md).

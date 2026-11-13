@@ -14,7 +14,7 @@ endif
 TOOLS_DIR := tools
 RCLONE := $(TOOLS_DIR)/rclone
 
-.PHONY: all setup test doctor run extension deb clean
+.PHONY: all setup test doctor run extension deb install uninstall clean
 
 all: test
 
@@ -30,6 +30,8 @@ $(RCLONE):
 	rm -rf $(TOOLS_DIR)/rclone.zip $(TOOLS_DIR)/rclone-v$(RCLONE_VERSION)-linux-$(RCLONE_ARCH)
 
 test: setup
+	sh -n scripts/install.sh
+	sh -n scripts/uninstall.sh
 	SAVEME_RCLONE=$(abspath $(RCLONE)) gjs -m tests/run.js
 
 doctor: setup
@@ -44,6 +46,12 @@ extension:
 
 deb: extension $(RCLONE)
 	./scripts/build-deb.sh
+
+install: deb
+	./scripts/install.sh
+
+uninstall:
+	./scripts/uninstall.sh
 
 clean:
 	rm -rf build dist
