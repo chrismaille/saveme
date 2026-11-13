@@ -14,7 +14,7 @@ endif
 TOOLS_DIR := tools
 RCLONE := $(TOOLS_DIR)/rclone
 
-.PHONY: all setup test doctor run extension deb install uninstall clean
+.PHONY: all setup test coverage e2e e2e-extension doctor run extension deb install uninstall clean
 
 all: test
 
@@ -33,6 +33,23 @@ test: setup
 	sh -n scripts/install.sh
 	sh -n scripts/uninstall.sh
 	SAVEME_RCLONE=$(abspath $(RCLONE)) gjs -m tests/run.js
+
+coverage: setup
+	rm -rf build/coverage
+	mkdir -p build/coverage
+	SAVEME_RCLONE=$(abspath $(RCLONE)) gjs \
+		--coverage-prefix="file://$(CURDIR)" \
+		--coverage-output="$(CURDIR)/build/coverage" \
+		-m tests/run.js
+	python3 scripts/coverage.py build/coverage/coverage.lcov \
+		--root "$(CURDIR)" --strip-prefix build/coverage \
+		--include src --exclude tests
+
+e2e: setup
+	SAVEME_RCLONE=$(abspath $(RCLONE)) sh scripts/run-e2e.sh
+
+e2e-extension: extension setup
+	SAVEME_RCLONE=$(abspath $(RCLONE)) sh scripts/e2e-extension.sh
 
 doctor: setup
 	SAVEME_RCLONE=$(abspath $(RCLONE)) gjs -m bin/saveme.js doctor

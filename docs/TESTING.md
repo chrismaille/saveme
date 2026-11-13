@@ -1,10 +1,75 @@
 # Testes
 
+## Camadas automatizadas
+
+```bash
+make test            # unitários + integração com rclone local
+make coverage        # GJS lcov + resumo de linha/branch/função
+make e2e             # daemon + D-Bus + sync real-time + backup/restore
+make e2e-extension   # GNOME Shell headless + extensão ACTIVE + sync
+```
+
+O E2E de daemon roda em `dbus-run-session`, com XDG temporário, daemon real,
+D-Bus real, rclone real e arquivos reais. O E2E da extensão sobe um GNOME Shell
+headless com monitor virtual e verifica que a extensão fica **ACTIVE**, sem
+erros JS, e que o daemon sincroniza um arquivo.
+
+O GJS gera lcov nativo:
+
+```bash
+gjs --coverage-prefix=file://$PWD \
+    --coverage-output=$PWD/build/coverage \
+    -m tests/run.js
+python3 scripts/coverage.py build/coverage/coverage.lcov ...
+```
+
+## Metas de cobertura
+
+| Camada | Linha | Branch | Como validar |
+|---|---:|---:|---|
+| Núcleo puro (config, jobs, queue, paths, state, util) | 95% | 90% | testes unitários |
+| Runner, watcher, rclone, volumes | 95% | 90% | integração + falhas simuladas |
+| Daemon, supervisor, auth, D-Bus | 90% | 85% | E2E em D-Bus privado |
+| App GTK | E2E/smoke | E2E/smoke | Xvfb + AT-SPI (a implementar) |
+| Extensão GNOME | E2E headless | E2E headless | `make e2e-extension` |
+| Provedores reais (Drive/OneDrive/Dropbox) | manual | manual | contas reais antes do release |
+
+**95% em tudo, incluindo UI, extensão e APIs de nuvem, não é uma meta
+realista nem útil neste stack.** O GJS lcov conta cada branch de `??`, `||`,
+optional chaining e caminhos defensivos de GI/GTK; a UI e os provedores mudam
+fora do nosso controle. A meta é 95% de linha e 90% de branch no núcleo crítico,
+90/85 no daemon e cobertura comportamental E2E nas superfícies visuais.
+
+Estado atual (unit + integration + E2E de daemon): **65,2% de linha e 44,8% de
+branch** nos arquivos `src/` executados. Ainda não é 95%; os maiores vazios são
+`auth.js`, `daemon.js`, `supervisor.js` e caminhos de erro do runner.
+
+## Simulação de backup e restore
+
+O E2E já cobre:
+
+- sync inicial, update, diretório novo, rename, delete e troca de destino;
+- backup incremental com `SaveMe/<job-id>/current` e `versions/<data>`;
+- arquivo deletado preservado em versões;
+- restauração de arquivo deletado por data;
+- restauração do backup atual inteiro;
+- restart do daemon com estado e jobs preservados.
+
+Próximos cenários:
+
+- remoto simulado com `rclone serve webdav` (inclui queda/retomada);
+- kill -9 do daemon no meio de um backup;
+- disco removido no meio de um sync;
+- arquivos com Unicode, espaços, symlinks, caminhos longos e arquivos grandes;
+- restore dry-run e colisão de destino;
+- provider OAuth com respostas gravadas + validação manual real.
+
 ## Automatizados
 
 ```bash
 make test
 ```
+
 
 Cobre:
 
