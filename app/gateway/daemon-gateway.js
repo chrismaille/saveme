@@ -1,0 +1,103 @@
+import {DaemonClient} from '../daemon-client.js';
+
+/**
+ * Application gateway: the only app-layer object that knows about D-Bus.
+ * Controllers and pages receive this object and never import DaemonClient.
+ */
+export class DaemonGateway {
+    constructor({client = new DaemonClient()} = {}) {
+        this.client = client;
+    }
+
+    close() {
+        this.client.close();
+    }
+
+    onSnapshot(callback) {
+        return this.client.onSnapshot(callback);
+    }
+
+    onRemoteAuth(callback) {
+        return this.client.onRemoteAuth(callback);
+    }
+
+    getSnapshot() {
+        return this.client.getSnapshot();
+    }
+
+    runJob(jobId, dryRun = false, force = false) {
+        return this.client.runJob(jobId, dryRun, force);
+    }
+
+    cancelJob(jobId) {
+        return this.client.cancelJob(jobId);
+    }
+
+    pauseJob(jobId, paused) {
+        return this.client.pauseJob(jobId, paused);
+    }
+
+    setJobEnabled(jobId, enabled) {
+        return this.client.setJobEnabled(jobId, enabled);
+    }
+
+    pauseAll(paused) {
+        return this.client.pauseAll(paused);
+    }
+
+    saveJob(job) {
+        return this.client.saveJob(job);
+    }
+
+    deleteJob(jobId) {
+        return this.client.deleteJob(jobId);
+    }
+
+    getRun(jobId, runId) {
+        return this.client.getRun(jobId, runId);
+    }
+
+    getRunLog(jobId, runId) {
+        return this.client.getRunLog(jobId, runId);
+    }
+
+    listRuns(jobId, limit = 50) {
+        return this.client.listRuns(jobId, limit);
+    }
+
+    listVersions(jobId) {
+        return this.client.listVersions(jobId);
+    }
+
+    listRemote(remote, path = '', dirsOnly = false) {
+        return this.client.listRemote(remote, path, dirsOnly);
+    }
+
+    listBackup(jobId, version = '', path = '', dirsOnly = false) {
+        return this.client.listBackup(jobId, version, path, dirsOnly);
+    }
+
+    restore(payload) {
+        return this.client.restore(payload);
+    }
+
+    beginRemoteAuth(provider, name, options = {}) {
+        return this.client.beginRemoteAuth(provider, name, options);
+    }
+
+    getRemoteAuth(authId) {
+        return this.client.getRemoteAuth(authId);
+    }
+
+    cancelRemoteAuth(authId) {
+        return this.client.cancelRemoteAuth(authId);
+    }
+
+    deleteRemote(name) {
+        return this.client.deleteRemote(name);
+    }
+
+    doctor() {
+        return this.client.doctor();
+    }
+}

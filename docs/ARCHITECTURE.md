@@ -73,16 +73,24 @@ para `SAVEME_RCLONE` e para o `rclone` do PATH. O binário bundled entra no
 ```
 extension/            extensão GNOME (zip do EGO)
   metadata.json
-  extension.js
+  extension.js        painel, popup e orquestração
+  daemon-client.js    gateway D-Bus com deduplicação de snapshot
+  system-launcher.js  gateway de processos (abrir Settings/Logs)
+  presentation.js     view model puro (status, progresso, textos)
+  ui/                 widgets St (JobRow, ProgressBar)
   stylesheet.css
   icons/
   locale/
 app/                  SaveMe Settings (GTK4/Adwaita)
   main.js
-  window.js
-  pages/
-  dialogs/
-  widgets/
+  window.js           composição da janela e navegação entre views
+  gateway/            DaemonGateway e SystemLauncher
+  presentation/       formatação pura (bytes, datas, status, ETA)
+  pages/              JobsPage, AccountsPage, LogsPage, SettingsPage,
+                      DebugPage
+  widgets/            helpers GTK compartilhados (status, linhas, read tail)
+  job-editor.js       diálogos de job, conta, restore, logs e browser
+  style.css
 src/                  daemon e bibliotecas compartilhadas internas
   domain/             regras puras, sem gi:// (backup, retenção, delete guard,
                       change batching, comandos rclone, parser de log, erros)
@@ -118,7 +126,7 @@ src/                  daemon e bibliotecas compartilhadas internas
 bin/                  saveme, saveme-daemon, saveme-settings
 data/                 .desktop, systemd, D-Bus service, ícones
 po/                   traduções
-tests/                unitários e integração
+tests/                unitários, integração, E2E e smoke
 tools/                rclone baixado para dev (não versionado)
 docs/
 debian/               empacotamento .deb
@@ -128,8 +136,14 @@ Makefile
 Durante a Fase 4, o supervisor usa `Scheduler`, `RetryPolicy` e
 `JobStateMachine` puros; o daemon ficou dividido entre ciclo de vida
 (`daemon.js`), `DaemonService` (casos de uso) e `DaemonApi` (adapter D-Bus).
-O contrato D-Bus não mudou. A Fase 5 move a UI para gateways/controllers/view
-models.
+
+Na Fase 5, as duas UIs passaram a ter o mesmo desenho: gateway na borda,
+view model puro e widgets sem D-Bus. A extensão fala com o daemon somente por
+`SaveMeDaemonClient`; `JobRow`/`ProgressBar` só consomem `presentation.js`;
+abrir o app passa por `system-launcher.js`.
+O app fala somente por `DaemonGateway` e `SystemLauncher`; as páginas recebem
+a janela e não importam `DaemonClient` nem `Gio.Subprocess`. O contrato D-Bus
+continua inalterado.
 
 ## 5. Configuração, estado e logs
 
@@ -379,14 +393,17 @@ Para remotes, o caminho equivalente é
 - D-Bus: daemon em `dbus-run-session`, chamadas reais, sinais e persistência.
 - Watcher: criação/alteração/rename/delete reais com `Gio.FileMonitor`,
   incluindo escrita atômica e temp files.
-- Extensão: teste manual no GNOME 50 e `make e2e-extension` headless;
-  a lógica pura (cliente D-Bus, formatação) fica testável fora do Shell.
+- App: gateways e formatação pura em unitários; `make e2e-app` sobe daemon +
+  GNOME Shell headless, abre a janela real com `--smoke-test`, percorre todas
+  as views e encerra com código de saída.
+- Extensão: gateways e view model puros em unitários; teste manual no GNOME 50
+  e `make e2e-extension` headless.
 - Lint: `make lint` roda pre-commit em todos os arquivos, com ESLint (GJS),
   Stylelint (GTK/St), ShellCheck, Ruff, Vulture, Knip, Markdownlint,
   `desktop-file-validate` e as regras de arquitetura do Omega.
   Ver [LINTING.md](LINTING.md).
 - CI: Ubuntu 26.04, rclone pinado, `make lint`, `make test`, `make coverage`,
-  `make e2e`, build do zip e do `.deb`.
+  `make e2e`, `make e2e-app`, build do zip e do `.deb`.
 - Matriz manual antes do release: instalação limpa, três provedores, disco
   removível, offline, suspend/resume, reboot, restore.
 

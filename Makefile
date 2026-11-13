@@ -17,7 +17,7 @@ VENV := .venv
 PRE_COMMIT ?= $(VENV)/bin/pre-commit
 PYTHON ?= python3
 
-.PHONY: all setup setup-lint test tests coverage e2e e2e-extension lint verify doctor run extension deb install uninstall clean
+.PHONY: all setup setup-lint test tests coverage e2e e2e-extension e2e-app lint verify doctor run extension deb install uninstall clean
 
 all: test
 
@@ -46,7 +46,7 @@ test: setup
 	$(PYTHON) -m unittest discover -s tests/python -p 'test_*.py'
 	SAVEME_RCLONE=$(abspath $(RCLONE)) gjs -m tests/run.js
 
-tests: test e2e e2e-extension
+tests: test e2e e2e-extension e2e-app
 
 verify: lint tests
 
@@ -89,6 +89,9 @@ e2e: setup
 e2e-extension: extension setup
 	SAVEME_RCLONE=$(abspath $(RCLONE)) sh scripts/e2e-extension.sh
 
+e2e-app: setup
+	SAVEME_RCLONE=$(abspath $(RCLONE)) sh scripts/e2e-app.sh
+
 doctor: setup
 	SAVEME_RCLONE=$(abspath $(RCLONE)) gjs -m bin/saveme.js doctor
 
@@ -97,7 +100,9 @@ run: setup
 
 extension:
 	mkdir -p dist
-	gnome-extensions pack extension -f -o dist --extra-source=icons
+	gnome-extensions pack extension -f -o dist --extra-source=icons \
+		--extra-source=daemon-client.js --extra-source=presentation.js \
+		--extra-source=system-launcher.js --extra-source=ui
 
 deb: extension $(RCLONE)
 	./scripts/build-deb.sh

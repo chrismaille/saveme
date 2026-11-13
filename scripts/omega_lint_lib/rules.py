@@ -81,7 +81,8 @@ SYMBOL_RULES = (
             "Gio.Subprocess must be behind a port/adapter "
             "(TransferEngine, SystemLauncher, or AuthProcess)."
         ),
-        allowed_prefixes=("src/adapters/", "src/composition/", "bin/", "tests/"),
+        allowed_prefixes=("src/adapters/", "src/composition/", "app/gateway/",
+                          "extension/system-launcher.js", "bin/", "tests/"),
     ),
     SymbolRule(
         name="dbus-ownership",

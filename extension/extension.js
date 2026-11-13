@@ -5,266 +5,18 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Extension, gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
-
-const DAEMON_BUS_NAME = 'io.github.chrismaille.SaveMe.Daemon';
-const DAEMON_OBJECT_PATH = '/io/github/chrismaille/SaveMe/Daemon';
-const DAEMON_INTERFACE = 'io.github.chrismaille.SaveMe.Daemon';
-
-const STATUS_LABELS = {
-    'idle': 'Idle',
-    'running': 'Running',
-    'paused': 'Paused',
-    'waiting-source': 'Source missing',
-    'waiting-destination': 'Destination missing',
-    'offline': 'Offline',
-    'error': 'Error',
-    'needs-auth': 'Needs authentication',
-    'delete-guard': 'Deleting blocked',
-    'disabled': 'Disabled',
-};
-
-function formatBytes(value) {
-    let n = Number(value) || 0;
-    const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
-    let unit = 0;
-    while (n >= 1024 && unit < units.length - 1) {
-        n /= 1024;
-        unit++;
-    }
-    return `${n.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
-}
-
-function formatWhen(iso) {
-    if (!iso)
-        return '';
-    const date = new Date(iso);
-    if (Number.isNaN(date.getTime()))
-        return '';
-    const diff = Date.now() - date.getTime();
-    if (diff < 60_000)
-        return _('just now');
-    if (diff < 3_600_000)
-        return `${Math.floor(diff / 60_000)} min`;
-    if (diff < 86_400_000)
-        return `${Math.floor(diff / 3_600_000)} h`;
-    return `${Math.floor(diff / 86_400_000)} d`;
-}
-
-function shortFile(path, max = 42) {
-    if (!path)
-        return '';
-    const name = GLib.path_get_basename(String(path));
-    return name.length <= max ? name : `${name.slice(0, max - 1)}…`;
-}
-
-function formatEta(value) {
-    const total = Number(value);
-    if (!Number.isFinite(total) || total < 0)
-        return '-';
-    const seconds = Math.round(total);
-    if (seconds < 60)
-        return `${seconds}s`;
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60)
-        return `${minutes}m ${seconds % 60}s`;
-    const hours = Math.floor(minutes / 60);
-    return `${hours}h ${minutes % 60}m`;
-}
-
-class ProgressBar {
-    constructor() {
-        this.percent = 0;
-        this.area = new St.DrawingArea({
-            style_class: 'saveme-progress',
-            x_expand: true,
-        });
-        this.area.connect('repaint', () => this._draw());
-    }
-
-    setPercent(value) {
-        this.percent = Math.max(0, Math.min(100, Number(value) || 0));
-        this.area.queue_repaint();
-    }
-
-    _draw() {
-        const cr = this.area.get_context();
-        const [width, height] = this.area.get_surface_size();
-        cr.setSourceRGBA(1, 1, 1, 0.14);
-        cr.rectangle(0, 0, width, height);
-        cr.fill();
-        if (this.percent > 0) {
-            cr.setSourceRGBA(0.26, 0.52, 0.89, 1);
-            cr.rectangle(0, 0, width * this.percent / 100, height);
-            cr.fill();
-        }
-    }
-}
-
-class JobRow {
-    constructor(extension, job) {
-        this.extension = extension;
-        this.job = job;
-        this.item = new PopupMenu.PopupBaseMenuItem({
-            reactive: false,
-            activate: false,
-            hover: false,
-        });
-
-        this.box = new St.BoxLayout({vertical: true, style_class: 'saveme-job-row'});
-        this.item.add_child(this.box);
-
-        this.top = new St.BoxLayout({vertical: false, style_class: 'saveme-job-top'});
-        this.statusIcon = new St.Icon({
-            icon_name: 'emblem-ok-symbolic',
-            icon_size: 16,
-            style_class: 'saveme-status-icon saveme-status-idle',
-        });
-        this.name = new St.Label({text: job.name, style_class: 'saveme-job-name', x_expand: true});
-        this.status = new St.Label({text: '', style_class: 'saveme-job-status'});
-        this.top.add_child(this.statusIcon);
-        this.top.add_child(this.name);
-        this.top.add_child(this.status);
-        this.box.add_child(this.top);
-
-        this.detail = new St.Label({text: '', style_class: 'saveme-job-detail'});
-        this.box.add_child(this.detail);
-
-        this.progressBar = new ProgressBar();
-        this.box.add_child(this.progressBar.area);
-
-        this.fileLabel = new St.Label({
-            text: '',
-            style_class: 'saveme-job-file',
-        });
-        this.box.add_child(this.fileLabel);
-
-        this.progress = new St.Label({text: '', style_class: 'saveme-job-detail'});
-        this.box.add_child(this.progress);
-
-        this.actions = new St.BoxLayout({vertical: false, style_class: 'saveme-actions'});
-        this.runButton = this._button('media-playback-start-symbolic', _('Run now'), () => {
-            extension.runJob(job.id);
-        });
-        this.pauseButton = this._button('media-playback-pause-symbolic', _('Pause'), () => {
-            extension.pauseJob(job.id, !this.job.state?.paused);
-        });
-        this.cancelButton = this._button('process-stop-symbolic', _('Stop and pause'), () => {
-            extension.cancelJob(job.id);
-        });
-        this.logsButton = this._button('document-open-symbolic', _('Logs'), () => {
-            extension.openLogs(job.id);
-        });
-        this.actions.add_child(this.runButton);
-        this.actions.add_child(this.pauseButton);
-        this.actions.add_child(this.cancelButton);
-        this.actions.add_child(this.logsButton);
-        this.box.add_child(this.actions);
-
-        this.update(job);
-    }
-
-    _button(iconName, tooltip, callback) {
-        const button = new St.Button({
-            style_class: 'saveme-action-button',
-            can_focus: false,
-            child: new St.Icon({
-                icon_name: iconName,
-                style_class: 'popup-menu-icon',
-            }),
-        });
-        button.accessible_name = tooltip;
-        button.connect('clicked', callback);
-        return button;
-    }
-
-    _setStatusIcon(status) {
-        const icons = {
-            'idle': 'emblem-ok-symbolic',
-            'running': 'emblem-synchronizing-symbolic',
-            'paused': 'media-playback-pause-symbolic',
-            'disabled': 'media-playback-pause-symbolic',
-            'waiting-source': 'dialog-warning-symbolic',
-            'waiting-destination': 'dialog-warning-symbolic',
-            'offline': 'dialog-warning-symbolic',
-            'error': 'dialog-error-symbolic',
-            'needs-auth': 'dialog-error-symbolic',
-            'delete-guard': 'dialog-error-symbolic',
-        };
-        this.statusIcon.icon_name = icons[status] || 'emblem-ok-symbolic';
-        this.statusIcon.style_class =
-            `saveme-status-icon saveme-status-${status}`;
-    }
-
-    update(job) {
-        this.job = job;
-        const state = job.state || {};
-        const status = state.status || 'idle';
-        this.name.text = job.name || job.id;
-        this.status.text = STATUS_LABELS[status] || status;
-        this._setStatusIcon(status);
-
-        let detail = job.type === 'backup' ? _('Backup') : _('Sync');
-        if (status === 'running') {
-            detail += ` · ${_('running now')}`;
-        } else if (state.lastRunAt) {
-            detail += ` · ${_('last run')} ${formatWhen(state.lastRunAt)}`;
-            if (state.lastResult)
-                detail += ` · ${state.lastResult}`;
-        }
-        this.detail.text = detail;
-
-        if (state.status === 'running' && state.progress) {
-            const p = state.progress;
-            const percent = Number(p.percent || 0).toFixed(0);
-            let text = `${percent}% · ${formatBytes(p.bytes)}`;
-            if (p.totalBytes)
-                text += ` / ${formatBytes(p.totalBytes)}`;
-            if (p.eta !== null && p.eta !== undefined)
-                text += ` · ETA ${formatEta(p.eta)}`;
-            this.progress.text = text;
-            this.progress.visible = true;
-            this.fileLabel.text = shortFile(p.currentFile);
-            this.fileLabel.visible = Boolean(this.fileLabel.text);
-            this.progressBar.area.visible = true;
-            this.progressBar.setPercent(p.percent || 0);
-        } else if (state.message) {
-            this.progress.text = state.message;
-            this.progress.visible = true;
-            this.fileLabel.text = '';
-            this.fileLabel.visible = false;
-            this.progressBar.area.visible = false;
-        } else {
-            this.progress.text = '';
-            this.progress.visible = false;
-            this.fileLabel.text = '';
-            this.fileLabel.visible = false;
-            this.progressBar.area.visible = false;
-        }
-
-        const running = status === 'running';
-        const paused = Boolean(state.paused);
-        this.runButton.visible = !running && job.enabled;
-        this.pauseButton.visible = job.enabled;
-        const pauseIcon = paused
-            ? 'media-playback-start-symbolic'
-            : 'media-playback-pause-symbolic';
-        if (this.pauseButton.child.icon_name !== pauseIcon)
-            this.pauseButton.child.icon_name = pauseIcon;
-        this.pauseButton.accessible_name = paused ? _('Resume') : _('Pause');
-        this.cancelButton.visible = running;
-        this.logsButton.visible = true;
-    }
-}
+import {SaveMeDaemonClient} from './daemon-client.js';
+import {SystemLauncher} from './system-launcher.js';
+import {JobRow} from './ui/job-row.js';
 
 export default class SaveMeExtension extends Extension {
     enable() {
-        this._bus = Gio.bus_get_sync(Gio.BusType.SESSION, null);
         this._snapshot = null;
-        this._snapshotJson = null;
         this._daemonError = null;
         this._rows = new Map();
         this._jobsKey = null;
-        this._signalId = 0;
+        this._refreshTimer = 0;
+        this._launcher = new SystemLauncher();
 
         this._indicator = new PanelMenu.Button(0.0, this.metadata.name, false);
         this._idleIcon = Gio.icon_new_for_string(`${this.path}/icons/saveme-symbolic.svg`);
@@ -284,39 +36,27 @@ export default class SaveMeExtension extends Extension {
         Main.panel.addToStatusArea(this.uuid, this._indicator);
 
         this._buildMenu();
-        this._signalId = this._bus.signal_subscribe(
-            DAEMON_BUS_NAME,
-            DAEMON_INTERFACE,
-            'SnapshotChanged',
-            DAEMON_OBJECT_PATH,
-            null,
-            Gio.DBusSignalFlags.NONE,
-            (_connection, _sender, _path, _iface, _signal, params) => {
-                try {
-                    const [json] = params.deepUnpack();
-                    this._applySnapshot(json);
-                } catch (e) {
-                    logError(e, 'SaveMe: invalid snapshot signal');
-                }
-            });
-        this._refresh();
+
+        this._daemonClient = new SaveMeDaemonClient({
+            onSnapshot: json => this._applySnapshot(json),
+            onError: message => this._setDaemonError(message),
+            onAfterCall: () => this._scheduleRefresh(),
+        });
+        this._daemonClient.connect();
     }
 
     disable() {
-        if (this._signalId) {
-            try {
-                this._bus.signal_unsubscribe(this._signalId);
-            } catch (_) {
-                // Ignore.
-            }
-            this._signalId = 0;
+        if (this._refreshTimer) {
+            GLib.source_remove(this._refreshTimer);
+            this._refreshTimer = 0;
         }
+        this._daemonClient?.disconnect();
+        this._daemonClient = null;
         this._rows?.clear();
         this._rows = null;
         this._indicator?.destroy();
         this._indicator = null;
         this._snapshot = null;
-        this._snapshotJson = null;
     }
 
     _buildMenu() {
@@ -409,41 +149,15 @@ export default class SaveMeExtension extends Extension {
         this._panelIcon.accessible_name = `SaveMe: ${key}`;
     }
 
-    _call(method, params, callback = null) {
-        if (!this._bus)
-            return;
-        this._bus.call(
-            DAEMON_BUS_NAME,
-            DAEMON_OBJECT_PATH,
-            DAEMON_INTERFACE,
-            method,
-            params,
-            null,
-            Gio.DBusCallFlags.NONE,
-            5000,
-            null,
-            (connection, result) => {
-                try {
-                    const reply = connection.call_finish(result);
-                    callback?.(reply);
-                    this._scheduleRefresh();
-                } catch (e) {
-                    this._setDaemonError(e.message);
-                }
-            });
-    }
-
     _refresh() {
-        this._call('GetSnapshot', null, reply => {
-            const [json] = reply.deepUnpack();
-            this._applySnapshot(json);
-        });
+        this._daemonClient?.refresh();
     }
 
     _scheduleRefresh() {
-        if (!this._indicator)
+        if (!this._indicator || this._refreshTimer)
             return;
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 300, () => {
+        this._refreshTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 300, () => {
+            this._refreshTimer = 0;
             this._refresh();
             return GLib.SOURCE_REMOVE;
         });
@@ -452,13 +166,10 @@ export default class SaveMeExtension extends Extension {
     _applySnapshot(json) {
         if (!this._indicator)
             return;
-        if (json === this._snapshotJson)
-            return;
-        this._snapshotJson = json;
         try {
             this._snapshot = JSON.parse(json);
             this._daemonError = null;
-        } catch (e) {
+        } catch (_) {
             this._setDaemonError(_('Invalid daemon response'));
             return;
         }
@@ -466,9 +177,9 @@ export default class SaveMeExtension extends Extension {
     }
 
     _setDaemonError(message) {
+        this._daemonClient?.invalidateSnapshot();
         this._daemonError = message;
         this._snapshot = null;
-        this._snapshotJson = null;
         this._render();
     }
 
@@ -533,30 +244,30 @@ export default class SaveMeExtension extends Extension {
     }
 
     runJob(jobId) {
-        this._call('RunJob', new GLib.Variant('(sbb)', [jobId, false, false]));
+        this._daemonClient?.runJob(jobId);
     }
 
     cancelJob(jobId) {
-        this._call('CancelJob', new GLib.Variant('(s)', [jobId]));
+        this._daemonClient?.cancelJob(jobId);
     }
 
     pauseJob(jobId, paused) {
-        this._call('PauseJob', new GLib.Variant('(sb)', [jobId, paused]));
+        this._daemonClient?.pauseJob(jobId, paused);
     }
 
     _togglePauseAll() {
         const paused = !this._snapshot?.pausedAll;
-        this._call('PauseAll', new GLib.Variant('(b)', [paused]));
+        this._daemonClient?.pauseAll(paused);
     }
 
     _openApp(args) {
         try {
-            const program = GLib.find_program_in_path('saveme-settings');
+            const program = this._launcher.find('saveme-settings');
             if (!program) {
                 Main.notify('SaveMe', _('SaveMe Settings is not installed'));
                 return;
             }
-            Gio.Subprocess.new([program, ...args], Gio.SubprocessFlags.NONE);
+            this._launcher.spawn([program, ...args]);
         } catch (e) {
             Main.notify('SaveMe', e.message);
         }

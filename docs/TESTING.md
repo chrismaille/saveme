@@ -8,7 +8,8 @@ make test            # unitários GJS + testes Python do Omega
 make coverage        # GJS lcov + resumo de linha/branch/função
 make e2e             # daemon + D-Bus + sync real-time + backup/restore
 make e2e-extension   # GNOME Shell headless + extensão ACTIVE + sync
-make tests           # test + e2e + e2e-extension
+make e2e-app         # daemon + Shell headless + janela GTK smoke
+make tests           # test + e2e + e2e-extension + e2e-app
 make verify          # lint + tests
 ```
 
@@ -19,7 +20,10 @@ Detalhes dos linters e das regras de arquitetura: [LINTING.md](LINTING.md).
 O E2E de daemon roda em `dbus-run-session`, com XDG temporário, daemon real,
 D-Bus real, rclone real e arquivos reais. O E2E da extensão sobe um GNOME Shell
 headless com monitor virtual e verifica que a extensão fica **ACTIVE**, sem
-erros JS, e que o daemon sincroniza um arquivo.
+erros JS, e que o daemon sincroniza um arquivo. O E2E do app usa o mesmo Shell
+headless, cria um job, abre a janela GTK real com `--smoke-test`, aplica um
+snapshot do daemon, percorre as cinco views e encerra com erro se uma view não
+renderizar.
 
 O GJS gera lcov nativo:
 
@@ -43,7 +47,7 @@ python3 scripts/coverage.py build/coverage/coverage.lcov ...
 | Núcleo legado (config, jobs, queue, paths, state, util) | 95% | 90% | testes unitários |
 | Runner, watcher, rclone, volumes | 95% | 90% | integração + falhas simuladas |
 | Daemon, supervisor, auth, D-Bus | 90% | 85% | E2E em D-Bus privado |
-| App GTK | E2E/smoke | E2E/smoke | Xvfb + AT-SPI (a implementar) |
+| App GTK | E2E/smoke | E2E/smoke | `make e2e-app` (Shell headless + `--smoke-test`) |
 | Extensão GNOME | E2E headless | E2E headless | `make e2e-extension` |
 | Provedores reais (Drive/OneDrive/Dropbox) | manual | manual | contas reais antes do release |
 
@@ -56,11 +60,11 @@ adapters e no daemon, e cobertura comportamental E2E nas superfícies visuais.
 
 Estado atual (unit + integration + E2E de daemon):
 
-- domínio puro: **99,2% linha / 97,9% branch / 100% funções**;
-- aplicação: **99,1% linha / 86,5% branch / 100% funções**;
+- domínio puro: **99,2% linha / 98,2% branch / 100% funções**;
+- aplicação: **99,1% linha / 86,8% branch / 100% funções**;
 - adapters Gio/persistência/system: **96,6% linha / 100% branch / 100% funções**;
 - adapter D-Bus (`DaemonApi`): **100% linha / 100% branch / 100% funções**;
-- `src/` global: **86,0% linha / 70,7% branch**.
+- `src/` global: **86,0% linha / 70,9% branch**.
 
 Os gates de domínio, aplicação, adapters e D-Bus rodam no `make coverage`.
 O adapter rclone é um wrapper de subprocesso e é validado por integração/E2E,
@@ -78,7 +82,9 @@ O E2E já cobre:
 - restart graceful do daemon com estado e jobs preservados;
 - pause/resume com bloqueio de mudanças em tempo real;
 - sinal `SnapshotChanged`;
-- kill -9 do daemon e recuperação de jobs/estado.
+- kill -9 do daemon e recuperação de jobs/estado;
+- app GTK headless recebendo snapshot real e renderizando todas as views;
+- extensão ACTIVE em GNOME Shell headless com sync real.
 
 Próximos cenários:
 
@@ -109,6 +115,9 @@ Cobre:
 - Scheduler, RetryPolicy e JobStateMachine puros;
 - adapters Gio: filesystem, raw log, relógio, paths e run repository;
 - adapter D-Bus: conversão de booleanos e delegação;
+- gateways do app (`DaemonGateway`, `SystemLauncher`) e da extensão
+  (`SaveMeDaemonClient`) com fakes;
+- formatação/view models puros do app e da extensão;
 - property-based tests para paths de backup, retenção e delete guard;
 - utilidades, configuração e validação de jobs;
 - fila/debounce do watcher;
@@ -118,7 +127,7 @@ Cobre:
 - origem vazia/ausente;
 - filtros padrão;
 - watcher real com criação, alteração, rename e delete;
-- E2E do daemon e da extensão.
+- E2E do daemon, do app e da extensão.
 
 O CI roda os mesmos componentes em `.github/workflows/ci.yml`.
 

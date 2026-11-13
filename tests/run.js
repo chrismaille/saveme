@@ -30,6 +30,12 @@ import changePlannerSuite from './unit/application/change-planner.test.js';
 import fileSystemAdapterSuite from './unit/adapters/file-system.test.js';
 import systemAdapterSuite from './unit/adapters/system.test.js';
 import dbusApiSuite from './unit/adapters/dbus-api.test.js';
+import appFormatSuite from './unit/app/format.test.js';
+import appGatewaySuite from './unit/app/daemon-gateway.test.js';
+import appLauncherSuite from './unit/app/system-launcher.test.js';
+import extensionPresentationSuite from './unit/extension/presentation.test.js';
+import extensionDaemonClientSuite from './unit/extension/daemon-client.test.js';
+import extensionLauncherSuite from './unit/extension/system-launcher.test.js';
 import runnerSuite from './integration/runner.test.js';
 import watcherSuite from './integration/watcher.test.js';
 
@@ -69,6 +75,12 @@ const suites = [
     fileSystemAdapterSuite,
     systemAdapterSuite,
     dbusApiSuite,
+    appFormatSuite,
+    appGatewaySuite,
+    appLauncherSuite,
+    extensionPresentationSuite,
+    extensionDaemonClientSuite,
+    extensionLauncherSuite,
     runnerSuite,
     watcherSuite,
 ];

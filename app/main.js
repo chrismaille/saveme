@@ -7,7 +7,7 @@ import Gdk from 'gi://Gdk?version=4.0';
 import GObject from 'gi://GObject';
 import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
-import {DaemonClient} from './daemon-client.js';
+import {DaemonGateway} from './gateway/daemon-gateway.js';
 import {SaveMeWindow} from './window.js';
 
 const APP_ID = 'io.github.chrismaille.SaveMe.Settings';
@@ -25,6 +25,10 @@ const SaveMeApplication = GObject.registerClass({
         this._client = null;
         this._pendingView = null;
         this._pendingJob = null;
+        this._smokeTest = false;
+        this._smokeStarted = false;
+        this._smokeChecks = 0;
+        this._smokeResult = 1;
         this.connect('startup', () => this._startup());
         this.connect('activate', () => this._activate());
         this.connect('command-line', (_app, commandLine) => {
@@ -40,7 +44,7 @@ const SaveMeApplication = GObject.registerClass({
 
     _startup() {
         this._loadCss();
-        this._client = new DaemonClient();
+        this._client = new DaemonGateway();
     }
 
     _loadCss() {
@@ -63,6 +67,8 @@ const SaveMeApplication = GObject.registerClass({
                 this._pendingView = args[++i];
             else if (args[i] === '--job')
                 this._pendingJob = args[++i];
+            else if (args[i] === '--smoke-test')
+                this._smokeTest = true;
         }
     }
 
@@ -80,12 +86,61 @@ const SaveMeApplication = GObject.registerClass({
             this._pendingView = null;
             this._pendingJob = null;
         }
+        if (this._smokeTest && !this._smokeStarted) {
+            this._smokeStarted = true;
+            this._checkSmoke();
+        }
+    }
+
+    get smokeRequested() {
+        return this._smokeTest;
+    }
+
+    get smokeExitCode() {
+        return this._smokeResult;
+    }
+
+    _checkSmoke() {
+        if (!this._window) {
+            this._failSmoke('window was not created');
+            return;
+        }
+        const snapshot = this._window.snapshot;
+        if (!snapshot) {
+            this._smokeChecks++;
+            if (this._smokeChecks > 100) {
+                this._failSmoke('daemon snapshot was not received');
+                return;
+            }
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+                this._checkSmoke();
+                return GLib.SOURCE_REMOVE;
+            });
+            return;
+        }
+        try {
+            for (const view of ['jobs', 'accounts', 'logs', 'settings', 'debug'])
+                this._window.showView(view);
+        } catch (e) {
+            this._failSmoke(`cannot show views: ${e.message}`);
+            return;
+        }
+        this._smokeResult = 0;
+        print(`SaveMe app smoke: OK (jobs=${snapshot.jobs?.length || 0})`);
+        this.quit();
+    }
+
+    _failSmoke(message) {
+        this._smokeResult = 1;
+        printerr(`SaveMe app smoke: ${message}`);
+        this.quit();
     }
 });
 
 try {
     const app = new SaveMeApplication();
-    system.exit(app.run([system.programInvocationName, ...system.programArgs]));
+    const status = app.run([system.programInvocationName, ...system.programArgs]);
+    system.exit(app.smokeRequested ? app.smokeExitCode : status);
 } catch (e) {
     printerr(`saveme-settings: ${e.message}`);
     if (e.stack)

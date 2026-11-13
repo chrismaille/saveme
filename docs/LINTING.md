@@ -85,7 +85,9 @@ Regras atuais:
 - o app não pode importar internals do daemon
   (`src/daemon.js`, `src/runner.js`, `src/supervisor.js`, etc.);
 - código de produção não pode importar `tests/`;
-- `Gio.Subprocess` só é permitido atrás de adapters/composição/CLI/testes;
+- `Gio.Subprocess` só é permitido atrás de adapters/composição,
+  `app/gateway` (`SystemLauncher`), `extension/system-launcher.js`, CLI e
+  testes;
 - `Gio.bus_get_sync` só é permitido nas fronteiras D-Bus;
 - testes não podem usar `.only`;
 - `extension/metadata.json` precisa dos campos obrigatórios do GNOME Shell.

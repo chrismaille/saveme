@@ -1,8 +1,5 @@
 {
-  "dbus-ownership:extension/extension.js:Gio.bus_get_sync": 1,
   "dbus-ownership:src/daemon.js:Gio.bus_get_sync": 3,
-  "subprocess-ownership:app/window.js:Gio.Subprocess": 3,
-  "subprocess-ownership:extension/extension.js:Gio.Subprocess": 1,
   "subprocess-ownership:src/auth.js:Gio.Subprocess": 1,
   "subprocess-ownership:src/daemon.js:Gio.Subprocess": 2
 }
