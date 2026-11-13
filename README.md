@@ -61,8 +61,16 @@ make deb
 ./scripts/install.sh
 ```
 
-The installer stops an existing daemon, reinstalls the `.deb`, updates the GNOME
-Shell extension and starts the daemon again. Use `--dry-run` to see the plan.
+To update an existing install without touching jobs, configuration or state:
+
+```bash
+./scripts/install.sh --update
+```
+
+The installer stops the app and daemon, verifies the target version, updates
+the `.deb` and restarts the daemon. The GNOME Shell extension is not installed
+by default; use `--with-extension` when you want it. Use `--dry-run` to see the
+plan.
 
 After the GitHub releases are published, the one-liner is:
 

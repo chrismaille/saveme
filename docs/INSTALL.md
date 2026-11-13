@@ -25,22 +25,26 @@ Os artefatos ficam em `dist/`:
 Com um checkout local:
 
 ```bash
-./scripts/install.sh
+./scripts/install.sh                 # instalar ou reparar (app + daemon + CLI)
+./scripts/install.sh --update        # atualizar preservando dados
+./scripts/install.sh --with-extension # incluir/atualizar a extensão GNOME
 ```
 
 O script:
 
-- para o daemon existente (`systemctl --user` + `pkill`);
+- verifica a versão instalada e, em `--update`, recusa versões iguais sem
+  `--force`;
+- para o app e o daemon existentes (`systemctl --user` + `pkill`);
 - reinstala/atualiza o `.deb` com `apt-get install --reinstall`;
-- reinstala a extensão com `gnome-extensions install --force`;
-- tenta habilitar a extensão;
-- inicia o daemon;
+- instala a extensão somente com `--with-extension` (ou `--extension PATH`);
+- inicia o daemon, exceto com `--no-start`;
 - roda `saveme doctor` no final.
 
 Use `--dry-run` para ver exatamente o que será feito:
 
 ```bash
 ./scripts/install.sh --dry-run
+./scripts/install.sh --update --dry-run
 ```
 
 O log completo da instalação fica em:
@@ -55,10 +59,16 @@ script anexa ao log o `systemctl status` e o `journalctl` do serviço.
 Opções úteis:
 
 ```bash
-./scripts/install.sh --no-extension     # só daemon/app/CLI
+./scripts/install.sh --install          # instalar/reparar (padrão)
+./scripts/install.sh --update           # atualizar uma instalação existente
+./scripts/install.sh --force            # reinstalar a mesma versão
+./scripts/install.sh --with-extension   # instalar/atualizar a extensão GNOME
+./scripts/install.sh --no-extension     # app-only (padrão)
+./scripts/install.sh --app-only         # alias de --no-extension
 ./scripts/install.sh --no-start         # não inicia o daemon agora
 ./scripts/install.sh --deb PATH         # usa um .deb específico
-./scripts/install.sh --extension PATH   # usa um zip específico
+./scripts/install.sh --extension PATH   # usa um zip específico (implica extensão)
+./scripts/install.sh --version 1.0.0    # release específico (força remoto)
 ./scripts/install.sh --log PATH         # caminho do log
 ```
 
@@ -66,11 +76,13 @@ Quando o repositório e os releases estiverem publicados:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/master/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/master/scripts/install.sh | sh -s -- --update
 ```
 
-O script baixa `saveme_<arch>.deb` e o zip da extensão do release mais recente,
-verifica `SHA256SUMS` quando disponível e instala como o seu usuário (ele chama
-`sudo` apenas para o `apt`). **Não rode o script com `sudo`.**
+O script baixa `saveme_<arch>.deb` e, quando `--with-extension` é usado, o zip
+da extensão do release mais recente, verifica `SHA256SUMS` quando disponível e
+instala como o seu usuário (ele chama `sudo` apenas para o `apt`). **Não rode o
+script com `sudo`.**
 
 ## 3. Instalação manual
 

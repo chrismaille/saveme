@@ -449,10 +449,12 @@ Para remotes, o caminho equivalente é
 - `make deb` gera `dist/saveme_<versão>_<arch>.deb` com daemon, app, CLI,
   rclone pinado, systemd, D-Bus, autostart, ícone e licenças.
 - `make extension` gera o zip do EGO em `dist/`.
-- `scripts/install.sh` instala/sobrescreve via apt, para o daemon, reinstala a
-  extensão e reinicia o daemon. `--dry-run` mostra o plano.
+- `scripts/install.sh` instala, repara ou atualiza via apt, para o app/daemon,
+  preserva dados do usuário e reinicia o serviço. `--dry-run` mostra o plano;
+  o app é o padrão e `--with-extension` adiciona a extensão GNOME.
 - `scripts/uninstall.sh` remove daemon, extensão, pacote e, com `--purge`,
-  configuração/tokens/logs.
+  configuração/tokens/logs. Sem `--purge`, remove logs/caches/temporários e
+  preserva jobs/estado.
 - `dist/saveme_<arch>.deb` e `SHA256SUMS` são os nomes estáveis usados pelo
   instalador `curl | sh` nos releases do GitHub.
 - `.deb`:

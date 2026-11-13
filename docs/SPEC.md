@@ -306,7 +306,8 @@ instalação limpa do Ubuntu 26.04:
     política de retenção.
 13. O primeiro run mostra dry-run com contagens corretas e exige confirmação.
 14. Desinstalar o `.deb` remove binários, serviços, logs, caches e temporários;
-    configuração/estado só são removidos com `--purge`.
+    configuração/estado só são removidos com `--purge`. Atualizar pelo script
+    (`--update`) preserva configuração, jobs, estado e histórico.
 15. `make test` e o CI passam; documentação de instalação, uso e restore está
     publicada; pt-BR e en funcionam.
 16. O app mantém o uso de memória sob o orçamento no soak E2E e registra

@@ -1,12 +1,14 @@
 #!/bin/sh
-# SaveMe installer / uninstaller.
+# SaveMe installer / updater / uninstaller.
 #
 # Local checkout:
-#   ./scripts/install.sh
+#   ./scripts/install.sh                  # install or repair
+#   ./scripts/install.sh --update         # update, preserving user data
 #   ./scripts/install.sh --uninstall --purge --yes
 #
 # Published:
 #   curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/master/scripts/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/master/scripts/install.sh | sh -s -- --update
 #   curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/master/scripts/install.sh | sh -s -- --uninstall --purge --yes
 #
 # Run as your desktop user, not with sudo. The script calls sudo only for apt.
@@ -20,8 +22,9 @@ ACTION="install"
 PURGE=0
 YES=0
 DRY_RUN=0
-WITH_EXTENSION=1
+WITH_EXTENSION=0
 START_DAEMON=1
+FORCE=0
 FORCE_REMOTE=0
 VERSION=""
 DEB_OVERRIDE=""
@@ -38,17 +41,26 @@ SaveMe installer
 
 Usage:
   install.sh [options]
+  install.sh --update [options]
+  install.sh --uninstall [options]
+
+Actions:
+  --install            Install or repair SaveMe (default)
+  --update             Update an installed SaveMe, preserving user data
+  --uninstall          Remove SaveMe (daemon, extension and package)
 
 Options:
-  --uninstall          Remove SaveMe (daemon, extension and package)
   --purge              With --uninstall: also remove config, tokens, logs and history
   --yes                Do not prompt for confirmation
   --dry-run            Print the plan without changing anything
-  --no-extension       Do not install the GNOME Shell extension
+  --force              Reinstall even when the version is unchanged
+  --with-extension     Install/update the GNOME Shell extension (optional)
+  --no-extension       Do not install or update the GNOME Shell extension
+  --app-only           Alias for --no-extension (default)
   --no-start           Do not start the daemon after installation
   --version VERSION    Install a specific release (e.g. 1.0.0)
   --deb PATH           Use a local .deb
-  --extension PATH     Use a local extension zip
+  --extension PATH     Use a local extension zip (implies extension)
   --repo OWNER/REPO    GitHub repository (default: $REPO)
   --remote             Download artifacts even if a local dist/ exists
   --log PATH           Write the installation log to PATH
@@ -56,6 +68,8 @@ Options:
 
 Examples:
   ./scripts/install.sh
+  ./scripts/install.sh --update
+  ./scripts/install.sh --update --version 1.0.0 --no-extension
   ./scripts/install.sh --dry-run
   ./scripts/install.sh --uninstall --purge --yes
 EOF
@@ -63,22 +77,31 @@ EOF
 
 while [ $# -gt 0 ]; do
     case "$1" in
+        --install) ACTION="install"; shift ;;
+        --update) ACTION="update"; shift ;;
         --uninstall) ACTION="uninstall"; shift ;;
         --purge) PURGE=1; shift ;;
         --yes|-y) YES=1; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
-        --no-extension) WITH_EXTENSION=0; shift ;;
+        --force) FORCE=1; shift ;;
+        --no-extension|--app-only) WITH_EXTENSION=0; shift ;;
+        --with-extension) WITH_EXTENSION=1; shift ;;
         --no-start) START_DAEMON=0; shift ;;
         --remote) FORCE_REMOTE=1; shift ;;
         --version) VERSION="${2:-}"; shift 2 ;;
         --deb) DEB_OVERRIDE="${2:-}"; shift 2 ;;
-        --extension) EXT_OVERRIDE="${2:-}"; shift 2 ;;
+        --extension) EXT_OVERRIDE="${2:-}"; WITH_EXTENSION=1; shift 2 ;;
         --repo) REPO="${2:-}"; shift 2 ;;
         --log) LOG_OVERRIDE="${2:-}"; shift 2 ;;
         --help|-h) usage; exit 0 ;;
         *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
     esac
 done
+
+if [ "$PURGE" -eq 1 ] && [ "$ACTION" != "uninstall" ]; then
+    echo "--purge is only valid with --uninstall." >&2
+    exit 1
+fi
 
 say() {
     printf '%s\n' "$*"
@@ -139,7 +162,9 @@ unmask_daemon() {
 
 cleanup() {
     if [ "$DAEMON_MASKED" -eq 1 ]; then
-        systemctl --user unmask saveme.service >/dev/null 2>&1 || true
+        if [ "$DRY_RUN" -eq 0 ]; then
+            systemctl --user unmask saveme.service >/dev/null 2>&1 || true
+        fi
         DAEMON_MASKED=0
     fi
     if [ -n "$TMP_DIR" ] && [ -d "$TMP_DIR" ]; then
@@ -224,6 +249,26 @@ fi
 
 TMP_DIR=""
 
+package_installed() {
+    command -v dpkg-query >/dev/null 2>&1 || return 1
+    dpkg-query -W -f='${Status}' saveme 2>/dev/null |
+        grep -q 'install ok installed'
+}
+
+package_version() {
+    if ! package_installed; then
+        return 0
+    fi
+    dpkg-query -W -f='${Version}' saveme 2>/dev/null || true
+}
+
+target_version() {
+    if [ ! -f "$DEB" ]; then
+        return 0
+    fi
+    dpkg-deb -f "$DEB" Version 2>/dev/null || true
+}
+
 if [ -n "$VERSION" ]; then
     BASE_URL="https://github.com/$REPO/releases/download/v$VERSION"
 elif [ "$FORCE_REMOTE" -eq 1 ]; then
@@ -237,7 +282,7 @@ pick_local_deb() {
         DEB="$DEB_OVERRIDE"
         return 0
     fi
-    if [ "$FORCE_REMOTE" -eq 0 ] && [ -n "$LOCAL_DIST" ]; then
+    if [ "$FORCE_REMOTE" -eq 0 ] && [ -z "$VERSION" ] && [ -n "$LOCAL_DIST" ]; then
         if [ -f "$LOCAL_DIST/saveme_${ARCH}.deb" ]; then
             DEB="$LOCAL_DIST/saveme_${ARCH}.deb"
             return 0
@@ -256,7 +301,7 @@ pick_local_extension() {
         EXT="$EXT_OVERRIDE"
         return 0
     fi
-    if [ "$FORCE_REMOTE" -eq 0 ] && [ -n "$LOCAL_DIST" ]; then
+    if [ "$FORCE_REMOTE" -eq 0 ] && [ -z "$VERSION" ] && [ -n "$LOCAL_DIST" ]; then
         if [ -f "$LOCAL_DIST/$UUID.shell-extension.zip" ]; then
             EXT="$LOCAL_DIST/$UUID.shell-extension.zip"
             return 0
@@ -381,9 +426,13 @@ start_daemon() {
 
 install_extension() {
     [ "$WITH_EXTENSION" -eq 1 ] || return 0
+    if [ ! -f "$EXT" ]; then
+        say "Extension package not found: ${EXT:-'(not downloaded)'}; skipping."
+        return 0
+    fi
     if ! command -v gnome-extensions >/dev/null 2>&1; then
         say "gnome-extensions not found; install the extension manually:"
-        say "  $EXT"
+        say "  /usr/share/saveme/extension.zip"
         return 0
     fi
     run gnome-extensions install --force "$EXT" || true
@@ -392,33 +441,82 @@ install_extension() {
 }
 
 do_install() {
-    if pick_local_deb; then
-        : # local package selected
-    else
+    current="$(package_version)"
+    if [ "$ACTION" = "update" ] && [ -z "$current" ]; then
+        say "SaveMe is not installed. Use --install first."
+        exit 1
+    fi
+    if [ "$ACTION" = "install" ] && [ -n "$current" ]; then
+        say "SaveMe $current is already installed; repairing/updating it."
+    fi
+
+    if ! pick_local_deb; then
         download_artifacts
     fi
-    if pick_local_extension; then
-        : # local extension selected
-    elif [ -z "${EXT:-}" ]; then
-        if [ -z "${TMP_DIR:-}" ]; then
-            TMP_DIR="$(mktemp -d)"
+    if [ "$DRY_RUN" -eq 0 ] && [ ! -f "$DEB" ]; then
+        say "Package not found: $DEB"
+        exit 1
+    fi
+    if [ -n "$DEB_OVERRIDE" ] && [ "$DRY_RUN" -eq 0 ] && [ ! -f "$DEB_OVERRIDE" ]; then
+        say "Package not found: $DEB_OVERRIDE"
+        exit 1
+    fi
+
+    if [ "$WITH_EXTENSION" -eq 1 ]; then
+        if ! pick_local_extension; then
+            if [ -z "${TMP_DIR:-}" ]; then
+                TMP_DIR="$(mktemp -d)"
+            fi
             EXT="$TMP_DIR/$UUID.shell-extension.zip"
             if [ "$DRY_RUN" -eq 1 ]; then
                 say "+ curl -fL --retry 3 -o $EXT $BASE_URL/$UUID.shell-extension.zip"
             else
+                command -v curl >/dev/null 2>&1 || {
+                    say "curl is required to download the extension."
+                    exit 1
+                }
+                say "Downloading $BASE_URL/$UUID.shell-extension.zip"
                 curl -fL --retry 3 -o "$EXT" "$BASE_URL/$UUID.shell-extension.zip"
+                if curl -fsSL -o "$TMP_DIR/SHA256SUMS" "$BASE_URL/SHA256SUMS" 2>/dev/null; then
+                    verify_checksums "$TMP_DIR/SHA256SUMS" "$EXT"
+                else
+                    say "SHA256SUMS not found; skipping extension checksum."
+                fi
             fi
+        fi
+        if [ -n "$EXT_OVERRIDE" ] && [ "$DRY_RUN" -eq 0 ] && [ ! -f "$EXT_OVERRIDE" ]; then
+            say "Extension not found: $EXT_OVERRIDE"
+            exit 1
         fi
     fi
 
-    say "SaveMe installer"
+    target="$(target_version)"
+    if [ "$ACTION" = "update" ] && [ "$DRY_RUN" -eq 0 ] &&
+        [ -n "$current" ] && [ -n "$target" ] && [ "$current" = "$target" ] &&
+        [ "$FORCE" -ne 1 ]; then
+        say "SaveMe is already at $current. Use --force to reinstall."
+        return 0
+    fi
+
+    say "SaveMe $ACTION"
     say "  package:   $DEB"
+    if [ -n "$current" ]; then
+        say "  installed: $current"
+    else
+        say "  installed: (none)"
+    fi
+    if [ -n "$target" ]; then
+        say "  target:    $target"
+    fi
     if [ "$WITH_EXTENSION" -eq 1 ]; then
         say "  extension: $EXT"
+    else
+        say "  extension: skipped (--no-extension)"
     fi
     say ""
 
     stop_daemon
+    stop_app
     mask_daemon
     run_sudo apt-get install -y --reinstall "$DEB"
     unmask_daemon
@@ -431,7 +529,7 @@ do_install() {
         say ""
         say "Installation check:"
         saveme doctor || true
-        if command -v gnome-extensions >/dev/null 2>&1; then
+        if [ "$WITH_EXTENSION" -eq 1 ] && command -v gnome-extensions >/dev/null 2>&1; then
             gnome-extensions info "$UUID" 2>/dev/null || true
         fi
         say ""

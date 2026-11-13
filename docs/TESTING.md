@@ -110,6 +110,8 @@ Cobre:
 - lint completo, incluindo ESLint, Stylelint, ShellCheck, Ruff, Vulture, Knip,
   Markdownlint, validação de `.desktop` e regras do Omega;
 - testes Python do próprio Omega lint;
+- `make test` também roda um dry-run do instalador, sem `sudo`/`apt`, cobrindo
+  install, update, app-only e uninstall normal/purge;
 - domínio puro: layout de backup, retenção, delete guard, change batcher,
   comandos rclone, parser de log, jobs e transições de estado;
 - application services com fakes de transfer/filesystem/state/clock:
