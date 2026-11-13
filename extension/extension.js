@@ -132,6 +132,12 @@ class JobRow {
         this.progressBar = new ProgressBar();
         this.box.add_child(this.progressBar.area);
 
+        this.fileLabel = new St.Label({
+            text: '',
+            style_class: 'saveme-job-file',
+        });
+        this.box.add_child(this.fileLabel);
+
         this.progress = new St.Label({text: '', style_class: 'saveme-job-detail'});
         this.box.add_child(this.progress);
 
@@ -198,10 +204,13 @@ class JobRow {
         this._setStatusIcon(status);
 
         let detail = job.type === 'backup' ? _('Backup') : _('Sync');
-        if (state.lastRunAt)
+        if (status === 'running') {
+            detail += ` · ${_('running now')}`;
+        } else if (state.lastRunAt) {
             detail += ` · ${_('last run')} ${formatWhen(state.lastRunAt)}`;
-        if (state.lastResult)
-            detail += ` · ${state.lastResult}`;
+            if (state.lastResult)
+                detail += ` · ${state.lastResult}`;
+        }
         this.detail.text = detail;
 
         if (state.status === 'running' && state.progress) {
@@ -212,20 +221,23 @@ class JobRow {
                 text += ` / ${formatBytes(p.totalBytes)}`;
             if (p.eta !== null && p.eta !== undefined)
                 text += ` · ETA ${formatEta(p.eta)}`;
-            const file = shortFile(p.currentFile);
-            if (file)
-                text += ` · ${file}`;
             this.progress.text = text;
             this.progress.visible = true;
+            this.fileLabel.text = shortFile(p.currentFile);
+            this.fileLabel.visible = Boolean(this.fileLabel.text);
             this.progressBar.area.visible = true;
             this.progressBar.setPercent(p.percent || 0);
         } else if (state.message) {
             this.progress.text = state.message;
             this.progress.visible = true;
+            this.fileLabel.text = '';
+            this.fileLabel.visible = false;
             this.progressBar.area.visible = false;
         } else {
             this.progress.text = '';
             this.progress.visible = false;
+            this.fileLabel.text = '';
+            this.fileLabel.visible = false;
             this.progressBar.area.visible = false;
         }
 
