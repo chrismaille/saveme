@@ -259,23 +259,33 @@ mesmo em cancelamento.
 
 ## 10. Versionamento
 
-O modo Backup usa `--backup-dir`:
+O modo Backup usa `--backup-dir` e mantém duas árvores irmãs dentro da pasta
+base escolhida:
 
 ```
-<destino>.saveme-versions/<job-id>/<YYYYMMDDTHHMMSS>/<caminho-relativo>
+<destino>/SaveMe/<job-id>/current/<caminho-relativo>
+<destino>/SaveMe/<job-id>/versions/<YYYYMMDDTHHMMSS>-<run>/<caminho-relativo>
 ```
 
-O diretório fica ao lado do destino, fora da árvore sincronizada. Isso evita
-recursão e facilita o browse/restore. Para remotes, o caminho equivalente é
-`<remote>:<destino>.saveme-versions/...`.
+Para remotes, o caminho equivalente é
+`<remote>:<destino>/SaveMe/<job-id>/...`.
 
-- Cada lote de mudanças gera um timestamp.
-- O rclone move a versão antiga para o backup-dir antes de sobrescrever.
-- Retenção: `rclone delete <versions-root>/<job-id> --min-age <dias>d` seguido
-  de `rmdirs`; roda após cada backup.
-- Restore de versão: `rclone copy <versions-root>/<job-id>/<timestamp>/<path>
-  <destino-local>` com dry-run e confirmação.
-- O app lista as versões via `rclone lsf --dirs-only`/`lsjson`.
+- `current` é o espelho do último backup. O full backup usa `rclone sync`
+  origem → current; delete/overwrite vão para o `--backup-dir`.
+- `versions` guarda apenas arquivos sobrescritos ou removidos naquele lote;
+  não é um snapshot completo.
+- No incremental, upserts usam `copy --backup-dir`; arquivos removidos são
+  movidos de `current` para o diretório de versão com `rclone move`.
+- Retenção: remove diretórios de versão antigos com `rclone purge`, após cada
+  backup.
+- Restore:
+  - backup atual inteiro: `rclone copy current <target>`;
+  - arquivo/pasta de uma versão: `rclone copy
+    versions/<timestamp>/<path> <target>`.
+- O app lista versões, datas e arquivos via `ListVersions`/`ListBackup` e
+  oferece um navegador de backup. O dry-run é padrão.
+- Trocar o destino de um job Sync começa um novo espelho; arquivos do destino
+  antigo não são movidos.
 
 ## 11. Volumes removíveis
 

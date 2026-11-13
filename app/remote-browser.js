@@ -23,13 +23,16 @@ export const RemoteBrowserDialog = GObject.registerClass({
         mode = 'browse',
         remote = null,
         path = '',
+        jobId = null,
+        version = '',
         transientFor = null,
         onSelect = null,
     } = {}) {
         super({
             transient_for: transientFor || mainWindow,
             modal: true,
-            title: mode === 'pick' ? 'Choose cloud folder' : 'Browse cloud folder',
+            title: jobId ? 'Browse backup'
+                : mode === 'pick' ? 'Choose cloud folder' : 'Browse cloud folder',
             default_width: 760,
             default_height: 620,
         });
@@ -39,11 +42,17 @@ export const RemoteBrowserDialog = GObject.registerClass({
         this.onSelect = onSelect;
         this.remote = remote;
         this.path = String(path || '').replace(/^\/+|\/+$/g, '');
+        this.jobId = jobId;
+        this.version = version || '';
+        this.backupMode = Boolean(jobId);
         this.remotes = [];
         this.loadToken = 0;
         this._updating = false;
         this._build();
-        this.updateRemotes();
+        if (this.backupMode)
+            this.updateRemotes();
+        else
+            this.updateRemotes();
     }
 
     _build() {
@@ -55,7 +64,7 @@ export const RemoteBrowserDialog = GObject.registerClass({
         header.pack_start(close);
         if (this.mode === 'pick') {
             this.selectButton = new Gtk.Button({
-                label: 'Select this folder',
+                label: this.backupMode ? 'Select' : 'Select this folder',
                 css_classes: ['suggested-action'],
             });
             this.selectButton.connect('clicked', () => this._select());
@@ -83,9 +92,16 @@ export const RemoteBrowserDialog = GObject.registerClass({
             orientation: Gtk.Orientation.HORIZONTAL,
             spacing: 8,
         });
+        if (this.backupMode) {
+            this.controls.append(new Gtk.Label({
+                label: this.version ? `Version ${this.version}` : 'Current backup',
+                css_classes: ['dim-label'],
+            }));
+        }
         this.remoteDropDown = new Gtk.DropDown({
             hexpand: true,
             model: Gtk.StringList.new(['No accounts']),
+            visible: !this.backupMode,
         });
         this.remoteDropDown.connect('notify::selected', () => {
             if (this._updating || this.remotes.length === 0)
@@ -161,6 +177,15 @@ export const RemoteBrowserDialog = GObject.registerClass({
     }
 
     updateRemotes() {
+        if (this.backupMode) {
+            this.remotes = [];
+            this.remote = 'backup';
+            this.controls.visible = true;
+            this.emptyBox.visible = false;
+            this.breadcrumb.visible = true;
+            this._load();
+            return;
+        }
         this.remotes = this.mainWindow.snapshot?.remotes || [];
         const labels = this.remotes.map(remote => remote.label || remote.name);
         this._updating = true;
@@ -211,11 +236,17 @@ export const RemoteBrowserDialog = GObject.registerClass({
         this._clearList();
         this._setStatus('Loading…');
         this.pathEntry.text = this.path;
-        this.breadcrumb.set_text(
-            `${this.remote}:${this.path ? `/${this.path}` : '/'}`);
+        if (this.backupMode) {
+            this.breadcrumb.set_text(
+                `${this.version ? `version ${this.version}` : 'current backup'}: /${this.path}`);
+        } else {
+            this.breadcrumb.set_text(
+                `${this.remote}:${this.path ? `/${this.path}` : '/'}`);
+        }
         try {
-            const entries = await this.client.listRemote(
-                this.remote, this.path, this.mode === 'pick');
+            const entries = this.backupMode
+                ? await this.client.listBackup(this.jobId, this.version, this.path, false)
+                : await this.client.listRemote(this.remote, this.path, this.mode === 'pick');
             if (token !== this.loadToken)
                 return;
             this._setStatus('');
@@ -310,6 +341,9 @@ export const RemoteBrowserDialog = GObject.registerClass({
             this._go(parts.join('/'));
         } else if (entry.isDir) {
             this._go(this.path ? `${this.path}/${entry.name}` : entry.name);
+        } else if (this.backupMode) {
+            this.path = this.path ? `${this.path}/${entry.name}` : entry.name;
+            this._select();
         }
     }
 
@@ -319,6 +353,13 @@ export const RemoteBrowserDialog = GObject.registerClass({
     }
 
     _select() {
+        if (this.backupMode) {
+            this.path = String(this.pathEntry.text || this.path || '')
+                .replace(/^\/+|\/+$/g, '');
+            this.onSelect?.({path: this.path});
+            this.close();
+            return;
+        }
         if (!this.remote) {
             this._setStatus('Choose a cloud account first.');
             return;
@@ -334,10 +375,12 @@ export const RemoteBrowserDialog = GObject.registerClass({
     }
 
     _copyPath() {
-        const text = `${this.remote || ''}:${this.path ? `/${this.path}` : '/'}`;
+        const text = this.backupMode
+            ? this.path
+            : `${this.remote || ''}:${this.path ? `/${this.path}` : '/'}`;
         try {
             this.get_clipboard().set(text);
-            this.mainWindow.toast('Remote path copied.');
+            this.mainWindow.toast('Path copied.');
         } catch (e) {
             this.mainWindow.toast(e.message);
         }

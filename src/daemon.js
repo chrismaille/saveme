@@ -7,7 +7,13 @@ import {ConfigStore} from './config.js';
 import {StateStore} from './state.js';
 import {VolumeResolver} from './volumes.js';
 import {Rclone, findRclone, isSuccessExit, exitCodeMessage} from './rclone.js';
-import {JobRunner, versionsRootFor, parseVersionTimestamp} from './runner.js';
+import {
+    JobRunner,
+    backupCurrentFor,
+    joinRclonePath,
+    versionsRootFor,
+    parseVersionTimestamp,
+} from './runner.js';
 import {JobManager} from './supervisor.js';
 import {RemoteAuthManager} from './auth.js';
 import {Logger, readTextTail} from './log.js';
@@ -97,6 +103,10 @@ export class DaemonApi {
 
     ListRemote(remote, path, dirsOnly) {
         return this.daemon.listRemote(remote, path, Boolean(dirsOnly));
+    }
+
+    ListBackup(jobId, version, path, dirsOnly) {
+        return this.daemon.listBackup(jobId, version, path, Boolean(dirsOnly));
     }
 
     Restore(payloadJson) {
@@ -565,6 +575,59 @@ export const SaveMeDaemonApplication = GObject.registerClass({
         return JSON.stringify(entries);
     }
 
+    listBackup(jobId, version, path, dirsOnly) {
+        const job = this._config.getJob(jobId);
+        if (!job)
+            throw new Error(`Job not found: ${jobId}`);
+        if (job.type !== 'backup')
+            throw new Error('This job is not a backup job.');
+        const dest = this._resolveJobDestination(job);
+        let root;
+        if (version) {
+            if (!validateVersionName(version))
+                throw new Error('Invalid version name.');
+            root = joinPath(versionsRootFor(job, dest), version);
+        } else {
+            root = backupCurrentFor(job, dest);
+        }
+        const cleanPath = String(path || '').replace(/^\/+|\/+$/g, '');
+        const target = cleanPath ? joinRclonePath(root, cleanPath) : root;
+        if (dirsOnly) {
+            const result = this._rclone.runCapture(['lsf', target, '--dirs-only']);
+            if (result.exitCode === 3)
+                return JSON.stringify([]);
+            if (!isSuccessExit(result.exitCode))
+                throw new Error(result.stderr.trim() || exitCodeMessage(result.exitCode));
+            const entries = result.stdout.split('\n')
+                .map(line => line.trim().replace(/\/$/, ''))
+                .filter(Boolean)
+                .map(name => ({name, isDir: true, size: 0, modTime: null}))
+                .sort((a, b) => a.name.localeCompare(b.name));
+            return JSON.stringify(entries);
+        }
+        const result = this._rclone.runCapture(['lsjson', target]);
+        if (result.exitCode === 3)
+            return JSON.stringify([]);
+        if (!isSuccessExit(result.exitCode))
+            throw new Error(result.stderr.trim() || exitCodeMessage(result.exitCode));
+        let raw = [];
+        try {
+            raw = JSON.parse(result.stdout || '[]');
+        } catch (e) {
+            throw new Error(`Invalid rclone lsjson output: ${e.message}`);
+        }
+        const entries = raw.map(entry => ({
+            name: entry.Name || entry.Path || '',
+            isDir: Boolean(entry.IsDir),
+            size: Number(entry.Size || 0),
+            modTime: entry.ModTime || null,
+        })).filter(entry => entry.name);
+        entries.sort((a, b) => a.isDir === b.isDir
+            ? a.name.localeCompare(b.name)
+            : a.isDir ? -1 : 1);
+        return JSON.stringify(entries);
+    }
+
     restore(payloadJson) {
         const payload = JSON.parse(payloadJson);
         const job = this._config.getJob(payload.jobId);
@@ -582,7 +645,7 @@ export const SaveMeDaemonApplication = GObject.registerClass({
             const root = versionsRootFor(job, dest);
             source = joinPath(root, payload.version);
         } else {
-            source = dest;
+            source = job.type === 'backup' ? backupCurrentFor(job, dest) : dest;
         }
         if (payload.path)
             source = `${String(source).replace(/\/+$/, '')}/${String(payload.path).replace(/^\/+/, '')}`;

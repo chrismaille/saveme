@@ -149,26 +149,40 @@ Regras:
 
 ## 7. Backup e restauração
 
-Layout de versões:
+Layout no destino:
 
 ```
-<destino>.saveme-versions/<job-id>/<timestamp>/<caminho-relativo>
+<destino>/SaveMe/<job-id>/current/<caminho-relativo>
+<destino>/SaveMe/<job-id>/versions/<timestamp>/<caminho-relativo>
 ```
 
 Para remote:
 
 ```
-<remote>:<destino>.saveme-versions/<job-id>/<timestamp>/<caminho-relativo>
+<remote>:<destino>/SaveMe/<job-id>/current/...
+<remote>:<destino>/SaveMe/<job-id>/versions/<timestamp>/...
 ```
 
-- O diretório de versões fica ao lado do destino, fora da árvore sincronizada.
-- Timestamp no formato `YYYYMMDDTHHMMSS`.
-- A limpeza de retenção roda após cada backup.
+- `current` é o espelho do último backup.
+- `versions/<timestamp>` contém os arquivos sobrescritos ou removidos naquele
+  lote. Não é um snapshot completo; é o histórico incremental.
+- Cada execução com mudanças gera um diretório de versão com timestamp.
+- A limpeza de retenção remove diretórios de versão antigos.
 - A interface permite:
-  - restaurar o estado atual de um arquivo/pasta do destino;
-  - listar versões por data e restaurar uma versão específica;
+  - restaurar o backup atual inteiro;
+  - navegar no backup atual ou em uma versão por data;
+  - restaurar um arquivo ou pasta específico;
   - fazer dry-run antes de restaurar.
 - Restauração nunca sobrescreve sem confirmação.
+
+O destino configurado no job de backup é a **pasta base**. O SaveMe cria
+`SaveMe/<job-id>/` dentro dela.
+
+## 7.1 Sync
+
+No modo Sync, o destino configurado é o espelho direto da origem. Alterações
+na origem são refletidas no destino. Trocar a pasta de destino pela edição do
+job começa um novo espelho; os arquivos do destino antigo não são movidos.
 
 ## 8. Discos removíveis
 

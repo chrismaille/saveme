@@ -56,6 +56,13 @@ export const DAEMON_INTERFACE = `
       <arg type="b" direction="in"/>
       <arg type="s" direction="out"/>
     </method>
+    <method name="ListBackup">
+      <arg type="s" direction="in"/>
+      <arg type="s" direction="in"/>
+      <arg type="s" direction="in"/>
+      <arg type="b" direction="in"/>
+      <arg type="s" direction="out"/>
+    </method>
     <method name="Restore">
       <arg type="s" direction="in"/>
       <arg type="s" direction="out"/>

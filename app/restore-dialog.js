@@ -2,6 +2,7 @@ import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
+import {RemoteBrowserDialog} from './remote-browser.js';
 
 export const RestoreDialog = GObject.registerClass({
     GTypeName: 'SaveMeRestoreDialog',
@@ -11,8 +12,8 @@ export const RestoreDialog = GObject.registerClass({
             transient_for: parentWindow,
             modal: true,
             title: `Restore — ${job.name}`,
-            default_width: 640,
-            default_height: 560,
+            default_width: 680,
+            default_height: 620,
         });
         this.parentWindow = parentWindow;
         this.client = parentWindow.client;
@@ -39,17 +40,31 @@ export const RestoreDialog = GObject.registerClass({
         toolbar.add_top_bar(header);
 
         const page = new Adw.PreferencesPage();
-        const sourceGroup = new Adw.PreferencesGroup({title: 'Source'});
+        const sourceGroup = new Adw.PreferencesGroup({
+            title: 'Source',
+            description: 'Choose the current backup or a dated version, then browse to a file or folder. Leave the path empty to restore the selected source.',
+        });
         this.versionRow = new Adw.ComboRow({
             title: 'Version',
-            model: Gtk.StringList.new(['Current destination']),
+            model: Gtk.StringList.new(['Current backup']),
             selected: 0,
+        });
+        this.versionRow.connect('notify::selected', () => {
+            if (this.pathRow)
+                this.pathRow.text = '';
         });
         sourceGroup.add(this.versionRow);
         this.pathRow = new Adw.EntryRow({
-            title: 'Path inside the destination',
+            title: 'File or folder inside the backup',
             text: '',
         });
+        const browse = new Gtk.Button({
+            label: 'Browse',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat'],
+        });
+        browse.connect('clicked', () => this._browse());
+        this.pathRow.add_suffix(browse);
         sourceGroup.add(this.pathRow);
         page.add(sourceGroup);
 
@@ -82,7 +97,7 @@ export const RestoreDialog = GObject.registerClass({
         try {
             const versions = await this.client.listVersions(this.job.id);
             this.versions = versions;
-            const labels = ['Current destination',
+            const labels = ['Current backup',
                 ...versions.map(version => {
                     if (!version.date)
                         return version.name;
@@ -93,6 +108,24 @@ export const RestoreDialog = GObject.registerClass({
         } catch (e) {
             this.parentWindow.toast(`Cannot list versions: ${e.message}`);
         }
+    }
+
+    _selectedVersion() {
+        const index = this.versionRow.selected;
+        return index > 0 ? this.versions[index - 1]?.name || '' : '';
+    }
+
+    _browse() {
+        new RemoteBrowserDialog(this.parentWindow, {
+            mode: 'pick',
+            jobId: this.job.id,
+            version: this._selectedVersion(),
+            path: String(this.pathRow.text || '').trim(),
+            transientFor: this,
+            onSelect: selected => {
+                this.pathRow.text = selected.path || '';
+            },
+        }).present();
     }
 
     _chooseTarget() {
@@ -120,12 +153,33 @@ export const RestoreDialog = GObject.registerClass({
             this.parentWindow.toast('Target folder does not exist.');
             return;
         }
-        const versionIndex = this.versionRow.selected;
-        const version = versionIndex > 0 ? this.versions[versionIndex - 1]?.name : null;
+        const version = this._selectedVersion();
+        const path = String(this.pathRow.text || '').trim();
+        if (version && !path) {
+            const dialog = new Adw.AlertDialog({
+                heading: 'Restore changed files only?',
+                body: 'A dated version contains only files that were overwritten or deleted in that batch. ' +
+                    'To restore the complete latest backup, choose Current backup. ' +
+                    'To restore a single file from this date, browse and select it.',
+            });
+            dialog.add_response('cancel', 'Cancel');
+            dialog.add_response('continue', 'Continue');
+            dialog.set_response_appearance('continue', Adw.ResponseAppearance.DESTRUCTIVE);
+            dialog.connect('response', (_dialog, response) => {
+                if (response === 'continue')
+                    this._performRestore({version, path});
+            });
+            dialog.present(this);
+            return;
+        }
+        await this._performRestore({version, path});
+    }
+
+    async _performRestore({version, path}) {
         const payload = {
             jobId: this.job.id,
             version,
-            path: String(this.pathRow.text || '').trim(),
+            path,
             target: this.target,
             dryRun: Boolean(this.dryRunRow.active),
         };

@@ -84,6 +84,16 @@ function truncate(text, max = 60) {
     return value.length <= max ? value : `${value.slice(0, max - 1)}…`;
 }
 
+function backupRootDisplay(job) {
+    if (job.destination.kind === 'remote') {
+        const path = job.destination.path
+            ? `${job.destination.path.replace(/\/+$/, '')}/SaveMe/${job.id}`
+            : `SaveMe/${job.id}`;
+        return `${job.destination.remote}:${path}`;
+    }
+    return `${String(job.destination.path || '').replace(/\/+$/, '')}/SaveMe/${job.id}`;
+}
+
 function openPath(path) {
     try {
         Gio.Subprocess.new(['xdg-open', path], Gio.SubprocessFlags.NONE);
@@ -118,13 +128,66 @@ function runDuration(run) {
     return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
 
-function setStatusDot(label, status) {
-    for (const cssClass of [...label.get_css_classes()]) {
+function formatEta(value) {
+    const total = Number(value);
+    if (!Number.isFinite(total) || total < 0)
+        return '-';
+    const seconds = Math.round(total);
+    if (seconds < 60)
+        return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60)
+        return `${minutes}m ${seconds % 60}s`;
+    const hours = Math.floor(minutes / 60);
+    return `${hours}h ${minutes % 60}m`;
+}
+
+function statusIconName(status) {
+    if (['error', 'needs-auth', 'delete-guard'].includes(status))
+        return 'dialog-error-symbolic';
+    if (status === 'running')
+        return 'emblem-synchronizing-symbolic';
+    if (status === 'paused' || status === 'disabled')
+        return 'media-playback-pause-symbolic';
+    if (['waiting-source', 'waiting-destination', 'offline'].includes(status))
+        return 'dialog-warning-symbolic';
+    return 'emblem-ok-symbolic';
+}
+
+function setStatusIcon(icon, status) {
+    icon.icon_name = statusIconName(status);
+    for (const cssClass of [...icon.get_css_classes()]) {
         if (cssClass.startsWith('saveme-status-'))
-            label.remove_css_class(cssClass);
+            icon.remove_css_class(cssClass);
     }
-    label.add_css_class('saveme-status-dot');
-    label.add_css_class(`saveme-status-${status}`);
+    icon.add_css_class(`saveme-status-${status}`);
+}
+
+function makeStatusIcon(status) {
+    const icon = new Gtk.Image({
+        icon_name: statusIconName(status),
+        pixel_size: 16,
+        valign: Gtk.Align.CENTER,
+    });
+    icon.add_css_class(`saveme-status-${status}`);
+    return icon;
+}
+
+function iconLabelButton(label, iconName, {cssClasses = [], tooltip = null} = {}) {
+    const box = new Gtk.Box({
+        orientation: Gtk.Orientation.HORIZONTAL,
+        spacing: 6,
+    });
+    const icon = new Gtk.Image({icon_name: iconName, pixel_size: 16});
+    const text = new Gtk.Label({label});
+    box.append(icon);
+    box.append(text);
+    const button = new Gtk.Button({child: box, css_classes: cssClasses});
+    if (tooltip)
+        button.set_tooltip_text(tooltip);
+    button._saveMeIcon = icon;
+    button._saveMeLabel = text;
+    return button;
 }
 
 function typeLabel(type) {
@@ -292,8 +355,7 @@ class JobsPage {
             margin_end: 10,
         });
         const top = new Gtk.Box({orientation: Gtk.Orientation.HORIZONTAL, spacing: 8});
-        const dot = new Gtk.Label({label: '●', valign: Gtk.Align.CENTER});
-        setStatusDot(dot, job.state?.status || 'idle');
+        const dot = makeStatusIcon(job.state?.status || 'idle');
         const name = new Gtk.Label({
             label: job.name || job.id,
             xalign: 0,
@@ -315,6 +377,13 @@ class JobsPage {
             ellipsize: Pango.EllipsizeMode.END,
             css_classes: ['dim-label'],
         });
+        const paths = new Gtk.Label({
+            label: this._sidebarPaths(job),
+            xalign: 0,
+            ellipsize: Pango.EllipsizeMode.END,
+            css_classes: ['saveme-sidebar-paths'],
+        });
+        paths.set_tooltip_text(this._sidebarPaths(job, false));
         const progress = new Gtk.ProgressBar({
             visible: false,
             height_request: 6,
@@ -322,11 +391,21 @@ class JobsPage {
         });
         box.append(top);
         box.append(subtitle);
+        box.append(paths);
         box.append(progress);
         row.set_child(box);
-        const entry = {row, dot, name, status, subtitle, progress, job};
+        const entry = {row, dot, name, status, subtitle, paths, progress, job};
         this._updateSidebarProgress(entry, job);
         return entry;
+    }
+
+    _sidebarPaths(job, short = true) {
+        const source = descriptorDisplay(job.source, this.window.volumes);
+        const destination = job.type === JOB_TYPES.BACKUP
+            ? backupRootDisplay(job)
+            : descriptorDisplay(job.destination, this.window.volumes);
+        const text = `${source} → ${destination}`;
+        return short ? truncate(text, 54) : text;
     }
 
     _sidebarSubtitle(job) {
@@ -361,8 +440,10 @@ class JobsPage {
         entry.job = job;
         entry.name.set_text(job.name || job.id);
         entry.status.set_text(statusLabel(job.state?.status));
-        setStatusDot(entry.dot, job.state?.status || 'idle');
+        setStatusIcon(entry.dot, job.state?.status || 'idle');
         entry.subtitle.set_text(this._sidebarSubtitle(job));
+        entry.paths.set_text(this._sidebarPaths(job));
+        entry.paths.set_tooltip_text(this._sidebarPaths(job, false));
         this._updateSidebarProgress(entry, job);
     }
 
@@ -405,13 +486,10 @@ class JobsPage {
             title: job.name || job.id,
             subtitle: `${typeLabel(job.type)} · ${statusLabel(state.status)}`,
         });
-        const dot = new Gtk.Label({label: '●', valign: Gtk.Align.CENTER});
-        setStatusDot(dot, state.status || 'idle');
+        const dot = makeStatusIcon(state.status || 'idle');
         statusRow.add_prefix(dot);
-        const openButton = new Gtk.Button({
-            label: 'Open destination',
-            valign: Gtk.Align.CENTER,
-            css_classes: ['flat'],
+        const openButton = iconLabelButton('Open destination', 'folder-open-symbolic', {
+            cssClasses: ['flat'],
         });
         openButton.connect('clicked', () => this.window.openDestination(job));
         statusRow.add_suffix(openButton);
@@ -435,6 +513,43 @@ class JobsPage {
         statusGroup.add(progressBox);
         page.add(statusGroup);
 
+        const paths = new Adw.PreferencesGroup({title: 'Source and destination'});
+        const sourceRow = new Adw.ActionRow({
+            title: 'Source',
+            subtitle: descriptorDisplay(job.source, this.window.volumes),
+        });
+        const sourceOpen = iconLabelButton('Open', 'folder-open-symbolic', {
+            cssClasses: ['flat'],
+        });
+        sourceOpen.connect('clicked', () => this.window.openSource(job));
+        sourceRow.add_suffix(sourceOpen);
+        const destinationRow = new Adw.ActionRow({
+            title: 'Destination',
+            subtitle: job.type === JOB_TYPES.BACKUP
+                ? `${descriptorDisplay(job.destination, this.window.volumes)} (base)`
+                : descriptorDisplay(job.destination, this.window.volumes),
+        });
+        const destinationOpen = iconLabelButton('Open', 'folder-open-symbolic', {
+            cssClasses: ['flat'],
+        });
+        destinationOpen.connect('clicked', () => this.window.openDestination(job));
+        destinationRow.add_suffix(destinationOpen);
+        paths.add(sourceRow);
+        paths.add(destinationRow);
+        if (job.type === JOB_TYPES.BACKUP) {
+            const backupRow = new Adw.ActionRow({
+                title: 'Backup folder',
+                subtitle: backupRootDisplay(job),
+            });
+            const backupOpen = iconLabelButton('Open', 'folder-open-symbolic', {
+                cssClasses: ['flat'],
+            });
+            backupOpen.connect('clicked', () => this.window.openBackupRoot(job));
+            backupRow.add_suffix(backupOpen);
+            paths.add(backupRow);
+        }
+        page.add(paths);
+
         const stats = new Adw.PreferencesGroup({title: 'Statistics'});
         const statsRows = {
             files: this._statRow('Files'),
@@ -457,37 +572,41 @@ class JobsPage {
             margin_top: 6,
             margin_bottom: 6,
         });
-        const addAction = (label, cssClasses, callback) => {
-            const button = new Gtk.Button({label, css_classes: cssClasses});
+        const addAction = (label, iconName, cssClasses, callback) => {
+            const button = iconLabelButton(label, iconName, {cssClasses});
             button.connect('clicked', callback);
             flow.append(button);
             return button;
         };
-        const runButton = addAction('Run now', ['suggested-action'], () => {
-            this.window.client.runJob(job.id)
-                .then(() => this.window.toast('Run started.'))
-                .catch(e => this.window.toast(e.message));
-        });
-        addAction('Dry run', [], () => {
+        const runButton = addAction('Run now', 'media-playback-start-symbolic',
+            ['suggested-action'], () => {
+                this.window.client.runJob(job.id)
+                    .then(() => this.window.toast('Run started.'))
+                    .catch(e => this.window.toast(e.message));
+            });
+        addAction('Dry run', 'system-run-symbolic', [], () => {
             this.window.client.runJob(job.id, true)
                 .then(() => this.window.toast('Dry run started. Check Logs.'))
                 .catch(e => this.window.toast(e.message));
         });
-        const pauseButton = addAction(state.paused ? 'Resume' : 'Pause', [], () => {
-            this.window.client.pauseJob(job.id, !this._currentJob()?.state?.paused)
-                .catch(e => this.window.toast(e.message));
-        });
-        const stopButton = addAction('Stop', ['destructive-action'], () => {
-            this.window.client.cancelJob(job.id)
-                .catch(e => this.window.toast(e.message));
-        });
-        addAction('Edit', [], () => this.window.editJob(job));
-        addAction('Logs', [], () => this.window.openLogs(job.id));
+        const pauseButton = addAction(state.paused ? 'Resume' : 'Pause',
+            state.paused ? 'media-playback-start-symbolic' : 'media-playback-pause-symbolic',
+            [], () => {
+                this.window.client.pauseJob(job.id, !this._currentJob()?.state?.paused)
+                    .catch(e => this.window.toast(e.message));
+            });
+        const stopButton = addAction('Stop', 'process-stop-symbolic',
+            ['destructive-action'], () => {
+                this.window.client.cancelJob(job.id)
+                    .catch(e => this.window.toast(e.message));
+            });
+        addAction('Edit', 'document-edit-symbolic', [], () => this.window.editJob(job));
+        addAction('Logs', 'text-x-generic-symbolic', [], () => this.window.openLogs(job.id));
         if (job.type === JOB_TYPES.BACKUP) {
-            addAction('Versions / restore', [],
+            addAction('Versions / restore', 'document-revert-symbolic', [],
                 () => this.window.openVersions(job));
         }
-        addAction('Delete', ['destructive-action'], () => {
+        addAction('Delete', 'edit-delete-symbolic', ['destructive-action'], () => {
             this.window.confirm('Delete job?',
                 `Delete “${job.name}”? The destination files are not removed.`,
                 true, () => {
@@ -498,33 +617,6 @@ class JobsPage {
         });
         actions.add(flow);
         page.add(actions);
-
-        const paths = new Adw.PreferencesGroup({title: 'Paths'});
-        const sourceRow = new Adw.ActionRow({
-            title: 'Source',
-            subtitle: descriptorDisplay(job.source, this.window.volumes),
-        });
-        const sourceOpen = new Gtk.Button({
-            label: 'Open',
-            valign: Gtk.Align.CENTER,
-            css_classes: ['flat'],
-        });
-        sourceOpen.connect('clicked', () => this.window.openSource(job));
-        sourceRow.add_suffix(sourceOpen);
-        const destinationRow = new Adw.ActionRow({
-            title: 'Destination',
-            subtitle: descriptorDisplay(job.destination, this.window.volumes),
-        });
-        const destinationOpen = new Gtk.Button({
-            label: 'Open',
-            valign: Gtk.Align.CENTER,
-            css_classes: ['flat'],
-        });
-        destinationOpen.connect('clicked', () => this.window.openDestination(job));
-        destinationRow.add_suffix(destinationOpen);
-        paths.add(sourceRow);
-        paths.add(destinationRow);
-        page.add(paths);
 
         const configuration = new Adw.PreferencesGroup({title: 'Configuration'});
         configuration.add(this._statRow('Schedule',
@@ -576,7 +668,7 @@ class JobsPage {
         const progress = state.progress;
         this.detail.statusRow.set_subtitle(
             `${typeLabel(job.type)} · ${statusLabel(state.status)}`);
-        setStatusDot(this.detail.dot, state.status || 'idle');
+        setStatusIcon(this.detail.dot, state.status || 'idle');
 
         if (progress) {
             this.detail.progress.set_fraction(
@@ -584,10 +676,11 @@ class JobsPage {
             this.detail.progress.set_text(
                 `${Math.round(progress.percent || 0)}% · ` +
                 `${formatBytes(progress.bytes)} / ${formatBytes(progress.totalBytes)}`);
-            if (progress.currentFile) {
+            const currentPath = progress.currentPath || progress.currentFile;
+            if (currentPath) {
                 this.detail.current.set_text(
-                    truncate(basenameOf(progress.currentFile), 64));
-                this.detail.current.set_tooltip_text(progress.currentFile);
+                    truncate(basenameOf(currentPath), 64));
+                this.detail.current.set_tooltip_text(currentPath);
                 this.detail.current.visible = true;
             } else {
                 this.detail.current.visible = false;
@@ -605,7 +698,7 @@ class JobsPage {
             ? `${formatBytes(progress.bytes)} / ${formatBytes(progress.totalBytes)}`
             : '-');
         this.detail.stats.speed.set_subtitle(progress
-            ? `${formatBytes(progress.speed)}/s · ${progress.eta ?? '-'}`
+            ? `${formatBytes(progress.speed)}/s · ETA ${formatEta(progress.eta)}`
             : '-');
         this.detail.stats.deletes.set_subtitle(progress
             ? `${progress.deletes || 0} / ${progress.errors || 0}`
@@ -619,7 +712,13 @@ class JobsPage {
         const running = state.status === 'running';
         this.detail.runButton.sensitive = !running;
         this.detail.stopButton.sensitive = running;
-        this.detail.pauseButton.label = state.paused ? 'Resume' : 'Pause';
+        if (this.detail.pauseButton._saveMeLabel)
+            this.detail.pauseButton._saveMeLabel.label = state.paused ? 'Resume' : 'Pause';
+        if (this.detail.pauseButton._saveMeIcon) {
+            this.detail.pauseButton._saveMeIcon.icon_name = state.paused
+                ? 'media-playback-start-symbolic'
+                : 'media-playback-pause-symbolic';
+        }
     }
 }
 
@@ -668,6 +767,10 @@ class AccountsPage {
                     title: remote.label || remote.name,
                     subtitle: `${remoteTypeLabel(remote.type)} · ${remote.name}`,
                 });
+                row.add_prefix(new Gtk.Image({
+                    icon_name: 'folder-remote-symbolic',
+                    pixel_size: 16,
+                }));
                 const menu = new Gtk.MenuButton({
                     valign: Gtk.Align.CENTER,
                     css_classes: ['flat'],
@@ -857,17 +960,19 @@ class LogsPage {
             this.progress.set_text(
                 `${Math.round(progress.percent || 0)}% · ` +
                 `${formatBytes(progress.bytes)} / ${formatBytes(progress.totalBytes)}`);
-            if (progress.currentFile) {
+            const currentPath = progress.currentPath || progress.currentFile;
+            if (currentPath) {
                 this.currentLabel.set_text(
-                    truncate(basenameOf(progress.currentFile), 72));
-                this.currentLabel.set_tooltip_text(progress.currentFile);
+                    truncate(basenameOf(currentPath), 72));
+                this.currentLabel.set_tooltip_text(currentPath);
                 this.currentLabel.visible = true;
             } else {
                 this.currentLabel.visible = false;
             }
             this.activeRow.set_subtitle(
                 `${progress.files || 0} / ${progress.totalFiles || 0} files · ` +
-                `${formatBytes(progress.bytes)} / ${formatBytes(progress.totalBytes)}`);
+                `${formatBytes(progress.bytes)} / ${formatBytes(progress.totalBytes)} · ` +
+                `ETA ${formatEta(progress.eta)}`);
         } else {
             this.progress.visible = false;
             this.currentLabel.visible = false;
@@ -920,8 +1025,12 @@ class LogsPage {
                     title: `${RESULT_LABELS[run.result] || run.result} · ${formatWhen(run.startedAt)}`,
                     subtitle: parts.join(' · '),
                 });
-                const dot = new Gtk.Label({label: '●', valign: Gtk.Align.CENTER});
-                dot.add_css_class('saveme-status-dot');
+                const dot = new Gtk.Image({
+                    icon_name: run.result === 'error' ? 'dialog-error-symbolic'
+                        : run.result === 'cancelled' ? 'media-playback-pause-symbolic'
+                            : 'emblem-ok-symbolic',
+                    pixel_size: 14,
+                });
                 dot.add_css_class(resultClass(run.result));
                 row.add_prefix(dot);
                 const view = new Gtk.Button({
@@ -1386,6 +1495,40 @@ export const SaveMeWindow = GObject.registerClass({
 
     openDestination(job) {
         this._openJobPath(job.destination);
+    }
+
+    openBackupRoot(job) {
+        if (!job || job.type !== JOB_TYPES.BACKUP)
+            return this.openDestination(job);
+        if (job.destination.kind === 'remote') {
+            const path = job.destination.path
+                ? `${job.destination.path.replace(/\/+$/, '')}/SaveMe/${job.id}`
+                : `SaveMe/${job.id}`;
+            new RemoteBrowserDialog(this, {
+                mode: 'browse',
+                remote: job.destination.remote,
+                path,
+            }).present();
+            return;
+        }
+        let base = null;
+        try {
+            base = localPathFor(job.destination, this.volumes);
+        } catch (e) {
+            this.toast(e.message);
+            return;
+        }
+        const path = `${String(base || '').replace(/\/+$/, '')}/SaveMe/${job.id}`;
+        if (!GLib.file_test(path, GLib.FileTest.EXISTS)) {
+            this.toast(`Backup folder not created yet: ${path}`);
+            return;
+        }
+        try {
+            Gio.AppInfo.launch_default_for_uri(
+                Gio.File.new_for_path(path).get_uri(), null);
+        } catch (e) {
+            this.toast(e.message);
+        }
     }
 
     _openJobPath(descriptor) {

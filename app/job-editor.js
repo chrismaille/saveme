@@ -29,6 +29,7 @@ export const JobEditor = GObject.registerClass({
         this.parentWindow = parentWindow;
         this.client = parentWindow.client;
         this.volumes = parentWindow.volumes || new VolumeResolver();
+        this.isNew = !job;
         this.job = normalizeJob(job
             ? JSON.parse(JSON.stringify(job))
             : defaultJob());
@@ -55,7 +56,10 @@ export const JobEditor = GObject.registerClass({
         toolbar.add_top_bar(header);
 
         const page = new Adw.PreferencesPage();
-        const general = new Adw.PreferencesGroup({title: 'General'});
+        const general = new Adw.PreferencesGroup({
+            title: 'General',
+            description: this.isNew ? '' : 'The job type cannot be changed after creation.',
+        });
         this.nameRow = new Adw.EntryRow({
             title: 'Name',
             text: this.job.name || '',
@@ -65,12 +69,16 @@ export const JobEditor = GObject.registerClass({
             model: Gtk.StringList.new(TYPE_LABELS),
             selected: this.job.type === JOB_TYPES.BACKUP ? 1 : 0,
         });
+        this.typeRow.sensitive = this.isNew;
         this.typeRow.connect('notify::selected', () => this._updateVisibility());
         general.add(this.nameRow);
         general.add(this.typeRow);
         page.add(general);
 
-        const locations = new Adw.PreferencesGroup({title: 'Source and destination'});
+        const locations = new Adw.PreferencesGroup({
+            title: 'Source and destination',
+            description: 'Changing the destination of an existing sync job does not move files already copied; the next run starts a fresh mirror at the new destination.',
+        });
         this.sourceRow = new Adw.ActionRow({
             title: 'Source',
             subtitle: descriptorDisplay(this.job.source, this.volumes),
@@ -119,7 +127,10 @@ export const JobEditor = GObject.registerClass({
         schedule.add(this.intervalRow);
         page.add(schedule);
 
-        this.backupGroup = new Adw.PreferencesGroup({title: 'Backup'});
+        this.backupGroup = new Adw.PreferencesGroup({
+            title: 'Backup',
+            description: 'Backups are stored in <destination>/SaveMe/<job-id>/current. Previous and deleted files go to <destination>/SaveMe/<job-id>/versions/<date>.',
+        });
         this.retentionRow = new Adw.SpinRow({
             title: 'Keep versions for (days)',
             subtitle: '0 keeps versions forever',

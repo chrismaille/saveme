@@ -120,11 +120,12 @@ export class ConfigStore {
             for (const error of jobErrors)
                 errors.push(`${job.name || job.id}: ${error}`);
             const key = descriptorKey(job.destination);
-            if (destinations.has(key)) {
+            const other = destinations.get(key);
+            if (other && !(other.type === 'backup' && job.type === 'backup')) {
                 errors.push(`${job.name || job.id}: destination already used by ` +
-                    `${destinations.get(key)}`);
-            } else {
-                destinations.set(key, job.name || job.id);
+                    `${other.name || other.id}`);
+            } else if (!other) {
+                destinations.set(key, job);
             }
         }
         if (errors.length > 0)
@@ -197,7 +198,7 @@ export class ConfigStore {
         const key = descriptorKey(job.destination);
         const other = this.data.jobs.find(item =>
             item.id !== excludeId && descriptorKey(item.destination) === key);
-        if (other)
+        if (other && !(other.type === 'backup' && job.type === 'backup'))
             throw new Error(`Destination already used by job: ${other.name || other.id}`);
     }
 

@@ -57,6 +57,20 @@ function shortFile(path, max = 42) {
     return name.length <= max ? name : `${name.slice(0, max - 1)}…`;
 }
 
+function formatEta(value) {
+    const total = Number(value);
+    if (!Number.isFinite(total) || total < 0)
+        return '-';
+    const seconds = Math.round(total);
+    if (seconds < 60)
+        return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60)
+        return `${minutes}m ${seconds % 60}s`;
+    const hours = Math.floor(minutes / 60);
+    return `${hours}h ${minutes % 60}m`;
+}
+
 class ProgressBar {
     constructor() {
         this.percent = 0;
@@ -100,10 +114,14 @@ class JobRow {
         this.item.add_child(this.box);
 
         this.top = new St.BoxLayout({vertical: false, style_class: 'saveme-job-top'});
-        this.dot = new St.Label({text: '●', style_class: 'saveme-dot saveme-status-idle'});
+        this.statusIcon = new St.Icon({
+            icon_name: 'emblem-ok-symbolic',
+            icon_size: 16,
+            style_class: 'saveme-status-icon saveme-status-idle',
+        });
         this.name = new St.Label({text: job.name, style_class: 'saveme-job-name', x_expand: true});
         this.status = new St.Label({text: '', style_class: 'saveme-job-status'});
-        this.top.add_child(this.dot);
+        this.top.add_child(this.statusIcon);
         this.top.add_child(this.name);
         this.top.add_child(this.status);
         this.box.add_child(this.top);
@@ -153,13 +171,31 @@ class JobRow {
         return button;
     }
 
+    _setStatusIcon(status) {
+        const icons = {
+            'idle': 'emblem-ok-symbolic',
+            'running': 'emblem-synchronizing-symbolic',
+            'paused': 'media-playback-pause-symbolic',
+            'disabled': 'media-playback-pause-symbolic',
+            'waiting-source': 'dialog-warning-symbolic',
+            'waiting-destination': 'dialog-warning-symbolic',
+            'offline': 'dialog-warning-symbolic',
+            'error': 'dialog-error-symbolic',
+            'needs-auth': 'dialog-error-symbolic',
+            'delete-guard': 'dialog-error-symbolic',
+        };
+        this.statusIcon.icon_name = icons[status] || 'emblem-ok-symbolic';
+        this.statusIcon.style_class =
+            `saveme-status-icon saveme-status-${status}`;
+    }
+
     update(job) {
         this.job = job;
         const state = job.state || {};
         const status = state.status || 'idle';
         this.name.text = job.name || job.id;
         this.status.text = STATUS_LABELS[status] || status;
-        this.dot.style_class = `saveme-dot saveme-status-${status}`;
+        this._setStatusIcon(status);
 
         let detail = job.type === 'backup' ? _('Backup') : _('Sync');
         if (state.lastRunAt)
@@ -174,6 +210,8 @@ class JobRow {
             let text = `${percent}% · ${formatBytes(p.bytes)}`;
             if (p.totalBytes)
                 text += ` / ${formatBytes(p.totalBytes)}`;
+            if (p.eta !== null && p.eta !== undefined)
+                text += ` · ETA ${formatEta(p.eta)}`;
             const file = shortFile(p.currentFile);
             if (file)
                 text += ` · ${file}`;

@@ -44,6 +44,11 @@
     font-weight: 600;
 }
 
+.saveme-sidebar-paths {
+    font-size: 0.8em;
+    opacity: 0.6;
+}
+
 .saveme-url {
     font-family: monospace;
     font-size: 0.9em;

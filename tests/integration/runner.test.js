@@ -4,7 +4,7 @@ import {Logger} from '../../src/log.js';
 import {Rclone, findRclone} from '../../src/rclone.js';
 import {StateStore} from '../../src/state.js';
 import {VolumeResolver} from '../../src/volumes.js';
-import {JobRunner, versionsRootFor} from '../../src/runner.js';
+import {JobRunner, backupCurrentFor, versionsRootFor} from '../../src/runner.js';
 import {JOB_TYPES, defaultJob} from '../../src/jobs.js';
 import {uniqueId} from '../../src/util.js';
 import {
@@ -121,7 +121,7 @@ export default suite('runner (integration)', [
             writeFile(GLib.build_filenamev([ctx.source, 'a.txt']), 'v3');
             run = await ctx.runner.runFull(job);
             assertEqual(run.result, 'success', `v3 failed: ${run.message}`);
-            assertEqual(readFile(GLib.build_filenamev([ctx.dest, 'a.txt'])), 'v3');
+            assertEqual(readFile(GLib.build_filenamev([backupCurrentFor(job, ctx.dest), 'a.txt'])), 'v3');
             const versionsRoot = versionsRootFor(job, ctx.dest);
             const versions = findFiles(versionsRoot).map(file => readFile(file.path)).sort();
             assert(versions.includes('v1'), `versions: ${JSON.stringify(versions)}`);
@@ -131,7 +131,7 @@ export default suite('runner (integration)', [
         }
     }),
 
-    test('backup does not delete destination when source deletes', async () => {
+    test('backup moves deleted files to versions', async () => {
         const ctx = createContext();
         try {
             writeFile(GLib.build_filenamev([ctx.source, 'a.txt']), 'keep');
@@ -142,8 +142,13 @@ export default suite('runner (integration)', [
             deleteFile(GLib.build_filenamev([ctx.source, 'a.txt']));
             run = await ctx.runner.runFull(job);
             assertEqual(run.result, 'success', `run failed: ${run.message}`);
-            assertEqual(readFile(GLib.build_filenamev([ctx.dest, 'a.txt'])), 'keep');
-            assertEqual(readFile(GLib.build_filenamev([ctx.dest, 'b.txt'])), 'remove');
+            const current = backupCurrentFor(job, ctx.dest);
+            assert(!GLib.file_test(GLib.build_filenamev([current, 'a.txt']),
+                GLib.FileTest.EXISTS));
+            assertEqual(readFile(GLib.build_filenamev([current, 'b.txt'])), 'remove');
+            const versionsRoot = versionsRootFor(job, ctx.dest);
+            const versions = findFiles(versionsRoot).map(file => readFile(file.path));
+            assert(versions.includes('keep'), `versions: ${JSON.stringify(versions)}`);
         } finally {
             cleanup(ctx.root);
         }
@@ -270,10 +275,36 @@ export default suite('runner (integration)', [
                 {path: GLib.build_filenamev([ctx.source, 'a.txt']), kind: 'upsert'},
             ]);
             assertEqual(run.result, 'success', `incremental failed: ${run.message}`);
-            assertEqual(readFile(GLib.build_filenamev([ctx.dest, 'a.txt'])), 'v2');
+            assertEqual(readFile(GLib.build_filenamev([backupCurrentFor(job, ctx.dest), 'a.txt'])), 'v2');
             const versionsRoot = versionsRootFor(job, ctx.dest);
             const versions = findFiles(versionsRoot).map(file => readFile(file.path));
             assert(versions.includes('v1'), `versions: ${JSON.stringify(versions)}`);
+        } finally {
+            cleanup(ctx.root);
+        }
+    }),
+
+    test('incremental backup moves deleted files to versions', async () => {
+        const ctx = createContext();
+        try {
+            writeFile(GLib.build_filenamev([ctx.source, 'a.txt']), 'keep');
+            writeFile(GLib.build_filenamev([ctx.source, 'b.txt']), 'stay');
+            const job = makeJob(ctx, JOB_TYPES.BACKUP);
+            let run = await ctx.runner.runFull(job);
+            assertEqual(run.result, 'success', `initial failed: ${run.message}`);
+            const path = GLib.build_filenamev([ctx.source, 'a.txt']);
+            deleteFile(path);
+            run = await ctx.runner.runIncremental(job, [
+                {path, kind: 'delete'},
+            ]);
+            assertEqual(run.result, 'success', `incremental failed: ${run.message}`);
+            const current = backupCurrentFor(job, ctx.dest);
+            assert(!GLib.file_test(GLib.build_filenamev([current, 'a.txt']),
+                GLib.FileTest.EXISTS));
+            assertEqual(readFile(GLib.build_filenamev([current, 'b.txt'])), 'stay');
+            const versions = findFiles(versionsRootFor(job, ctx.dest))
+                .map(file => readFile(file.path));
+            assert(versions.includes('keep'), `versions: ${JSON.stringify(versions)}`);
         } finally {
             cleanup(ctx.root);
         }

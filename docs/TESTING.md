@@ -52,11 +52,13 @@ Use uma instalação limpa do Ubuntu 26.04.
 
 ### Backup local
 
-- [ ] Alterar o mesmo arquivo 3 vezes; 3 versões existem
-- [ ] Restaurar versão atual e versão antiga
+- [ ] Alterar o mesmo arquivo 3 vezes; versões anteriores existem
+- [ ] Restaurar backup atual inteiro
+- [ ] Navegar por uma versão por data e restaurar um arquivo
 - [ ] Dry run de restore não escreve
-- [ ] Apagar na origem; destino mantém a última cópia
+- [ ] Apagar na origem; o arquivo vai para `versions` e pode ser restaurado
 - [ ] Retenção remove versões antigas
+- [ ] Pasta final: `<destino>/SaveMe/<job-id>/current` e `.../versions`
 
 ### Nuvem
 
@@ -66,6 +68,7 @@ Use uma instalação limpa do Ubuntu 26.04.
 - [ ] Backup local → nuvem com versões
 - [ ] Ficar offline; job tenta com backoff e recupera depois
 - [ ] Cancelar job em andamento
+- [ ] Trocar a pasta de destino de um job Sync pela edição; novo espelho começa nela
 
 ### Discos removíveis
 
