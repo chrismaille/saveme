@@ -148,6 +148,12 @@ export class DaemonClient {
         return JSON.parse(reply.deepUnpack()[0]);
     }
 
+    async listRemote(remote, path = '', dirsOnly = false) {
+        const reply = await this._call('ListRemote',
+            new GLib.Variant('(ssb)', [remote, path, dirsOnly]), 60_000);
+        return JSON.parse(reply.deepUnpack()[0]);
+    }
+
     async restore(payload) {
         const reply = await this._call('Restore',
             new GLib.Variant('(s)', [JSON.stringify(payload)]), 300_000);

@@ -1,14 +1,16 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
+import Pango from 'gi://Pango';
 import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
 import {JobEditor} from './job-editor.js';
 import {AccountDialog} from './account-dialog.js';
 import {RestoreDialog} from './restore-dialog.js';
 import {LogDialog} from './log-dialog.js';
+import {RemoteBrowserDialog} from './remote-browser.js';
 import {VolumeResolver} from '../src/volumes.js';
-import {descriptorDisplay, JOB_TYPES} from '../src/jobs.js';
+import {descriptorDisplay, JOB_TYPES, localPathFor} from '../src/jobs.js';
 import {sleep} from '../src/util.js';
 
 const APP_DIR = GLib.path_get_dirname(GLib.filename_from_uri(import.meta.url)[0]);
@@ -73,6 +75,15 @@ function readTail(path, maxLines = 800) {
     }
 }
 
+function basenameOf(path) {
+    return GLib.path_get_basename(String(path || ''));
+}
+
+function truncate(text, max = 60) {
+    const value = String(text || '');
+    return value.length <= max ? value : `${value.slice(0, max - 1)}…`;
+}
+
 function openPath(path) {
     try {
         Gio.Subprocess.new(['xdg-open', path], Gio.SubprocessFlags.NONE);
@@ -83,6 +94,28 @@ function openPath(path) {
 
 function statusLabel(status) {
     return STATUS_LABELS[status] || status || 'Idle';
+}
+
+function resultClass(result) {
+    if (result === 'error')
+        return 'saveme-status-error';
+    if (result === 'cancelled')
+        return 'saveme-status-paused';
+    return 'saveme-status-idle';
+}
+
+function runDuration(run) {
+    const start = Date.parse(run.startedAt || '');
+    const end = Date.parse(run.finishedAt || '');
+    if (!Number.isFinite(start) || !Number.isFinite(end))
+        return '';
+    const seconds = Math.max(0, Math.round((end - start) / 1000));
+    if (seconds < 60)
+        return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60)
+        return `${minutes}m ${seconds % 60}s`;
+    return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
 
 function setStatusDot(label, status) {
@@ -118,148 +151,343 @@ function jobSubtitle(job, volumes) {
 class JobsPage {
     constructor(window) {
         this.window = window;
-        this.widget = new Adw.PreferencesPage();
-        this.group = null;
-        this.rows = new Map();
         this.jobs = [];
+        this.selectedId = null;
+        this.rows = new Map();
         this.structureKey = null;
+        this.detailsJobId = null;
+        this.detail = null;
+        this._updatingSelection = false;
+
+        this.widget = new Gtk.Paned({
+            orientation: Gtk.Orientation.HORIZONTAL,
+            position: 340,
+            shrink_start_child: false,
+            shrink_end_child: false,
+            resize_start_child: false,
+            resize_end_child: true,
+        });
+        this._buildSidebar();
+        this._renderDetails();
+    }
+
+    _buildSidebar() {
+        const sidebar = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL});
+        const header = new Gtk.Box({
+            orientation: Gtk.Orientation.HORIZONTAL,
+            spacing: 6,
+            margin_top: 8,
+            margin_bottom: 8,
+            margin_start: 12,
+            margin_end: 12,
+        });
+        header.append(new Gtk.Label({
+            label: 'Jobs',
+            xalign: 0,
+            hexpand: true,
+            css_classes: ['heading'],
+        }));
+        const add = new Gtk.Button({
+            icon_name: 'list-add-symbolic',
+            tooltip_text: 'New job',
+            css_classes: ['flat'],
+        });
+        add.connect('clicked', () => this.window.newJob());
+        header.append(add);
+        sidebar.append(header);
+
+        this.listBox = new Gtk.ListBox({
+            selection_mode: Gtk.SelectionMode.SINGLE,
+            activate_on_single_click: true,
+            show_separators: true,
+        });
+        this.listBox.connect('row-selected', (_box, row) => {
+            if (this._updatingSelection || !row?._jobId)
+                return;
+            this.selectedId = row._jobId;
+            this._renderDetails();
+        });
+        const scrolled = new Gtk.ScrolledWindow({vexpand: true, hexpand: true});
+        scrolled.set_child(this.listBox);
+        sidebar.append(scrolled);
+        this.widget.set_start_child(sidebar);
+        this.sidebar = sidebar;
     }
 
     update(snapshot) {
         const jobs = snapshot.jobs || [];
         this.jobs = jobs;
+        if (!jobs.some(job => job.id === this.selectedId))
+            this.selectedId = jobs[0]?.id || null;
+
         const key = jobs.map(job =>
             `${job.id}:${job.name}:${job.type}:${job.enabled}`).join('|');
-        if (key !== this.structureKey) {
+        const structureChanged = key !== this.structureKey;
+        if (structureChanged) {
             this.structureKey = key;
-            this._rebuild(jobs);
+            this._rebuildSidebar();
         } else {
             for (const job of jobs)
-                this._updateRow(job);
+                this._updateSidebarRow(job);
+        }
+
+        const job = jobs.find(item => item.id === this.selectedId) || null;
+        if (structureChanged || this.detailsJobId !== this.selectedId || !this.detail)
+            this._renderDetails();
+        else if (job)
+            this._updateDetails(job);
+    }
+
+    _clearListBox() {
+        let child = this.listBox.get_first_child();
+        while (child) {
+            const next = child.get_next_sibling();
+            this.listBox.remove(child);
+            child = next;
         }
     }
 
-    _rebuild(jobs) {
-        if (this.group)
-            this.widget.remove(this.group);
+    _rebuildSidebar() {
+        this._updatingSelection = true;
+        this._clearListBox();
         this.rows.clear();
-        this.group = new Adw.PreferencesGroup({title: 'Jobs'});
-        if (jobs.length === 0) {
-            const row = new Adw.ActionRow({
+        for (const job of this.jobs) {
+            const entry = this._makeSidebarRow(job);
+            this.rows.set(job.id, entry);
+            this.listBox.append(entry.row);
+        }
+        if (this.jobs.length === 0) {
+            const row = new Gtk.ListBoxRow({activatable: false, selectable: false});
+            row.set_child(new Gtk.Label({
+                label: 'No jobs configured',
+                xalign: 0,
+                margin_top: 12,
+                margin_bottom: 12,
+                margin_start: 12,
+                margin_end: 12,
+                css_classes: ['dim-label'],
+            }));
+            this.listBox.append(row);
+        }
+        const selected = this.rows.get(this.selectedId) ||
+            this.rows.values().next().value || null;
+        if (selected) {
+            this.selectedId = selected.row._jobId;
+            this.listBox.select_row(selected.row);
+        } else {
+            this.selectedId = null;
+        }
+        this._updatingSelection = false;
+    }
+
+    _makeSidebarRow(job) {
+        const row = new Gtk.ListBoxRow();
+        row._jobId = job.id;
+        const box = new Gtk.Box({
+            orientation: Gtk.Orientation.VERTICAL,
+            spacing: 4,
+            margin_top: 8,
+            margin_bottom: 8,
+            margin_start: 10,
+            margin_end: 10,
+        });
+        const top = new Gtk.Box({orientation: Gtk.Orientation.HORIZONTAL, spacing: 8});
+        const dot = new Gtk.Label({label: '●', valign: Gtk.Align.CENTER});
+        setStatusDot(dot, job.state?.status || 'idle');
+        const name = new Gtk.Label({
+            label: job.name || job.id,
+            xalign: 0,
+            hexpand: true,
+            ellipsize: Pango.EllipsizeMode.END,
+        });
+        name.add_css_class('saveme-job-title');
+        const status = new Gtk.Label({
+            label: statusLabel(job.state?.status),
+            css_classes: ['dim-label'],
+        });
+        top.append(dot);
+        top.append(name);
+        top.append(status);
+
+        const subtitle = new Gtk.Label({
+            label: this._sidebarSubtitle(job),
+            xalign: 0,
+            ellipsize: Pango.EllipsizeMode.END,
+            css_classes: ['dim-label'],
+        });
+        const progress = new Gtk.ProgressBar({
+            visible: false,
+            height_request: 6,
+            margin_top: 2,
+        });
+        box.append(top);
+        box.append(subtitle);
+        box.append(progress);
+        row.set_child(box);
+        const entry = {row, dot, name, status, subtitle, progress, job};
+        this._updateSidebarProgress(entry, job);
+        return entry;
+    }
+
+    _sidebarSubtitle(job) {
+        const state = job.state || {};
+        const progress = state.progress;
+        if (state.status === 'running' && progress) {
+            return `${typeLabel(job.type)} · ${Math.round(progress.percent || 0)}% · ` +
+                `${formatBytes(progress.bytes)} / ${formatBytes(progress.totalBytes)}`;
+        }
+        let text = `${typeLabel(job.type)} · ${statusLabel(state.status)}`;
+        if (state.lastRunAt)
+            text += ` · ${formatWhen(state.lastRunAt)}`;
+        return text;
+    }
+
+    _updateSidebarProgress(entry, job) {
+        const progress = job.state?.progress;
+        if (job.state?.status === 'running' && progress) {
+            entry.progress.visible = true;
+            entry.progress.set_fraction(
+                Math.max(0, Math.min(1, Number(progress.percent || 0) / 100)));
+        } else {
+            entry.progress.visible = false;
+            entry.progress.set_fraction(0);
+        }
+    }
+
+    _updateSidebarRow(job) {
+        const entry = this.rows.get(job.id);
+        if (!entry)
+            return;
+        entry.job = job;
+        entry.name.set_text(job.name || job.id);
+        entry.status.set_text(statusLabel(job.state?.status));
+        setStatusDot(entry.dot, job.state?.status || 'idle');
+        entry.subtitle.set_text(this._sidebarSubtitle(job));
+        this._updateSidebarProgress(entry, job);
+    }
+
+    _renderDetails() {
+        const job = this.jobs.find(item => item.id === this.selectedId) || null;
+        const scroll = new Gtk.ScrolledWindow({vexpand: true, hexpand: true});
+        this.detailsScroll = scroll;
+        this.widget.set_end_child(scroll);
+        this.detail = null;
+        this.detailsJobId = job?.id || null;
+
+        if (!job) {
+            const page = new Adw.StatusPage({
                 title: 'No jobs configured',
-                subtitle: 'Create a job to start syncing.',
+                description: 'Create a job to start syncing.',
+                icon_name: 'view-list-symbolic',
             });
             const button = new Gtk.Button({
                 label: 'New job',
-                valign: Gtk.Align.CENTER,
+                halign: Gtk.Align.CENTER,
                 css_classes: ['suggested-action'],
             });
             button.connect('clicked', () => this.window.newJob());
-            row.add_suffix(button);
-            this.group.add(row);
-        } else {
-            for (const job of jobs) {
-                const entry = this._makeRow(job);
-                this.rows.set(job.id, entry);
-                this.group.add(entry.row);
-            }
+            page.set_child(button);
+            scroll.set_child(page);
+            return;
         }
-        this.widget.add(this.group);
-    }
 
-    _makeRow(job) {
-        const row = new Adw.ActionRow({
+        const page = new Adw.PreferencesPage();
+        const clamp = new Adw.Clamp({
+            maximum_size: 760,
+            tightening_threshold: 600,
+            child: page,
+        });
+        scroll.set_child(clamp);
+
+        const state = job.state || {};
+        const statusGroup = new Adw.PreferencesGroup({title: 'Status'});
+        const statusRow = new Adw.ActionRow({
             title: job.name || job.id,
-            subtitle: jobSubtitle(job, this.window.volumes),
+            subtitle: `${typeLabel(job.type)} · ${statusLabel(state.status)}`,
         });
         const dot = new Gtk.Label({label: '●', valign: Gtk.Align.CENTER});
-        setStatusDot(dot, job.state?.status || 'idle');
-        row.add_prefix(dot);
-
-        const toggle = new Gtk.Switch({
-            active: Boolean(job.enabled),
-            valign: Gtk.Align.CENTER,
-        });
-        toggle.connect('notify::active', () => {
-            if (toggle._saveMeUpdating)
-                return;
-            this.window.client.setJobEnabled(job.id, toggle.active)
-                .catch(e => this.window.toast(e.message));
-        });
-        row.add_suffix(toggle);
-
-        const menu = new Gtk.MenuButton({
+        setStatusDot(dot, state.status || 'idle');
+        statusRow.add_prefix(dot);
+        const openButton = new Gtk.Button({
+            label: 'Open destination',
             valign: Gtk.Align.CENTER,
             css_classes: ['flat'],
         });
-        menu.set_child(new Gtk.Image({icon_name: 'view-more-symbolic'}));
-        menu.set_popover(this._makeMenu(job));
-        row.add_suffix(menu);
+        openButton.connect('clicked', () => this.window.openDestination(job));
+        statusRow.add_suffix(openButton);
+        statusGroup.add(statusRow);
 
-        if (job.state?.message)
-            row.set_tooltip_text(job.state.message);
-        return {row, dot, toggle, menu, job};
-    }
-
-    _makeMenu(job) {
-        const popover = new Gtk.Popover();
-        const box = new Gtk.Box({
+        const progressBox = new Gtk.Box({
             orientation: Gtk.Orientation.VERTICAL,
-            spacing: 2,
+            spacing: 4,
             margin_top: 6,
             margin_bottom: 6,
-            margin_start: 6,
-            margin_end: 6,
         });
-        const add = (label, callback, destructive = false) => {
-            const button = new Gtk.Button({
-                label,
-                css_classes: destructive ? ['flat', 'destructive-action'] : ['flat'],
-            });
-            button.connect('clicked', () => {
-                popover.popdown();
-                callback();
-            });
-            box.append(button);
+        const progress = new Gtk.ProgressBar({show_text: true});
+        const current = new Gtk.Label({
+            xalign: 0,
+            ellipsize: Pango.EllipsizeMode.END,
+            css_classes: ['dim-label'],
+            visible: false,
+        });
+        progressBox.append(progress);
+        progressBox.append(current);
+        statusGroup.add(progressBox);
+        page.add(statusGroup);
+
+        const stats = new Adw.PreferencesGroup({title: 'Statistics'});
+        const statsRows = {
+            files: this._statRow('Files'),
+            data: this._statRow('Data'),
+            speed: this._statRow('Speed / ETA'),
+            deletes: this._statRow('Deletes / errors'),
+            last: this._statRow('Last run'),
+            message: this._statRow('Message'),
         };
-        const running = job.state?.status === 'running';
-        add('Run now', () => {
+        for (const row of Object.values(statsRows))
+            stats.add(row);
+        page.add(stats);
+
+        const actions = new Adw.PreferencesGroup({title: 'Actions'});
+        const flow = new Gtk.FlowBox({
+            selection_mode: Gtk.SelectionMode.NONE,
+            max_children_per_line: 4,
+            column_spacing: 6,
+            row_spacing: 6,
+            margin_top: 6,
+            margin_bottom: 6,
+        });
+        const addAction = (label, cssClasses, callback) => {
+            const button = new Gtk.Button({label, css_classes: cssClasses});
+            button.connect('clicked', callback);
+            flow.append(button);
+            return button;
+        };
+        const runButton = addAction('Run now', ['suggested-action'], () => {
             this.window.client.runJob(job.id)
                 .then(() => this.window.toast('Run started.'))
                 .catch(e => this.window.toast(e.message));
         });
-        add('Dry run', () => {
+        addAction('Dry run', [], () => {
             this.window.client.runJob(job.id, true)
                 .then(() => this.window.toast('Dry run started. Check Logs.'))
                 .catch(e => this.window.toast(e.message));
         });
-        if (job.state?.status === 'delete-guard') {
-            add('Force run', () => {
-                this.window.confirm('Force run?',
-                    'This run would delete more files than the configured limit. ' +
-                    'Review the dry-run log before continuing.',
-                    true, () => {
-                        this.window.client.runJob(job.id, false, true)
-                            .then(() => this.window.toast('Forced run started.'))
-                            .catch(e => this.window.toast(e.message));
-                    });
-            }, true);
-        }
-        if (running) {
-            add('Cancel', () => {
-                this.window.client.cancelJob(job.id)
-                    .catch(e => this.window.toast(e.message));
-            });
-        }
-        add(job.state?.paused ? 'Resume' : 'Pause', () => {
-            this.window.client.pauseJob(job.id, !job.state?.paused)
+        const pauseButton = addAction(state.paused ? 'Resume' : 'Pause', [], () => {
+            this.window.client.pauseJob(job.id, !this._currentJob()?.state?.paused)
                 .catch(e => this.window.toast(e.message));
         });
-        add('Edit', () => this.window.editJob(job));
-        add('Logs', () => this.window.openLogs(job.id));
-        if (job.type === JOB_TYPES.BACKUP)
-            add('Versions and restore', () => this.window.openVersions(job));
-        add('Delete', () => {
+        const stopButton = addAction('Stop', ['destructive-action'], () => {
+            this.window.client.cancelJob(job.id)
+                .catch(e => this.window.toast(e.message));
+        });
+        addAction('Edit', [], () => this.window.editJob(job));
+        addAction('Logs', [], () => this.window.openLogs(job.id));
+        if (job.type === JOB_TYPES.BACKUP) {
+            addAction('Versions / restore', [],
+                () => this.window.openVersions(job));
+        }
+        addAction('Delete', ['destructive-action'], () => {
             this.window.confirm('Delete job?',
                 `Delete “${job.name}”? The destination files are not removed.`,
                 true, () => {
@@ -267,26 +495,131 @@ class JobsPage {
                         .then(() => this.window.toast('Job deleted.'))
                         .catch(e => this.window.toast(e.message));
                 });
-        }, true);
-        popover.set_child(box);
-        return popover;
+        });
+        actions.add(flow);
+        page.add(actions);
+
+        const paths = new Adw.PreferencesGroup({title: 'Paths'});
+        const sourceRow = new Adw.ActionRow({
+            title: 'Source',
+            subtitle: descriptorDisplay(job.source, this.window.volumes),
+        });
+        const sourceOpen = new Gtk.Button({
+            label: 'Open',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat'],
+        });
+        sourceOpen.connect('clicked', () => this.window.openSource(job));
+        sourceRow.add_suffix(sourceOpen);
+        const destinationRow = new Adw.ActionRow({
+            title: 'Destination',
+            subtitle: descriptorDisplay(job.destination, this.window.volumes),
+        });
+        const destinationOpen = new Gtk.Button({
+            label: 'Open',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat'],
+        });
+        destinationOpen.connect('clicked', () => this.window.openDestination(job));
+        destinationRow.add_suffix(destinationOpen);
+        paths.add(sourceRow);
+        paths.add(destinationRow);
+        page.add(paths);
+
+        const configuration = new Adw.PreferencesGroup({title: 'Configuration'});
+        configuration.add(this._statRow('Schedule',
+            job.trigger.mode === 'interval'
+                ? `every ${job.trigger.intervalMinutes} minutes`
+                : job.trigger.mode));
+        configuration.add(this._statRow('Delete guard',
+            `${job.options.maxDeletePercent}% (minimum ${job.options.maxDeleteMinimum})`));
+        if (job.type === JOB_TYPES.BACKUP) {
+            configuration.add(this._statRow('Retention',
+                job.backup.retentionDays > 0
+                    ? `${job.backup.retentionDays} days`
+                    : 'keep versions forever'));
+        }
+        if (job.filters.exclude?.length) {
+            configuration.add(this._statRow('Excludes',
+                job.filters.exclude.join(', ')));
+        }
+        page.add(configuration);
+
+        this.detail = {
+            jobId: job.id,
+            statusRow,
+            dot,
+            progress,
+            current,
+            stats: statsRows,
+            runButton,
+            pauseButton,
+            stopButton,
+        };
+        this._updateDetails(job);
     }
 
-    _updateRow(job) {
-        const entry = this.rows.get(job.id);
-        if (!entry)
+    _currentJob() {
+        return this.jobs.find(item => item.id === this.selectedId) || null;
+    }
+
+    _statRow(title, subtitle = '') {
+        return new Adw.ActionRow({title, subtitle});
+    }
+
+    _updateDetails(job) {
+        if (!this.detail || this.detail.jobId !== job.id) {
+            this._renderDetails();
             return;
-        entry.job = job;
-        entry.row.set_title(job.name || job.id);
-        entry.row.set_subtitle(jobSubtitle(job, this.window.volumes));
-        setStatusDot(entry.dot, job.state?.status || 'idle');
-        if (entry.toggle.active !== Boolean(job.enabled)) {
-            entry.toggle._saveMeUpdating = true;
-            entry.toggle.active = Boolean(job.enabled);
-            entry.toggle._saveMeUpdating = false;
         }
-        entry.menu.set_popover(this._makeMenu(job));
-        entry.row.set_tooltip_text(job.state?.message || '');
+        const state = job.state || {};
+        const progress = state.progress;
+        this.detail.statusRow.set_subtitle(
+            `${typeLabel(job.type)} · ${statusLabel(state.status)}`);
+        setStatusDot(this.detail.dot, state.status || 'idle');
+
+        if (progress) {
+            this.detail.progress.set_fraction(
+                Math.max(0, Math.min(1, Number(progress.percent || 0) / 100)));
+            this.detail.progress.set_text(
+                `${Math.round(progress.percent || 0)}% · ` +
+                `${formatBytes(progress.bytes)} / ${formatBytes(progress.totalBytes)}`);
+            if (progress.currentFile) {
+                this.detail.current.set_text(
+                    truncate(basenameOf(progress.currentFile), 64));
+                this.detail.current.set_tooltip_text(progress.currentFile);
+                this.detail.current.visible = true;
+            } else {
+                this.detail.current.visible = false;
+            }
+        } else {
+            this.detail.progress.set_fraction(0);
+            this.detail.progress.set_text(statusLabel(state.status));
+            this.detail.current.visible = false;
+        }
+
+        this.detail.stats.files.set_subtitle(progress
+            ? `${progress.files || 0} / ${progress.totalFiles || 0}`
+            : '-');
+        this.detail.stats.data.set_subtitle(progress
+            ? `${formatBytes(progress.bytes)} / ${formatBytes(progress.totalBytes)}`
+            : '-');
+        this.detail.stats.speed.set_subtitle(progress
+            ? `${formatBytes(progress.speed)}/s · ${progress.eta ?? '-'}`
+            : '-');
+        this.detail.stats.deletes.set_subtitle(progress
+            ? `${progress.deletes || 0} / ${progress.errors || 0}`
+            : '-');
+        this.detail.stats.last.set_subtitle(state.lastRunAt
+            ? `${state.lastResult || '-'} · ${formatWhen(state.lastRunAt)}`
+            : 'never');
+        this.detail.stats.message.set_subtitle(state.message || '');
+        this.detail.stats.message.visible = Boolean(state.message);
+
+        const running = state.status === 'running';
+        this.detail.runButton.sensitive = !running;
+        this.detail.stopButton.sensitive = running;
+        this.detail.pauseButton.label = state.paused ? 'Resume' : 'Pause';
     }
 }
 
@@ -402,26 +735,86 @@ class LogsPage {
         this.structureKey = null;
         this.loadToken = 0;
 
-        const filterGroup = new Adw.PreferencesGroup({title: 'Job'});
+        this.summaryGroup = new Adw.PreferencesGroup({title: 'Status'});
+        this.statusRow = new Adw.ActionRow({title: 'Job', subtitle: 'No job selected'});
+        this.destinationRow = new Adw.ActionRow({title: 'Destination'});
+        this.openDestination = new Gtk.Button({
+            label: 'Open',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat'],
+        });
+        this.openDestination.connect('clicked', () => {
+            const job = this._selectedJob();
+            if (job)
+                this.window.openDestination(job);
+        });
+        this.destinationRow.add_suffix(this.openDestination);
+        this.progress = new Gtk.ProgressBar({show_text: true, visible: false});
+        this.currentLabel = new Gtk.Label({
+            xalign: 0,
+            ellipsize: Pango.EllipsizeMode.END,
+            visible: false,
+            css_classes: ['dim-label'],
+        });
+        const progressBox = new Gtk.Box({
+            orientation: Gtk.Orientation.VERTICAL,
+            spacing: 4,
+            margin_top: 6,
+            margin_bottom: 6,
+        });
+        progressBox.append(this.progress);
+        progressBox.append(this.currentLabel);
+        this.activeRow = new Adw.ActionRow({title: 'Active run'});
+        this.cancelButton = new Gtk.Button({
+            label: 'Stop',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['destructive-action'],
+        });
+        this.cancelButton.connect('clicked', () => {
+            const job = this._selectedJob();
+            if (!job)
+                return;
+            this.window.client.cancelJob(job.id)
+                .catch(e => this.window.toast(e.message));
+        });
+        this.activeRow.add_suffix(this.cancelButton);
+        this.summaryGroup.add(this.statusRow);
+        this.summaryGroup.add(this.destinationRow);
+        this.summaryGroup.add(progressBox);
+        this.summaryGroup.add(this.activeRow);
+        this.widget.add(this.summaryGroup);
+
+        const filterGroup = new Adw.PreferencesGroup({title: 'Select job'});
         this.jobRow = new Adw.ComboRow({
             title: 'Job',
             model: Gtk.StringList.new(['No jobs']),
         });
-        this.jobRow.connect('notify::selected', () => this._loadRuns());
+        this.jobRow.connect('notify::selected', () => {
+            this._loadRuns();
+            this._updateSummary();
+        });
         filterGroup.add(this.jobRow);
         this.widget.add(filterGroup);
 
         this.runsGroup = new Adw.PreferencesGroup({title: 'Runs'});
         this.widget.add(this.runsGroup);
+        this._updateSummary();
+    }
+
+    _selectedJob() {
+        const id = this.jobIds[this.jobRow.selected];
+        return this.jobs.find(job => job.id === id) || null;
     }
 
     update(snapshot) {
         const jobs = snapshot.jobs || [];
         const key = jobs.map(job =>
-            `${job.id}:${job.name}:${job.state?.lastRunId || ''}:${job.state?.lastRunAt || ''}`)
+            `${job.id}:${job.name}:${job.state?.lastRunId || ''}:` +
+            `${job.state?.lastRunAt || ''}`)
             .join('|');
         this.jobs = jobs;
         this.jobIds = jobs.map(job => job.id);
+        this._updateSummary();
         if (key === this.structureKey)
             return;
         this.structureKey = key;
@@ -433,6 +826,54 @@ class LogsPage {
             index = 0;
         this.jobRow.selected = index;
         this._loadRuns();
+    }
+
+    _updateSummary() {
+        const job = this._selectedJob();
+        if (!job) {
+            this.statusRow.set_title('Job');
+            this.statusRow.set_subtitle('No job selected');
+            this.destinationRow.set_subtitle('-');
+            this.progress.visible = false;
+            this.currentLabel.visible = false;
+            this.activeRow.visible = false;
+            return;
+        }
+        const state = job.state || {};
+        const progress = state.progress;
+        this.statusRow.set_title(job.name || job.id);
+        this.statusRow.set_subtitle(
+            `${typeLabel(job.type)} · ${statusLabel(state.status)}` +
+            (state.lastRunAt ? ` · last run ${formatWhen(state.lastRunAt)}` : ''));
+        this.destinationRow.set_subtitle(
+            descriptorDisplay(job.destination, this.window.volumes));
+
+        const running = state.status === 'running';
+        this.activeRow.visible = running;
+        if (progress) {
+            this.progress.visible = true;
+            this.progress.set_fraction(
+                Math.max(0, Math.min(1, Number(progress.percent || 0) / 100)));
+            this.progress.set_text(
+                `${Math.round(progress.percent || 0)}% · ` +
+                `${formatBytes(progress.bytes)} / ${formatBytes(progress.totalBytes)}`);
+            if (progress.currentFile) {
+                this.currentLabel.set_text(
+                    truncate(basenameOf(progress.currentFile), 72));
+                this.currentLabel.set_tooltip_text(progress.currentFile);
+                this.currentLabel.visible = true;
+            } else {
+                this.currentLabel.visible = false;
+            }
+            this.activeRow.set_subtitle(
+                `${progress.files || 0} / ${progress.totalFiles || 0} files · ` +
+                `${formatBytes(progress.bytes)} / ${formatBytes(progress.totalBytes)}`);
+        } else {
+            this.progress.visible = false;
+            this.currentLabel.visible = false;
+            this.activeRow.set_subtitle('Running');
+        }
+        this.cancelButton.visible = running;
     }
 
     async _loadRuns() {
@@ -469,6 +910,9 @@ class LogsPage {
                     run.dryRun ? 'dry run' : null,
                     `${stats.transfers || 0} files`,
                     formatBytes(stats.bytes || 0),
+                    `${stats.deletes || 0} deletes`,
+                    `${stats.errors || 0} errors`,
+                    runDuration(run),
                 ].filter(Boolean);
                 if (run.message)
                     parts.push(run.message);
@@ -476,6 +920,10 @@ class LogsPage {
                     title: `${RESULT_LABELS[run.result] || run.result} · ${formatWhen(run.startedAt)}`,
                     subtitle: parts.join(' · '),
                 });
+                const dot = new Gtk.Label({label: '●', valign: Gtk.Align.CENTER});
+                dot.add_css_class('saveme-status-dot');
+                dot.add_css_class(resultClass(run.result));
+                row.add_prefix(dot);
                 const view = new Gtk.Button({
                     label: 'View log',
                     valign: Gtk.Align.CENTER,
@@ -503,6 +951,7 @@ class LogsPage {
         const index = this.jobIds.indexOf(jobId);
         if (index >= 0) {
             this.jobRow.selected = index;
+            this._updateSummary();
             this._loadRuns();
         }
     }
@@ -929,6 +1378,44 @@ export const SaveMeWindow = GObject.registerClass({
 
     openLogs(jobId = null) {
         this.showView('logs', jobId);
+    }
+
+    openSource(job) {
+        this._openJobPath(job.source);
+    }
+
+    openDestination(job) {
+        this._openJobPath(job.destination);
+    }
+
+    _openJobPath(descriptor) {
+        if (!descriptor)
+            return;
+        if (descriptor.kind === 'remote') {
+            new RemoteBrowserDialog(this, {
+                mode: 'browse',
+                remote: descriptor.remote,
+                path: descriptor.path || '',
+            }).present();
+            return;
+        }
+        let path = null;
+        try {
+            path = localPathFor(descriptor, this.volumes);
+        } catch (e) {
+            this.toast(e.message);
+            return;
+        }
+        if (!path || !GLib.file_test(path, GLib.FileTest.EXISTS)) {
+            this.toast(`Path not available: ${path || descriptor.path || ''}`);
+            return;
+        }
+        try {
+            Gio.AppInfo.launch_default_for_uri(
+                Gio.File.new_for_path(path).get_uri(), null);
+        } catch (e) {
+            this.toast(e.message);
+        }
     }
 
     openVersions(job) {

@@ -50,6 +50,42 @@ function formatWhen(iso) {
     return `${Math.floor(diff / 86_400_000)} d`;
 }
 
+function shortFile(path, max = 42) {
+    if (!path)
+        return '';
+    const name = GLib.path_get_basename(String(path));
+    return name.length <= max ? name : `${name.slice(0, max - 1)}…`;
+}
+
+class ProgressBar {
+    constructor() {
+        this.percent = 0;
+        this.area = new St.DrawingArea({
+            style_class: 'saveme-progress',
+            x_expand: true,
+        });
+        this.area.connect('repaint', () => this._draw());
+    }
+
+    setPercent(value) {
+        this.percent = Math.max(0, Math.min(100, Number(value) || 0));
+        this.area.queue_repaint();
+    }
+
+    _draw() {
+        const cr = this.area.get_context();
+        const [width, height] = this.area.get_surface_size();
+        cr.setSourceRGBA(1, 1, 1, 0.14);
+        cr.rectangle(0, 0, width, height);
+        cr.fill();
+        if (this.percent > 0) {
+            cr.setSourceRGBA(0.26, 0.52, 0.89, 1);
+            cr.rectangle(0, 0, width * this.percent / 100, height);
+            cr.fill();
+        }
+    }
+}
+
 class JobRow {
     constructor(extension, job) {
         this.extension = extension;
@@ -75,6 +111,9 @@ class JobRow {
         this.detail = new St.Label({text: '', style_class: 'saveme-job-detail'});
         this.box.add_child(this.detail);
 
+        this.progressBar = new ProgressBar();
+        this.box.add_child(this.progressBar.area);
+
         this.progress = new St.Label({text: '', style_class: 'saveme-job-detail'});
         this.box.add_child(this.progress);
 
@@ -85,7 +124,7 @@ class JobRow {
         this.pauseButton = this._button('media-playback-pause-symbolic', _('Pause'), () => {
             extension.pauseJob(job.id, !this.job.state?.paused);
         });
-        this.cancelButton = this._button('process-stop-symbolic', _('Cancel'), () => {
+        this.cancelButton = this._button('process-stop-symbolic', _('Stop and pause'), () => {
             extension.cancelJob(job.id);
         });
         this.logsButton = this._button('document-open-symbolic', _('Logs'), () => {
@@ -135,25 +174,32 @@ class JobRow {
             let text = `${percent}% · ${formatBytes(p.bytes)}`;
             if (p.totalBytes)
                 text += ` / ${formatBytes(p.totalBytes)}`;
-            if (p.currentFile)
-                text += ` · ${p.currentFile}`;
+            const file = shortFile(p.currentFile);
+            if (file)
+                text += ` · ${file}`;
             this.progress.text = text;
             this.progress.visible = true;
+            this.progressBar.area.visible = true;
+            this.progressBar.setPercent(p.percent || 0);
         } else if (state.message) {
             this.progress.text = state.message;
             this.progress.visible = true;
+            this.progressBar.area.visible = false;
         } else {
             this.progress.text = '';
             this.progress.visible = false;
+            this.progressBar.area.visible = false;
         }
 
         const running = status === 'running';
         const paused = Boolean(state.paused);
         this.runButton.visible = !running && job.enabled;
         this.pauseButton.visible = job.enabled;
-        this.pauseButton.child.icon_name = paused
+        const pauseIcon = paused
             ? 'media-playback-start-symbolic'
             : 'media-playback-pause-symbolic';
+        if (this.pauseButton.child.icon_name !== pauseIcon)
+            this.pauseButton.child.icon_name = pauseIcon;
         this.pauseButton.accessible_name = paused ? _('Resume') : _('Pause');
         this.cancelButton.visible = running;
         this.logsButton.visible = true;
@@ -171,14 +217,19 @@ export default class SaveMeExtension extends Extension {
         this._signalId = 0;
 
         this._indicator = new PanelMenu.Button(0.0, this.metadata.name, false);
-        const icon = new St.Icon({
-            gicon: Gio.icon_new_for_string(`${this.path}/icons/saveme-symbolic.svg`),
+        this._idleIcon = Gio.icon_new_for_string(`${this.path}/icons/saveme-symbolic.svg`);
+        this._panelIcon = new St.Icon({
+            gicon: this._idleIcon,
             style_class: 'system-status-icon',
         });
-        this._indicator.add_child(icon);
+        this._panelIconKey = null;
+        this._pauseAllKey = null;
+        this._indicator.add_child(this._panelIcon);
         this._indicator.menu.connect('open-state-changed', (_menu, open) => {
             if (open)
                 this._refresh();
+            else
+                this._updatePanelIcon();
         });
         Main.panel.addToStatusArea(this.uuid, this._indicator);
 
@@ -263,6 +314,51 @@ export default class SaveMeExtension extends Extension {
         menu.addMenuItem(debugItem);
     }
 
+    _updatePanelIcon() {
+        if (!this._panelIcon)
+            return;
+        // Changing the panel icon while the popup is open can make GNOME
+        // Shell close the menu. Update it when the menu is closed instead.
+        if (this._indicator?.menu?.isOpen)
+            return;
+        let key = 'idle';
+        if (this._daemonError) {
+            key = 'unavailable';
+        } else {
+            const jobs = this._snapshot?.jobs || [];
+            if (jobs.some(job => ['error', 'needs-auth', 'delete-guard']
+                .includes(job.state?.status))) {
+                key = 'error';
+            } else if (jobs.some(job => job.state?.status === 'running')) {
+                key = 'running';
+            } else if (this._snapshot?.pausedAll ||
+                jobs.some(job => job.state?.status === 'paused')) {
+                key = 'paused';
+            } else if (jobs.some(job => ['waiting-source', 'waiting-destination', 'offline']
+                .includes(job.state?.status))) {
+                key = 'waiting';
+            }
+        }
+        if (key === this._panelIconKey)
+            return;
+        this._panelIconKey = key;
+        const icons = {
+            'unavailable': 'dialog-warning-symbolic',
+            'error': 'dialog-error-symbolic',
+            'running': 'emblem-synchronizing-symbolic',
+            'paused': 'media-playback-pause-symbolic',
+            'waiting': 'dialog-warning-symbolic',
+        };
+        if (key === 'idle') {
+            this._panelIcon.icon_name = null;
+            this._panelIcon.gicon = this._idleIcon;
+        } else {
+            this._panelIcon.gicon = null;
+            this._panelIcon.icon_name = icons[key];
+        }
+        this._panelIcon.accessible_name = `SaveMe: ${key}`;
+    }
+
     _call(method, params, callback = null) {
         if (!this._bus)
             return;
@@ -330,10 +426,16 @@ export default class SaveMeExtension extends Extension {
         if (!this._indicator || !this._jobsSection)
             return;
         const pausedAll = Boolean(this._snapshot?.pausedAll);
-        this._pauseAllButton.child.icon_name = pausedAll
-            ? 'media-playback-start-symbolic'
-            : 'media-playback-pause-symbolic';
-        this._pauseAllButton.accessible_name = pausedAll ? _('Resume all') : _('Pause all');
+        this._updatePanelIcon();
+        const pauseAllKey = pausedAll ? 'resume' : 'pause';
+        if (this._pauseAllKey !== pauseAllKey) {
+            this._pauseAllKey = pauseAllKey;
+            this._pauseAllButton.child.icon_name = pausedAll
+                ? 'media-playback-start-symbolic'
+                : 'media-playback-pause-symbolic';
+            this._pauseAllButton.accessible_name = pausedAll
+                ? _('Resume all') : _('Pause all');
+        }
 
         if (this._daemonError) {
             this._jobsSection.removeAll();

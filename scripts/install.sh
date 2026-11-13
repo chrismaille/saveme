@@ -13,6 +13,7 @@
 
 set -eu
 
+ORIGINAL_ARGS="$*"
 REPO="${SAVEME_REPO:-chrismaille/save_me}"
 UUID="saveme@chrismaille.github.io"
 ACTION="install"
@@ -25,6 +26,10 @@ FORCE_REMOTE=0
 VERSION=""
 DEB_OVERRIDE=""
 EXT_OVERRIDE=""
+LOG_OVERRIDE=""
+LOG_FILE=""
+DAEMON_MASKED=0
+EXITING=0
 
 usage() {
     cat <<EOF
@@ -45,6 +50,7 @@ Options:
   --extension PATH     Use a local extension zip
   --repo OWNER/REPO    GitHub repository (default: $REPO)
   --remote             Download artifacts even if a local dist/ exists
+  --log PATH           Write the installation log to PATH
   -h, --help           Show this help
 
 Examples:
@@ -67,6 +73,7 @@ while [ $# -gt 0 ]; do
         --deb) DEB_OVERRIDE="${2:-}"; shift 2 ;;
         --extension) EXT_OVERRIDE="${2:-}"; shift 2 ;;
         --repo) REPO="${2:-}"; shift 2 ;;
+        --log) LOG_OVERRIDE="${2:-}"; shift 2 ;;
         --help|-h) usage; exit 0 ;;
         *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
     esac
@@ -74,23 +81,103 @@ done
 
 say() {
     printf '%s\n' "$*"
+    if [ -n "$LOG_FILE" ]; then
+        printf '%s\n' "$*" >> "$LOG_FILE" 2>/dev/null || true
+    fi
 }
 
 run() {
     if [ "$DRY_RUN" -eq 1 ]; then
-        printf '+ %s\n' "$*"
-    else
-        "$@"
+        say "+ $*"
+        return 0
     fi
+    say "+ $*"
+    tmp="$(mktemp)"
+    "$@" >"$tmp" 2>&1
+    status=$?
+    if [ -s "$tmp" ]; then
+        cat "$tmp" | tee -a "$LOG_FILE"
+    fi
+    rm -f "$tmp"
+    return $status
 }
 
 run_sudo() {
     if [ "$DRY_RUN" -eq 1 ]; then
-        printf '+ sudo %s\n' "$*"
-    else
-        sudo "$@"
+        say "+ sudo $*"
+        return 0
+    fi
+    say "+ sudo $*"
+    tmp="$(mktemp)"
+    sudo "$@" >"$tmp" 2>&1
+    status=$?
+    if [ -s "$tmp" ]; then
+        cat "$tmp" | tee -a "$LOG_FILE"
+    fi
+    rm -f "$tmp"
+    return $status
+}
+
+mask_daemon() {
+    if command -v systemctl >/dev/null 2>&1 &&
+        systemctl --user show-environment >/dev/null 2>&1; then
+        if run systemctl --user mask saveme.service >/dev/null 2>&1; then
+            DAEMON_MASKED=1
+        fi
     fi
 }
+
+unmask_daemon() {
+    if [ "$DAEMON_MASKED" -eq 1 ] && command -v systemctl >/dev/null 2>&1; then
+        run systemctl --user unmask saveme.service >/dev/null 2>&1 || true
+        DAEMON_MASKED=0
+    fi
+}
+
+cleanup() {
+    if [ "$DAEMON_MASKED" -eq 1 ]; then
+        systemctl --user unmask saveme.service >/dev/null 2>&1 || true
+        DAEMON_MASKED=0
+    fi
+    if [ -n "$TMP_DIR" ] && [ -d "$TMP_DIR" ]; then
+        rm -rf "$TMP_DIR"
+    fi
+}
+
+on_exit() {
+    status=$?
+    if [ "$EXITING" -eq 1 ]; then
+        exit "$status"
+    fi
+    EXITING=1
+    printf 'exit status: %s\n' "$status" >> "$LOG_FILE" 2>/dev/null || true
+    cleanup
+    exit "$status"
+}
+
+trap on_exit EXIT INT TERM
+
+# Installation log. Keep it outside the state directory so --purge does not
+# destroy the diagnostic log before it can be shared.
+LOG_DIR="${XDG_STATE_HOME:-$HOME/.local/state}"
+if [ -n "$LOG_OVERRIDE" ]; then
+    LOG_FILE="$LOG_OVERRIDE"
+else
+    LOG_FILE="$LOG_DIR/saveme-install.log"
+fi
+mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+if ! : >> "$LOG_FILE" 2>/dev/null; then
+    LOG_FILE="${TMPDIR:-/tmp}/saveme-install.log"
+    : >> "$LOG_FILE" 2>/dev/null || true
+fi
+{
+    printf '\n===== SaveMe %s %s =====\n' "$(date -Iseconds 2>/dev/null || date)" "$ACTION"
+    printf 'command: %s %s\n' "$0" "$ORIGINAL_ARGS"
+    printf 'user: %s host: %s\n' "$(id -un)" "$(hostname 2>/dev/null || echo unknown)"
+    printf 'uname: %s\n' "$(uname -a)"
+} >> "$LOG_FILE" 2>/dev/null || true
+
+say "Installation log: $LOG_FILE"
 
 if [ "$(id -u)" -eq 0 ]; then
     say "Run this script as your desktop user, not with sudo."
@@ -126,12 +213,6 @@ if [ -n "$SCRIPT_DIR" ] && [ -d "$SCRIPT_DIR/../dist" ]; then
 fi
 
 TMP_DIR=""
-cleanup() {
-    if [ -n "$TMP_DIR" ] && [ -d "$TMP_DIR" ]; then
-        rm -rf "$TMP_DIR"
-    fi
-}
-trap cleanup EXIT INT TERM
 
 if [ -n "$VERSION" ]; then
     BASE_URL="https://github.com/$REPO/releases/download/v$VERSION"
@@ -253,7 +334,15 @@ stop_daemon() {
 start_daemon() {
     if command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1; then
         run systemctl --user daemon-reload || true
-        run systemctl --user enable --now saveme.service || true
+        if ! run systemctl --user enable --now saveme.service; then
+            say "systemd service failed to start; collecting diagnostics"
+            if [ "$DRY_RUN" -eq 0 ]; then
+                {
+                    systemctl --user status saveme.service --no-pager || true
+                    journalctl --user -u saveme.service -n 100 --no-pager || true
+                } 2>&1 | tee -a "$LOG_FILE"
+            fi
+        fi
         if [ "$DRY_RUN" -eq 0 ]; then
             sleep 1
         fi
@@ -310,7 +399,9 @@ do_install() {
     say ""
 
     stop_daemon
+    mask_daemon
     run_sudo apt-get install -y --reinstall "$DEB"
+    unmask_daemon
     install_extension
     if [ "$START_DAEMON" -eq 1 ]; then
         start_daemon
@@ -325,6 +416,7 @@ do_install() {
         fi
         say ""
         say "Open the app with: saveme-settings"
+        say "Installation log: $LOG_FILE"
     fi
 }
 
@@ -345,6 +437,7 @@ do_uninstall() {
 
     say "Uninstalling SaveMe..."
     stop_daemon
+    mask_daemon
     if command -v systemctl >/dev/null 2>&1; then
         if [ "$DRY_RUN" -eq 1 ]; then
             say "+ systemctl --user disable --now saveme.service"
@@ -393,6 +486,7 @@ do_uninstall() {
     else
         run_sudo apt-get remove -y saveme || true
     fi
+    unmask_daemon
 
     say ""
     if [ "$PURGE" -eq 1 ]; then
@@ -403,6 +497,7 @@ do_uninstall() {
         say "  $HOME/.local/state/saveme"
         say "Use --purge to remove it."
     fi
+    say "Uninstall log: $LOG_FILE"
 }
 
 if [ "$ACTION" = "uninstall" ]; then

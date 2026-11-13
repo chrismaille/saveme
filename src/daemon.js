@@ -95,6 +95,10 @@ export class DaemonApi {
         return this.daemon.listVersions(jobId);
     }
 
+    ListRemote(remote, path, dirsOnly) {
+        return this.daemon.listRemote(remote, path, Boolean(dirsOnly));
+    }
+
     Restore(payloadJson) {
         return this.daemon.restore(payloadJson);
     }
@@ -518,6 +522,47 @@ export const SaveMeDaemonApplication = GObject.registerClass({
             }))
             .sort((a, b) => String(b.name).localeCompare(String(a.name)));
         return JSON.stringify(versions);
+    }
+
+    listRemote(remote, path, dirsOnly) {
+        if (!remote || !this._config.getRemote(remote))
+            throw new Error(`Remote not found: ${remote}`);
+        const cleanPath = String(path || '').replace(/^\/+|\/+$/g, '');
+        const target = cleanPath ? `${remote}:${cleanPath}` : `${remote}:`;
+        if (dirsOnly) {
+            const result = this._rclone.runCapture(['lsf', target, '--dirs-only']);
+            if (result.exitCode === 3)
+                return JSON.stringify([]);
+            if (!isSuccessExit(result.exitCode))
+                throw new Error(result.stderr.trim() || exitCodeMessage(result.exitCode));
+            const entries = result.stdout.split('\n')
+                .map(line => line.trim().replace(/\/$/, ''))
+                .filter(Boolean)
+                .map(name => ({name, isDir: true, size: 0, modTime: null}))
+                .sort((a, b) => a.name.localeCompare(b.name));
+            return JSON.stringify(entries);
+        }
+        const result = this._rclone.runCapture(['lsjson', target]);
+        if (result.exitCode === 3)
+            return JSON.stringify([]);
+        if (!isSuccessExit(result.exitCode))
+            throw new Error(result.stderr.trim() || exitCodeMessage(result.exitCode));
+        let raw = [];
+        try {
+            raw = JSON.parse(result.stdout || '[]');
+        } catch (e) {
+            throw new Error(`Invalid rclone lsjson output: ${e.message}`);
+        }
+        const entries = raw.map(entry => ({
+            name: entry.Name || entry.Path || '',
+            isDir: Boolean(entry.IsDir),
+            size: Number(entry.Size || 0),
+            modTime: entry.ModTime || null,
+        })).filter(entry => entry.name);
+        entries.sort((a, b) => a.isDir === b.isDir
+            ? a.name.localeCompare(b.name)
+            : a.isDir ? -1 : 1);
+        return JSON.stringify(entries);
     }
 
     restore(payloadJson) {

@@ -10,16 +10,17 @@ const PROVIDER_LABELS = ['Google Drive', 'Microsoft OneDrive', 'Dropbox'];
 export const AccountDialog = GObject.registerClass({
     GTypeName: 'SaveMeAccountDialog',
 }, class AccountDialog extends Adw.Window {
-    constructor(parentWindow, existing = null) {
+    constructor(parentWindow, existing = null, options = {}) {
         super({
-            transient_for: parentWindow,
+            transient_for: options.transientFor || parentWindow,
             modal: true,
             title: existing ? 'Reauthenticate account' : 'Add account',
             default_width: 620,
             default_height: 520,
         });
-        this.parentWindow = parentWindow;
+        this.window = parentWindow;
         this.client = parentWindow.client;
+        this.onDone = options.onDone || null;
         this.existing = existing;
         this.authId = null;
         this.done = false;
@@ -179,21 +180,21 @@ export const AccountDialog = GObject.registerClass({
             return;
         try {
             const auth = await this.client.getRemoteAuth(this.authId);
-            this._applyAuthObject(auth);
+            await this._applyAuthObject(auth);
         } catch (e) {
             this._showError(e.message);
         }
     }
 
-    _applyAuth(json) {
+    async _applyAuth(json) {
         try {
-            this._applyAuthObject(JSON.parse(json));
+            await this._applyAuthObject(JSON.parse(json));
         } catch (_) {
             // Ignore malformed auth state.
         }
     }
 
-    _applyAuthObject(auth) {
+    async _applyAuthObject(auth) {
         if (!auth)
             return;
         this.statusRow.set_subtitle(auth.status);
@@ -211,8 +212,13 @@ export const AccountDialog = GObject.registerClass({
         if (auth.status === 'done') {
             this.done = true;
             this._cleanup();
-            this.parentWindow.toast('Account connected.');
-            this.parentWindow.refresh();
+            try {
+                await this.window.refresh();
+            } catch (_) {
+                // Best effort.
+            }
+            this.window.toast('Account connected.');
+            this.onDone?.();
             this.close();
         } else if (auth.status === 'error' || auth.status === 'cancelled') {
             this.connectButton.sensitive = true;

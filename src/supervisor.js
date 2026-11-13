@@ -486,7 +486,12 @@ export class JobSupervisor {
         this._stopRealtime();
         this.cancel();
         try {
-            this.state.setJobState(this.job.id, {paused: true, status: 'paused', message: ''});
+            this.state.setJobState(this.job.id, {
+                paused: true,
+                status: 'paused',
+                message: '',
+                progress: null,
+            });
         } catch (_) {
             // Best effort.
         }
@@ -507,6 +512,11 @@ export class JobSupervisor {
         this._clearTimers();
         this._stopRealtime();
         this.cancel();
+        try {
+            this.state.setJobState(this.job.id, {progress: null});
+        } catch (_) {
+            // Best effort.
+        }
         this._setStatus('paused', '');
     }
 
@@ -672,7 +682,10 @@ export class JobManager {
         const supervisor = this.get(jobId);
         if (!supervisor)
             throw new Error(`Job not found: ${jobId}`);
+        // Cancelling a run stops the job. This avoids a running watcher
+        // immediately starting a new run after the user pressed Cancel.
         supervisor.cancel();
+        supervisor.pause();
     }
 
     pauseJob(jobId, paused) {

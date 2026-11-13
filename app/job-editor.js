@@ -2,6 +2,7 @@ import GObject from 'gi://GObject';
 import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
 import {VolumeResolver} from '../src/volumes.js';
+import {RemoteBrowserDialog} from './remote-browser.js';
 import {
     JOB_TYPES,
     TRIGGER_MODES,
@@ -259,65 +260,14 @@ export const JobEditor = GObject.registerClass({
     }
 
     _pickRemote(callback, currentDescriptor = null) {
-        const remotes = this.parentWindow.snapshot?.remotes || [];
-        if (remotes.length === 0) {
-            const dialog = new Adw.AlertDialog({
-                heading: 'No cloud accounts',
-                body: 'Add Google Drive, OneDrive or Dropbox in the Accounts tab first.',
-            });
-            dialog.add_response('cancel', 'Close');
-            dialog.add_response('accounts', 'Open Accounts');
-            dialog.set_response_appearance('accounts', Adw.ResponseAppearance.SUGGESTED);
-            dialog.connect('response', (_dialog, response) => {
-                if (response === 'accounts') {
-                    this.close();
-                    this.parentWindow.showView('accounts');
-                }
-            });
-            dialog.present(this);
-            return;
-        }
         const current = currentDescriptor?.kind === 'remote' ? currentDescriptor : null;
-        const labels = remotes.map(remote => remote.label || remote.name);
-        const combo = new Gtk.DropDown({
-            model: Gtk.StringList.new(labels),
-            selected: current
-                ? Math.max(0, remotes.findIndex(remote => remote.name === current.remote))
-                : 0,
-            hexpand: true,
-        });
-        const entry = new Adw.EntryRow({
-            title: 'Folder path',
-            text: current?.path || '',
-        });
-        const box = new Gtk.Box({
-            orientation: Gtk.Orientation.VERTICAL,
-            spacing: 8,
-        });
-        box.append(combo);
-        box.append(entry);
-
-        const dialog = new Adw.AlertDialog({
-            heading: 'Cloud folder',
-            body: 'Choose an account and type the folder path.',
-        });
-        dialog.set_extra_child(box);
-        dialog.add_response('cancel', 'Cancel');
-        dialog.add_response('select', 'Select');
-        dialog.set_response_appearance('select', Adw.ResponseAppearance.SUGGESTED);
-        dialog.connect('response', (_dialog, response) => {
-            if (response !== 'select')
-                return;
-            const remote = remotes[combo.selected];
-            if (!remote)
-                return;
-            callback({
-                kind: 'remote',
-                remote: remote.name,
-                path: String(entry.text || '').replace(/^\/+/, '').trim(),
-            });
-        });
-        dialog.present(this);
+        new RemoteBrowserDialog(this.parentWindow, {
+            mode: 'pick',
+            remote: current?.remote || null,
+            path: current?.path || '',
+            transientFor: this,
+            onSelect: descriptor => callback(descriptor),
+        }).present();
     }
 
     _collectJob() {

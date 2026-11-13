@@ -2,13 +2,15 @@
 Description=SaveMe sync and backup daemon
 Documentation=https://github.com/chrismaille/save_me
 After=graphical-session.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 Type=dbus
 BusName=io.github.chrismaille.SaveMe.Daemon
 ExecStart=/usr/bin/saveme-daemon
 Restart=on-failure
-RestartSec=5
+RestartSec=2
 
 [Install]
 WantedBy=default.target

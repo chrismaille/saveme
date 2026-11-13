@@ -43,6 +43,15 @@ Use `--dry-run` para ver exatamente o que será feito:
 ./scripts/install.sh --dry-run
 ```
 
+O log completo da instalação fica em:
+
+```text
+~/.local/state/saveme-install.log
+```
+
+Use `--log PATH` para escolher outro arquivo. Em caso de falha do systemd, o
+script anexa ao log o `systemctl status` e o `journalctl` do serviço.
+
 Opções úteis:
 
 ```bash
@@ -50,6 +59,7 @@ Opções úteis:
 ./scripts/install.sh --no-start         # não inicia o daemon agora
 ./scripts/install.sh --deb PATH         # usa um .deb específico
 ./scripts/install.sh --extension PATH   # usa um zip específico
+./scripts/install.sh --log PATH         # caminho do log
 ```
 
 Quando o repositório e os releases estiverem publicados:

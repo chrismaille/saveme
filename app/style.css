@@ -40,6 +40,10 @@
     opacity: 0.75;
 }
 
+.saveme-job-title {
+    font-weight: 600;
+}
+
 .saveme-url {
     font-family: monospace;
     font-size: 0.9em;
