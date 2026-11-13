@@ -72,6 +72,26 @@ function startDaemon() {
     ], Gio.SubprocessFlags.NONE);
 }
 
+async function killDaemon(proc) {
+    if (!proc)
+        return;
+    try {
+        proc.force_exit();
+    } catch (_) {
+        // Already gone.
+    }
+    await new Promise(resolve => {
+        proc.wait_async(null, (p, result) => {
+            try {
+                p.wait_finish(result);
+            } catch (_) {
+                // Ignore.
+            }
+            resolve();
+        });
+    });
+}
+
 async function waitFor(predicate, {timeout = 20000, interval = 250} = {}) {
     const deadline = Date.now() + timeout;
     let lastError = null;
@@ -296,6 +316,56 @@ async function backupScenario() {
     ok('backup: restore current backup tree');
 }
 
+async function pauseResumeScenario() {
+    const source = path('lifecycle-src');
+    const destination = path('lifecycle-dst');
+    GLib.mkdir_with_parents(source, 0o700);
+    GLib.mkdir_with_parents(destination, 0o700);
+    write(path('lifecycle-src', 'a.txt'), 'one');
+
+    const job = defaultJob({
+        name: 'E2E Lifecycle',
+        type: JOB_TYPES.SYNC,
+        source: {kind: 'local', path: source},
+        destination: {kind: 'local', path: destination},
+        trigger: {mode: 'realtime'},
+        options: {maxDeleteMinimum: 10},
+    });
+    await client.saveJob(job);
+    await waitFor(() => fileEquals(path('lifecycle-dst', 'a.txt'), 'one'));
+    ok('lifecycle: initial sync');
+
+    await client.pauseJob(job.id, true);
+    await waitFor(async () => {
+        const current = await client.getSnapshot();
+        return current.jobs.find(item => item.id === job.id)?.state.status === 'paused';
+    });
+    ok('lifecycle: pause');
+
+    write(path('lifecycle-src', 'b.txt'), 'two');
+    await sleep(1500);
+    if (GLib.file_test(path('lifecycle-dst', 'b.txt'), GLib.FileTest.EXISTS))
+        throw new Error('paused job copied a file');
+    ok('lifecycle: pause blocks realtime changes');
+
+    await client.pauseJob(job.id, false);
+    await waitFor(() => fileEquals(path('lifecycle-dst', 'b.txt'), 'two'));
+    ok('lifecycle: resume flushes changes');
+
+    let signals = 0;
+    const unsubscribe = client.onSnapshot(() => {
+        signals++;
+    });
+    await client.pauseAll(false);
+    await sleep(1200);
+    unsubscribe();
+    if (signals === 0)
+        throw new Error('daemon emitted no SnapshotChanged signal');
+    ok('lifecycle: snapshot signal');
+
+    await client.deleteJob(job.id);
+}
+
 async function restartScenario() {
     const oldDaemon = daemon;
     await stopDaemon(oldDaemon);
@@ -307,6 +377,19 @@ async function restartScenario() {
     if (!snapshot.jobs.some(job => job.name === 'E2E Backup'))
         throw new Error('backup job missing after daemon restart');
     ok('daemon: state and jobs survive restart');
+}
+
+async function killScenario() {
+    const oldDaemon = daemon;
+    await killDaemon(oldDaemon);
+    daemon = null;
+    client.close();
+    client = null;
+    startDaemon();
+    snapshot = await waitForDaemon();
+    if (!snapshot.jobs.some(job => job.name === 'E2E Backup'))
+        throw new Error('backup job missing after daemon kill');
+    ok('daemon: kill -9 preserves jobs and state');
 }
 
 let snapshot = null;
@@ -334,6 +417,19 @@ async function main() {
         await restartScenario();
     } catch (e) {
         fail('restart scenario', e);
+    }
+
+    try {
+        await pauseResumeScenario();
+        snapshot = await client.getSnapshot();
+    } catch (e) {
+        fail('lifecycle scenario', e);
+    }
+
+    try {
+        await killScenario();
+    } catch (e) {
+        fail('kill scenario', e);
     }
 
     if (client) {

@@ -92,8 +92,10 @@ src/                  daemon e bibliotecas compartilhadas internas
     gio/              filesystem, raw log, watcher, volumes
     persistence/      config, state e runs
     system/           clock, logger, paths
+    dbus/             DaemonApi fino
   application/        SyncService, BackupService, RestoreService,
-                      RunCoordinator, RunExecutor, change planner
+                      RunCoordinator, RunExecutor, DaemonService,
+                      Scheduler, change planner
   composition/        montagem do runner para daemon e CLI
   main.js
   application.js
@@ -104,6 +106,7 @@ src/                  daemon e bibliotecas compartilhadas internas
   watcher.js
   queue.js
   runner.js           fachada fina sobre RunCoordinator
+  supervisor.js       JobManager/JobSupervisor sobre Scheduler/RetryPolicy
   auth.js
   volumes.js
   restore.js
@@ -122,12 +125,11 @@ debian/               empacotamento .deb
 Makefile
 ```
 
-Durante a Fase 3, `jobs.js`, `runner.js`, `queue.js` e `util.js` continuam como
-fachadas. A lógica de execução foi movida para `application/`; `runner.js`
-apenas delega ao `RunCoordinator`. O motor rclone foi movido para
-`adapters/rclone/transfer-engine.js`; os demais adapters concretos ficam em
-`adapters/` e são montados por `composition/runner.js`. A Fase 4 move o
-supervisor, o daemon e o D-Bus para a mesma estrutura.
+Durante a Fase 4, o supervisor usa `Scheduler`, `RetryPolicy` e
+`JobStateMachine` puros; o daemon ficou dividido entre ciclo de vida
+(`daemon.js`), `DaemonService` (casos de uso) e `DaemonApi` (adapter D-Bus).
+O contrato D-Bus não mudou. A Fase 5 move a UI para gateways/controllers/view
+models.
 
 ## 5. Configuração, estado e logs
 
@@ -201,6 +203,11 @@ RemoteAuthChanged(s auth_id, s json)
 Payloads complexos são JSON para simplificar o GVariant no GJS e permitir
 evolução sem quebrar a interface. A extensão usa apenas `GetSnapshot`,
 `RunJob`, `CancelJob`, `SetJobEnabled` e `PauseAll`.
+
+Na Fase 4, `adapters/dbus/api.js` é um adapter fino: cada método converte
+booleanos/GVariant e delega ao `DaemonService`. O contrato completo está em
+`src/dbus.js`; o daemon só cuida de ciclo de vida, sinais, notificações,
+energia e rede.
 
 ## 8. Watcher em tempo real
 
@@ -327,11 +334,14 @@ Para remotes, o caminho equivalente é
 
 ## 12. Agendamento, rede e energia
 
-- `src/scheduler.js` usa timers GLib e estado persistido.
+- `application/scheduler.js` usa o port `Clock`; o adapter `SystemClock` usa
+  timers GLib. O scheduler é testável com clock fake.
+- `RetryPolicy` puro: 1 min, 5 min, 15 min, 1 h (máximo).
+- `JobStateMachine` puro decide `idle`, `paused`, `waiting-source` e
+  `disabled`.
 - Ao iniciar, jobs `realtime`/`interval` atrasados rodam imediatamente.
 - `logind` (`PrepareForSleep`) dispara reconciliação no resume.
 - `Gio.NetworkMonitor` pausa jobs de nuvem quando offline e retoma ao voltar.
-- Backoff exponencial em erro: 1 min, 5 min, 15 min, 1 h (máximo).
 - Limite de jobs simultâneos (padrão 1) para não saturar disco/rede.
 - `--bwlimit` por job.
 
@@ -355,6 +365,9 @@ Para remotes, o caminho equivalente é
 - Application: SyncService/BackupService/RestoreService com fakes de transfer,
   filesystem, state, clock e paths; cobre full/incremental, dry-run, delete
   guard, cancelamento, retenção e restore.
+- Daemon: DaemonService com fakes de config/state/manager/auth/transfer;
+  DaemonApi fino testado por contrato.
+- Supervisor: Scheduler com clock fake, RetryPolicy e JobStateMachine puros.
 - Adapters: filesystem Gio, raw log, clock, paths e run repository.
 - Integração com rclone local em diretórios temporários:
   - sync inicial, upsert, rename, delete;

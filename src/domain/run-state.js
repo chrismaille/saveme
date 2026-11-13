@@ -13,7 +13,7 @@ export const JOB_STATUS = {
     DISABLED: 'disabled',
 };
 
-export const BACKOFF_MS = [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000];
+export {BACKOFF_MS, nextBackoffDelay} from './retry-policy.js';
 
 export function statusFromError(message) {
     if (/source.*(unavailable|does not exist|not a directory)|source volume/i.test(message))
@@ -25,10 +25,6 @@ export function statusFromError(message) {
     if (/Delete guard/i.test(message))
         return JOB_STATUS.DELETE_GUARD;
     return JOB_STATUS.ERROR;
-}
-
-export function nextBackoffDelay(index, backoff = BACKOFF_MS) {
-    return backoff[Math.min(Math.max(0, Number(index) || 0), backoff.length - 1)];
 }
 
 export function isSuccessfulRun(result) {

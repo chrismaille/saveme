@@ -15,16 +15,21 @@ import rcloneCommandSuite from './unit/domain/rclone-command.test.js';
 import rcloneLogSuite from './unit/domain/rclone-log.test.js';
 import jobSuite from './unit/domain/job.test.js';
 import runStateSuite from './unit/domain/run-state.test.js';
+import retryPolicySuite from './unit/domain/retry-policy.test.js';
+import jobStateMachineSuite from './unit/domain/job-state-machine.test.js';
 import errorsSuite from './unit/domain/errors.test.js';
 import syncServiceSuite from './unit/application/sync-service.test.js';
 import backupServiceSuite from './unit/application/backup-service.test.js';
 import restoreServiceSuite from './unit/application/restore-service.test.js';
 import runCoordinatorSuite from './unit/application/run-coordinator.test.js';
 import runExecutorSuite from './unit/application/run-executor.test.js';
+import schedulerSuite from './unit/application/scheduler.test.js';
+import daemonServiceSuite from './unit/application/daemon-service.test.js';
 import jobTargetSuite from './unit/application/job-target.test.js';
 import changePlannerSuite from './unit/application/change-planner.test.js';
 import fileSystemAdapterSuite from './unit/adapters/file-system.test.js';
 import systemAdapterSuite from './unit/adapters/system.test.js';
+import dbusApiSuite from './unit/adapters/dbus-api.test.js';
 import runnerSuite from './integration/runner.test.js';
 import watcherSuite from './integration/watcher.test.js';
 
@@ -49,16 +54,21 @@ const suites = [
     rcloneLogSuite,
     jobSuite,
     runStateSuite,
+    retryPolicySuite,
+    jobStateMachineSuite,
     errorsSuite,
     syncServiceSuite,
     backupServiceSuite,
     restoreServiceSuite,
     runCoordinatorSuite,
     runExecutorSuite,
+    schedulerSuite,
+    daemonServiceSuite,
     jobTargetSuite,
     changePlannerSuite,
     fileSystemAdapterSuite,
     systemAdapterSuite,
+    dbusApiSuite,
     runnerSuite,
     watcherSuite,
 ];

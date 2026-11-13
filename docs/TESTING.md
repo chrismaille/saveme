@@ -37,7 +37,9 @@ python3 scripts/coverage.py build/coverage/coverage.lcov ...
 | Domínio puro (`src/domain/`) | 95% | 95% | `make coverage` (gate) |
 | Aplicação (`src/application/`) | 95% | 85% | `make coverage` (gate) |
 | Adapters Gio/persistência/system (`src/adapters/`, exceto rclone) | 90% | 85% | `make coverage` (gate) |
+| Adapter D-Bus (`src/adapters/dbus/`) | 90% | 85% | `make coverage` (gate) |
 | Adapter rclone | integração/E2E | integração/E2E | `make e2e` + `make coverage` informativo |
+| Daemon/supervisor | 90% | 85% | `DaemonService` unit + E2E de ciclo de vida |
 | Núcleo legado (config, jobs, queue, paths, state, util) | 95% | 90% | testes unitários |
 | Runner, watcher, rclone, volumes | 95% | 90% | integração + falhas simuladas |
 | Daemon, supervisor, auth, D-Bus | 90% | 85% | E2E em D-Bus privado |
@@ -54,15 +56,15 @@ adapters e no daemon, e cobertura comportamental E2E nas superfícies visuais.
 
 Estado atual (unit + integration + E2E de daemon):
 
-- domínio puro: **98,9% linha / 98,1% branch / 100% funções**;
-- aplicação: **99,4% linha / 87,5% branch / 100% funções**;
-- adapters: **94,7% linha / 100% branch / 100% funções** (Gio, persistência e
-  system; o adapter rclone é coberto por integração/E2E);
-- `src/` global: **84,2% linha / 69,1% branch**.
+- domínio puro: **99,2% linha / 97,9% branch / 100% funções**;
+- aplicação: **99,1% linha / 86,5% branch / 100% funções**;
+- adapters Gio/persistência/system: **96,6% linha / 100% branch / 100% funções**;
+- adapter D-Bus (`DaemonApi`): **100% linha / 100% branch / 100% funções**;
+- `src/` global: **86,0% linha / 70,7% branch**.
 
-Os gates de domínio, aplicação e adapters Gio/persistência/system rodam no
-`make coverage`. O adapter rclone é um wrapper de subprocesso e é validado por
-integração/E2E, não por branch coverage.
+Os gates de domínio, aplicação, adapters e D-Bus rodam no `make coverage`.
+O adapter rclone é um wrapper de subprocesso e é validado por integração/E2E,
+não por branch coverage.
 
 ## Simulação de backup e restore
 
@@ -73,7 +75,10 @@ O E2E já cobre:
 - arquivo deletado preservado em versões;
 - restauração de arquivo deletado por data;
 - restauração do backup atual inteiro;
-- restart do daemon com estado e jobs preservados.
+- restart graceful do daemon com estado e jobs preservados;
+- pause/resume com bloqueio de mudanças em tempo real;
+- sinal `SnapshotChanged`;
+- kill -9 do daemon e recuperação de jobs/estado.
 
 Próximos cenários:
 
@@ -100,7 +105,10 @@ Cobre:
 - application services com fakes de transfer/filesystem/state/clock:
   full e incremental sync, full e incremental backup, delete guard,
   cancelamento, retries, restore e limpeza de versões;
+- DaemonService/DaemonApi com fakes de config/state/manager/auth/transfer;
+- Scheduler, RetryPolicy e JobStateMachine puros;
 - adapters Gio: filesystem, raw log, relógio, paths e run repository;
+- adapter D-Bus: conversão de booleanos e delegação;
 - property-based tests para paths de backup, retenção e delete guard;
 - utilidades, configuração e validação de jobs;
 - fila/debounce do watcher;

@@ -8,16 +8,11 @@ import {StateStore} from './adapters/persistence/state-repository.js';
 import {VolumeResolver} from './adapters/gio/volume-catalog.js';
 import {
     RcloneTransferEngine as Rclone,
-    exitCodeMessage,
     findRclone,
-    isSuccessExit,
 } from './adapters/rclone/transfer-engine.js';
-import {
-    backupCurrentFor,
-    joinRclonePath,
-    versionsRootFor,
-    parseVersionTimestamp,
-} from './runner.js';
+import {DaemonApi} from './adapters/dbus/api.js';
+import {SystemClock} from './adapters/system/clock.js';
+import {DaemonService} from './application/daemon-service.js';
 import {createJobRunner, createRestoreService} from './composition/runner.js';
 import {JobManager} from './supervisor.js';
 import {RemoteAuthManager} from './auth.js';
@@ -30,8 +25,7 @@ import {
     rcloneConfigFile,
     stateDir,
 } from './paths.js';
-import {jobRemoteNames, localPathFor, remotePathFor} from './jobs.js';
-import {ensureDir, joinPath, nowIso, uniqueId} from './util.js';
+import {ensureDir, nowIso, uniqueId} from './util.js';
 
 const VERSION = '1.0.0-dev';
 
@@ -44,99 +38,6 @@ function getPid() {
     }
 }
 
-function validateVersionName(name) {
-    return parseVersionTimestamp(name) !== null && !name.includes('/');
-}
-
-export class DaemonApi {
-    constructor(daemon) {
-        this.daemon = daemon;
-    }
-
-    GetSnapshot() {
-        return this.daemon.snapshotJson();
-    }
-
-    RunJob(jobId, dryRun, force) {
-        return this.daemon.runJob(jobId, Boolean(dryRun), Boolean(force));
-    }
-
-    CancelJob(jobId) {
-        this.daemon.cancelJob(jobId);
-    }
-
-    PauseJob(jobId, paused) {
-        this.daemon.pauseJob(jobId, Boolean(paused));
-    }
-
-    SetJobEnabled(jobId, enabled) {
-        this.daemon.setJobEnabled(jobId, Boolean(enabled));
-    }
-
-    PauseAll(paused) {
-        this.daemon.pauseAll(Boolean(paused));
-    }
-
-    SaveJob(payloadJson) {
-        return this.daemon.saveJob(payloadJson);
-    }
-
-    DeleteJob(jobId) {
-        this.daemon.deleteJob(jobId);
-    }
-
-    GetRun(jobId, runId) {
-        return this.daemon.getRun(jobId, runId);
-    }
-
-    GetRunLog(jobId, runId) {
-        return this.daemon.getRunLog(jobId, runId);
-    }
-
-    ListRuns(jobId, limit) {
-        return this.daemon.listRuns(jobId, limit);
-    }
-
-    ListVersions(jobId) {
-        return this.daemon.listVersions(jobId);
-    }
-
-    ListRemote(remote, path, dirsOnly) {
-        return this.daemon.listRemote(remote, path, Boolean(dirsOnly));
-    }
-
-    ListBackup(jobId, version, path, dirsOnly) {
-        return this.daemon.listBackup(jobId, version, path, Boolean(dirsOnly));
-    }
-
-    Restore(payloadJson) {
-        return this.daemon.restore(payloadJson);
-    }
-
-    BeginRemoteAuth(provider, name, optionsJson) {
-        return this.daemon.beginRemoteAuth(provider, name, optionsJson);
-    }
-
-    GetRemoteAuth(authId) {
-        return this.daemon.getRemoteAuth(authId);
-    }
-
-    CancelRemoteAuth(authId) {
-        this.daemon.cancelRemoteAuth(authId);
-    }
-
-    DeleteRemote(name) {
-        this.daemon.deleteRemote(name);
-    }
-
-    Doctor() {
-        return this.daemon.doctorJson();
-    }
-
-    Quit() {
-        this.daemon.quit();
-    }
-}
 
 export const SaveMeDaemonApplication = GObject.registerClass({
     GTypeName: 'SaveMeDaemonApplication',
@@ -155,6 +56,7 @@ export const SaveMeDaemonApplication = GObject.registerClass({
         this._runner = null;
         this._restore = null;
         this._manager = null;
+        this._service = null;
         this._auth = null;
         this._dbus = null;
         this._api = null;
@@ -213,6 +115,7 @@ export const SaveMeDaemonApplication = GObject.registerClass({
             state: this._state,
             runner: this._runner,
             logger: this._logger,
+            clock: new SystemClock(),
             onChange: () => this._markDirty(),
             onRunFinished: run => this._onRunFinished(run),
             onNotify: notification => this._onNotify(notification),
@@ -223,8 +126,38 @@ export const SaveMeDaemonApplication = GObject.registerClass({
             logger: this._logger,
             onChange: (authId, json) => this._onRemoteAuthChanged(authId, json),
         });
+        this._service = new DaemonService({
+            config: this._config,
+            state: this._state,
+            manager: this._manager,
+            restore: this._restore,
+            auth: this._auth,
+            transfer: this._rclone,
+            volumes: this._volumes,
+            logger: this._logger,
+            startedAt: this._startedAt,
+            idFactory: prefix => uniqueId(prefix),
+            getPid,
+            readTextTail,
+            findRclone,
+            secureFile: path => {
+                try {
+                    Gio.File.new_for_path(path).set_attribute_uint32(
+                        'unix::mode', 0o600, Gio.FileQueryInfoFlags.NONE, null);
+                } catch (_) {
+                    // Best effort.
+                }
+            },
+            environment: {
+                version: VERSION,
+                gjs: system.version,
+                configDir: configDir(),
+                stateDir: stateDir(),
+            },
+            onSnapshot: force => this._emitSnapshot(force),
+        });
 
-        this._api = new DaemonApi(this);
+        this._api = new DaemonApi({service: this._service, quit: () => this.quit()});
         this._exportDbus();
         this._setupActions();
         this._setupVolumes();
@@ -354,7 +287,7 @@ export const SaveMeDaemonApplication = GObject.registerClass({
     _emitSnapshot(force = false) {
         if (!this._dbus)
             return;
-        const json = this.snapshotJson();
+        const json = this._service.snapshotJson();
         if (!force && json === this._lastSnapshot)
             return;
         this._lastSnapshot = json;
@@ -404,303 +337,7 @@ export const SaveMeDaemonApplication = GObject.registerClass({
         }
     }
 
-    snapshotJson() {
-        const jobs = this._config.listJobs().map(job => ({
-            ...job,
-            state: this._state.getJobState(job.id),
-        }));
-        let rcloneInfo;
-        try {
-            const version = this._rclone.getVersion();
-            rcloneInfo = {
-                path: this._rclone.binary,
-                version: version.text,
-            };
-        } catch (e) {
-            rcloneInfo = {path: this._rclone?.binary || findRclone(), error: e.message};
-        }
-        return JSON.stringify({
-            version: VERSION,
-            daemon: {
-                pid: getPid(),
-                startedAt: this._startedAt,
-                rclone: rcloneInfo,
-            },
-            settings: this._config.settings,
-            pausedAll: this._state.pausedAll,
-            remotes: this._config.listRemotes(),
-            jobs,
-            volumes: this._volumes.list(),
-        });
-    }
 
-    runJob(jobId, dryRun, force) {
-        const supervisor = this._manager.get(jobId);
-        if (!supervisor)
-            throw new Error(`Job not found: ${jobId}`);
-        if (supervisor.running)
-            throw new Error('Job is already running.');
-        const runId = uniqueId('run_');
-        this._manager.runJob(jobId, {dryRun, force, runId}).then(run => {
-            if (!run)
-                this._logger?.warn(`Run ${runId} did not start`);
-        }).catch(e => {
-            this._logger?.error(`Run ${runId} failed: ${e.message}`);
-        });
-        return runId;
-    }
-
-    cancelJob(jobId) {
-        this._manager.cancelJob(jobId);
-        this._markDirty();
-    }
-
-    pauseJob(jobId, paused) {
-        this._manager.pauseJob(jobId, paused);
-        this._markDirty();
-    }
-
-    setJobEnabled(jobId, enabled) {
-        const job = this._config.setJobEnabled(jobId, enabled);
-        this._manager.updateJob(jobId, job);
-        this._emitSnapshot(true);
-    }
-
-    pauseAll(paused) {
-        this._manager.pauseAll(paused);
-        this._emitSnapshot(true);
-    }
-
-    saveJob(payloadJson) {
-        const payload = JSON.parse(payloadJson);
-        delete payload.state;
-        let saved;
-        if (payload.id && this._config.getJob(payload.id))
-            saved = this._config.updateJob(payload.id, payload);
-        else
-            saved = this._config.addJob(payload);
-        this._manager.addJob(saved);
-        this._emitSnapshot(true);
-        return JSON.stringify(saved);
-    }
-
-    deleteJob(jobId) {
-        this._config.removeJob(jobId);
-        this._manager.removeJob(jobId);
-        this._emitSnapshot(true);
-    }
-
-    getRun(jobId, runId) {
-        return JSON.stringify(this._state.getRun(jobId, runId) || {});
-    }
-
-    getRunLog(jobId, runId) {
-        const run = this._state.getRun(jobId, runId);
-        if (!run)
-            throw new Error(`Run not found: ${runId}`);
-        return readTextTail(run.logFile, 800);
-    }
-
-    listRuns(jobId, limit) {
-        return JSON.stringify(this._state.listRuns(jobId, Number(limit) || 50));
-    }
-
-    _resolveJobDestination(job) {
-        return job.destination.kind === 'local'
-            ? localPathFor(job.destination, this._volumes)
-            : remotePathFor(job.destination);
-    }
-
-    listVersions(jobId) {
-        const job = this._config.getJob(jobId);
-        if (!job)
-            throw new Error(`Job not found: ${jobId}`);
-        if (job.type !== 'backup')
-            return JSON.stringify([]);
-        const dest = this._resolveJobDestination(job);
-        const root = versionsRootFor(job, dest);
-        const result = this._rclone.runCapture(['lsf', root, '--dirs-only']);
-        if (result.exitCode === 3)
-            return JSON.stringify([]);
-        if (!isSuccessExit(result.exitCode))
-            throw new Error(result.stderr.trim() || exitCodeMessage(result.exitCode));
-        const versions = result.stdout.split('\n')
-            .map(line => line.trim().replace(/\/$/, ''))
-            .filter(Boolean)
-            .map(name => ({
-                name,
-                date: parseVersionTimestamp(name)?.toISOString() ?? null,
-            }))
-            .sort((a, b) => String(b.name).localeCompare(String(a.name)));
-        return JSON.stringify(versions);
-    }
-
-    listRemote(remote, path, dirsOnly) {
-        if (!remote || !this._config.getRemote(remote))
-            throw new Error(`Remote not found: ${remote}`);
-        const cleanPath = String(path || '').replace(/^\/+|\/+$/g, '');
-        const target = cleanPath ? `${remote}:${cleanPath}` : `${remote}:`;
-        if (dirsOnly) {
-            const result = this._rclone.runCapture(['lsf', target, '--dirs-only']);
-            if (result.exitCode === 3)
-                return JSON.stringify([]);
-            if (!isSuccessExit(result.exitCode))
-                throw new Error(result.stderr.trim() || exitCodeMessage(result.exitCode));
-            const entries = result.stdout.split('\n')
-                .map(line => line.trim().replace(/\/$/, ''))
-                .filter(Boolean)
-                .map(name => ({name, isDir: true, size: 0, modTime: null}))
-                .sort((a, b) => a.name.localeCompare(b.name));
-            return JSON.stringify(entries);
-        }
-        const result = this._rclone.runCapture(['lsjson', target]);
-        if (result.exitCode === 3)
-            return JSON.stringify([]);
-        if (!isSuccessExit(result.exitCode))
-            throw new Error(result.stderr.trim() || exitCodeMessage(result.exitCode));
-        let raw;
-        try {
-            raw = JSON.parse(result.stdout || '[]');
-        } catch (e) {
-            throw new Error(`Invalid rclone lsjson output: ${e.message}`, {cause: e});
-        }
-        const entries = raw.map(entry => ({
-            name: entry.Name || entry.Path || '',
-            isDir: Boolean(entry.IsDir),
-            size: Number(entry.Size || 0),
-            modTime: entry.ModTime || null,
-        })).filter(entry => entry.name);
-        entries.sort((a, b) => a.isDir === b.isDir
-            ? a.name.localeCompare(b.name)
-            : a.isDir ? -1 : 1);
-        return JSON.stringify(entries);
-    }
-
-    listBackup(jobId, version, path, dirsOnly) {
-        const job = this._config.getJob(jobId);
-        if (!job)
-            throw new Error(`Job not found: ${jobId}`);
-        if (job.type !== 'backup')
-            throw new Error('This job is not a backup job.');
-        const dest = this._resolveJobDestination(job);
-        let root;
-        if (version) {
-            if (!validateVersionName(version))
-                throw new Error('Invalid version name.');
-            root = joinPath(versionsRootFor(job, dest), version);
-        } else {
-            root = backupCurrentFor(job, dest);
-        }
-        const cleanPath = String(path || '').replace(/^\/+|\/+$/g, '');
-        const target = cleanPath ? joinRclonePath(root, cleanPath) : root;
-        if (dirsOnly) {
-            const result = this._rclone.runCapture(['lsf', target, '--dirs-only']);
-            if (result.exitCode === 3)
-                return JSON.stringify([]);
-            if (!isSuccessExit(result.exitCode))
-                throw new Error(result.stderr.trim() || exitCodeMessage(result.exitCode));
-            const entries = result.stdout.split('\n')
-                .map(line => line.trim().replace(/\/$/, ''))
-                .filter(Boolean)
-                .map(name => ({name, isDir: true, size: 0, modTime: null}))
-                .sort((a, b) => a.name.localeCompare(b.name));
-            return JSON.stringify(entries);
-        }
-        const result = this._rclone.runCapture(['lsjson', target]);
-        if (result.exitCode === 3)
-            return JSON.stringify([]);
-        if (!isSuccessExit(result.exitCode))
-            throw new Error(result.stderr.trim() || exitCodeMessage(result.exitCode));
-        let raw;
-        try {
-            raw = JSON.parse(result.stdout || '[]');
-        } catch (e) {
-            throw new Error(`Invalid rclone lsjson output: ${e.message}`, {cause: e});
-        }
-        const entries = raw.map(entry => ({
-            name: entry.Name || entry.Path || '',
-            isDir: Boolean(entry.IsDir),
-            size: Number(entry.Size || 0),
-            modTime: entry.ModTime || null,
-        })).filter(entry => entry.name);
-        entries.sort((a, b) => a.isDir === b.isDir
-            ? a.name.localeCompare(b.name)
-            : a.isDir ? -1 : 1);
-        return JSON.stringify(entries);
-    }
-
-    restore(payloadJson) {
-        const payload = JSON.parse(payloadJson);
-        const job = this._config.getJob(payload.jobId);
-        if (!job)
-            throw new Error(`Job not found: ${payload.jobId}`);
-        const destination = this._resolveJobDestination(job);
-        const result = this._restore.restore({job, destination, payload});
-        this._emitSnapshot(true);
-        return JSON.stringify(result);
-    }
-
-    beginRemoteAuth(provider, name, optionsJson) {
-        const options = optionsJson ? JSON.parse(optionsJson) : {};
-        return this._auth.begin(provider, name, options);
-    }
-
-    getRemoteAuth(authId) {
-        return this._auth.get(authId);
-    }
-
-    cancelRemoteAuth(authId) {
-        this._auth.cancel(authId);
-    }
-
-    deleteRemote(name) {
-        const users = this._config.listJobs()
-            .filter(job => jobRemoteNames(job).includes(name));
-        if (users.length > 0) {
-            throw new Error(`Remote ${name} is used by jobs: ` +
-                users.map(job => job.name).join(', '));
-        }
-        const result = this._rclone.configDelete(name);
-        if (!isSuccessExit(result.exitCode)) {
-            throw new Error(result.stderr.trim() ||
-                `Cannot delete remote ${name}: ${exitCodeMessage(result.exitCode)}`);
-        }
-        this._config.removeRemote(name);
-        try {
-            Gio.File.new_for_path(this._rclone.configPath).set_attribute_uint32(
-                'unix::mode', 0o600, Gio.FileQueryInfoFlags.NONE, null);
-        } catch (_) {
-            // Best effort.
-        }
-        this._emitSnapshot(true);
-    }
-
-    doctorJson() {
-        let rcloneInfo;
-        try {
-            const version = this._rclone.getVersion();
-            rcloneInfo = {
-                ok: true,
-                path: this._rclone.binary,
-                version: version.text,
-                minimum: '1.60.0',
-                supported: this._rclone.checkVersion('1.60.0'),
-            };
-        } catch (e) {
-            rcloneInfo = {ok: false, error: e.message};
-        }
-        return JSON.stringify({
-            version: VERSION,
-            gjs: system.version,
-            configDir: configDir(),
-            stateDir: stateDir(),
-            rclone: rcloneInfo,
-            volumes: this._volumes.list(),
-            jobs: this._config.listJobs().length,
-            remotes: this._config.listRemoteNames(),
-            pausedAll: this._state.pausedAll,
-        });
-    }
 });
 
 export function main() {

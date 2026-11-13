@@ -1,5 +1,4 @@
 import Gio from 'gi://Gio';
-import GLib from 'gi://GLib';
 import {ChangeQueue} from './queue.js';
 import {RecursiveWatcher, WatcherLimitError} from './adapters/gio/watcher.js';
 import {localPathFor, remotePathFor, TRIGGER_MODES} from './jobs.js';
@@ -7,10 +6,11 @@ import {uniqueId} from './util.js';
 import {
     isCancelledRun,
     isSuccessfulRun,
-    nextBackoffDelay,
     shouldRetryAfterRun,
-    statusFromError,
 } from './domain/run-state.js';
+import {cancelledStatus, failureStatus, idleStatus} from './domain/job-state-machine.js';
+import {RetryPolicy} from './domain/retry-policy.js';
+import {Scheduler} from './application/scheduler.js';
 
 export class RunPool {
     constructor(limit = 1) {
@@ -42,6 +42,7 @@ export class JobSupervisor {
         logger,
         pool,
         getSettings,
+        clock,
         onChange = null,
         onRunFinished = null,
         onNotify = null,
@@ -52,19 +53,18 @@ export class JobSupervisor {
         this.logger = logger.child(job.name || job.id);
         this.pool = pool;
         this.getSettings = getSettings;
+        this.clock = clock;
+        this.scheduler = new Scheduler({clock, logger: this.logger});
+        this.retryPolicy = new RetryPolicy();
         this.onChange = onChange;
         this.onRunFinished = onRunFinished;
         this.onNotify = onNotify;
         this._watcher = null;
         this._queue = null;
-        this._timer = null;
-        this._reconcileTimer = null;
-        this._retryTimer = null;
         this._running = null;
         this._runningPromise = null;
         this._stopped = false;
         this._paused = Boolean(state.getJobState(job.id).paused);
-        this._backoffIndex = 0;
         this._lastNotifyKey = null;
     }
 
@@ -126,7 +126,7 @@ export class JobSupervisor {
         if (this.job.trigger.mode === TRIGGER_MODES.INTERVAL) {
             const intervalMs = Math.max(1, Number(this.job.trigger.intervalMinutes || 60)) * 60_000;
             const last = Date.parse(this.state.getJobState(this.job.id).lastRunAt || '');
-            const elapsed = Number.isFinite(last) ? Date.now() - last : Infinity;
+            const elapsed = Number.isFinite(last) ? this.clock.nowMs() - last : Infinity;
             if (elapsed >= intervalMs)
                 await this._runFull({reason: 'interval'});
             else {
@@ -184,12 +184,11 @@ export class JobSupervisor {
     }
 
     _setIdleStatus() {
-        if (!this.job.enabled)
-            this._setStatus('disabled', '');
-        else if (this._paused || this.state.pausedAll)
-            this._setStatus('paused', '');
-        else
-            this._setStatus('idle', '');
+        this._setStatus(idleStatus({
+            enabled: this.job.enabled,
+            paused: this._paused,
+            pausedAll: this.state.pausedAll,
+        }), '');
     }
 
     _notify(status, message) {
@@ -220,19 +219,23 @@ export class JobSupervisor {
             return;
         this.onRunFinished?.(run);
         if (isCancelledRun(run.result)) {
-            if (this._paused || this.state.pausedAll || !this.job.enabled)
-                this._setStatus('paused', 'Cancelled');
-            else {
-                const availability = this._checkAvailability();
-                if (!availability.sourceAvailable)
-                    this._setStatus('waiting-source', availability.message || 'Source unavailable');
-                else
-                    this._setStatus('paused', 'Cancelled');
-            }
+            const availability = this._paused || this.state.pausedAll || !this.job.enabled
+                ? {sourceAvailable: true}
+                : this._checkAvailability();
+            const status = cancelledStatus({
+                enabled: this.job.enabled,
+                paused: this._paused,
+                pausedAll: this.state.pausedAll,
+                sourceAvailable: availability.sourceAvailable,
+            });
+            this._setStatus(status,
+                status === 'waiting-source'
+                    ? availability.message || 'Source unavailable'
+                    : 'Cancelled');
             return;
         }
         if (isSuccessfulRun(run.result)) {
-            this._backoffIndex = 0;
+            this.retryPolicy.reset();
             this._lastNotifyKey = null;
             if (this.job.trigger.mode === TRIGGER_MODES.REALTIME) {
                 this._startRealtime().catch(e => {
@@ -250,7 +253,7 @@ export class JobSupervisor {
 
         // Error path.
         const message = run.message || 'Unknown error';
-        const status = statusFromError(message);
+        const status = failureStatus(message);
         this._stopRealtime();
         this._setStatus(status, message);
         this._notify(status, message);
@@ -319,8 +322,8 @@ export class JobSupervisor {
     }
 
     async _startRealtime() {
-        if (this._watcher || this._timer || this._stopped || this._paused ||
-            this.state.pausedAll || !this.job.enabled)
+        if (this._watcher || this.scheduler.has('poll') || this.scheduler.has('interval') ||
+            this._stopped || this._paused || this.state.pausedAll || !this.job.enabled)
             return;
         if (this.job.source.kind !== 'local') {
             this._startPolling();
@@ -367,13 +370,11 @@ export class JobSupervisor {
     _startPolling() {
         this._clearPollTimer();
         const minutes = Math.max(1, Number(this.getSettings()?.pollIntervalMinutes || 5));
-        this._timer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, minutes * 60, () => {
-            this._timer = null;
+        this.scheduler.start('poll', minutes * 60 * 1000, () => {
             if (!this._stopped && !this._paused && !this.state.pausedAll) {
                 this._runFull({reason: 'poll'}).catch(e =>
                     this.logger.warn(`Poll failed: ${e.message}`));
             }
-            return GLib.SOURCE_REMOVE;
         });
         this._setIdleStatus();
     }
@@ -388,82 +389,57 @@ export class JobSupervisor {
             this._queue = null;
         }
         this._clearPollTimer();
-        if (this._reconcileTimer) {
-            GLib.source_remove(this._reconcileTimer);
-            this._reconcileTimer = null;
-        }
+        this.scheduler.clear('reconcile');
     }
 
     _scheduleReconcile() {
-        if (this._reconcileTimer) {
-            GLib.source_remove(this._reconcileTimer);
-            this._reconcileTimer = null;
-        }
+        this.scheduler.clear('reconcile');
         const hours = Number(this.getSettings()?.reconcileIntervalHours || 24);
         if (hours <= 0)
             return;
-        this._reconcileTimer = GLib.timeout_add_seconds(
-            GLib.PRIORITY_DEFAULT, hours * 3600, () => {
-                this._reconcileTimer = null;
-                if (!this._stopped && !this._paused && !this.state.pausedAll) {
-                    this._runFull({reason: 'reconcile'}).catch(e =>
-                        this.logger.warn(`Reconcile failed: ${e.message}`));
-                }
-                return GLib.SOURCE_REMOVE;
-            });
+        this.scheduler.start('reconcile', hours * 3600 * 1000, () => {
+            if (!this._stopped && !this._paused && !this.state.pausedAll) {
+                this._runFull({reason: 'reconcile'}).catch(e =>
+                    this.logger.warn(`Reconcile failed: ${e.message}`));
+            }
+        });
     }
 
     _scheduleInterval(delayMs = null) {
         this._clearIntervalTimer();
         const interval = Math.max(1, Number(this.job.trigger.intervalMinutes || 60)) * 60_000;
         const delay = delayMs ?? interval;
-        this._timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, delay, () => {
-            this._timer = null;
+        this.scheduler.start('interval', delay, () => {
             if (!this._stopped && !this._paused && !this.state.pausedAll) {
                 this._runFull({reason: 'interval'}).catch(e =>
                     this.logger.warn(`Interval run failed: ${e.message}`));
             }
-            return GLib.SOURCE_REMOVE;
         });
     }
 
     _scheduleRetry() {
         this._clearRetryTimer();
-        const delay = nextBackoffDelay(this._backoffIndex);
-        this._backoffIndex++;
-        this._retryTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, delay, () => {
-            this._retryTimer = null;
+        const delay = this.retryPolicy.nextDelay();
+        this.scheduler.start('retry', delay, () => {
             if (!this._stopped && !this._paused && !this.state.pausedAll)
                 this._start().catch(e => this.logger.warn(`Retry failed: ${e.message}`));
-            return GLib.SOURCE_REMOVE;
         });
     }
 
     _clearPollTimer() {
-        if (this._timer) {
-            GLib.source_remove(this._timer);
-            this._timer = null;
-        }
+        this.scheduler.clear('poll');
     }
 
     _clearIntervalTimer() {
-        this._clearPollTimer();
+        this.scheduler.clear('interval');
     }
 
     _clearRetryTimer() {
-        if (this._retryTimer) {
-            GLib.source_remove(this._retryTimer);
-            this._retryTimer = null;
-        }
+        this.scheduler.clear('retry');
     }
 
     _clearTimers() {
-        this._clearPollTimer();
-        this._clearRetryTimer();
-        if (this._reconcileTimer) {
-            GLib.source_remove(this._reconcileTimer);
-            this._reconcileTimer = null;
-        }
+        this.scheduler.clearAll();
     }
 
     pause() {
@@ -537,7 +513,7 @@ export class JobSupervisor {
         if (this.job.trigger.mode === TRIGGER_MODES.INTERVAL) {
             const interval = Math.max(1, Number(this.job.trigger.intervalMinutes || 60)) * 60_000;
             const last = Date.parse(this.state.getJobState(this.job.id).lastRunAt || '');
-            if (!Number.isFinite(last) || Date.now() - last >= interval)
+            if (!Number.isFinite(last) || this.clock.nowMs() - last >= interval)
                 this.start();
         }
     }
@@ -554,7 +530,7 @@ export class JobSupervisor {
             job: this.job,
             state: this.state.getJobState(this.job.id),
             watching: Boolean(this._watcher),
-            polling: Boolean(this._timer),
+            polling: this.scheduler.has('poll') || this.scheduler.has('interval'),
             running: Boolean(this._running),
         };
     }
@@ -566,6 +542,7 @@ export class JobManager {
         state,
         runner,
         logger,
+        clock,
         onChange = null,
         onRunFinished = null,
         onNotify = null,
@@ -574,6 +551,7 @@ export class JobManager {
         this.state = state;
         this.runner = runner;
         this.logger = logger;
+        this.clock = clock;
         this.onChange = onChange;
         this.onRunFinished = onRunFinished;
         this.onNotify = onNotify;
@@ -610,6 +588,7 @@ export class JobManager {
             logger: this.logger,
             pool: this.pool,
             getSettings: () => this.getSettings(),
+            clock: this.clock,
             onChange: this.onChange,
             onRunFinished: this.onRunFinished,
             onNotify: this.onNotify,

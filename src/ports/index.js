@@ -19,7 +19,7 @@ export const PORT_METHODS = Object.freeze({
         'writeText',
         'removeIfExists',
     ],
-    clock: ['nowMs', 'nowIso', 'newDate'],
+    clock: ['nowMs', 'nowIso', 'newDate', 'setTimeout', 'clearTimeout'],
     logger: ['debug', 'info', 'warn', 'error', 'child', 'close'],
     stateRepository: ['getJobState', 'setJobState', 'updateProgress'],
     runRepository: ['recordRun', 'getRun', 'listRuns'],

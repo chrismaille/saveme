@@ -111,6 +111,8 @@ export class FakeTransfer {
 export class FakeClock {
     constructor(ms = new Date(2026, 0, 2, 3, 4, 5).getTime()) {
         this.ms = ms;
+        this._timers = new Map();
+        this._nextTimer = 1;
     }
 
     nowMs() {
@@ -123,6 +125,40 @@ export class FakeClock {
 
     newDate() {
         return new Date(this.ms);
+    }
+
+    setTimeout(callback, delayMs) {
+        const id = this._nextTimer++;
+        this._timers.set(id, {at: this.ms + Math.max(0, delayMs), callback});
+        return id;
+    }
+
+    clearTimeout(id) {
+        this._timers.delete(id);
+    }
+
+    tick(ms) {
+        const target = this.ms + ms;
+        while (true) {
+            let nextId = null;
+            let next = null;
+            for (const [id, timer] of this._timers) {
+                if (timer.at <= target && (!next || timer.at < next.at)) {
+                    nextId = id;
+                    next = timer;
+                }
+            }
+            if (!next)
+                break;
+            this._timers.delete(nextId);
+            this.ms = next.at;
+            next.callback();
+        }
+        this.ms = target;
+    }
+
+    get timerCount() {
+        return this._timers.size;
     }
 
     advance(ms) {

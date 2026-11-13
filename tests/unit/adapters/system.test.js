@@ -39,6 +39,32 @@ export default suite('adapters/system', [
         assert(Date.parse(iso) >= before);
         assert(date instanceof Date);
     }),
+    test('system clock schedules and cancels GLib timers', async () => {
+        const clock = new SystemClock();
+        let fired = 0;
+        clock.setTimeout(() => {
+            fired++;
+        }, 0);
+        clock.setTimeout(() => {
+            fired += 100;
+        }, 10);
+        const cancelled = clock.setTimeout(() => {
+            fired += 1000;
+        }, 10);
+        clock.clearTimeout(cancelled);
+        clock.clearTimeout(null);
+        clock.clearTimeout(0);
+        clock.setTimeout(() => {
+            fired++;
+        }, -5);
+        await new Promise(resolve => {
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 40, () => {
+                resolve();
+                return GLib.SOURCE_REMOVE;
+            });
+        });
+        assertEqual(fired, 102);
+    }),
     test('system paths expose XDG-backed directories and joins', () => {
         const paths = new SystemPaths();
         assert(paths.filtersDir().endsWith('/saveme/filters'));
