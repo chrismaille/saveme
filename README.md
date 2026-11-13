@@ -2,7 +2,7 @@
 
 **Source → Destination.** One-way real-time sync and versioned backup for GNOME.
 
-SaveMe is a GNOME Shell extension backed by a small user daemon. It keeps a
+SaveMe is a GTK4/Adwaita settings app backed by a small user daemon. It keeps a
 destination folder or cloud remote in sync with a source folder, with two
 deliberately different modes:
 
@@ -27,15 +27,29 @@ iCloud is intentionally out of scope until Apple offers a stable API.
 ## Architecture
 
 ```
-GNOME Shell extension (GJS) ──D-Bus──┐
-                                     ├── saveme-daemon (GJS, systemd --user) ── rclone
-SaveMe Settings (GTK4/Adwaita) ──────┤                                          │
-                                     └── config, state, logs, notifications     └── local / cloud
-CLI (saveme) ────────────────────────┘
+GNOME Shell extension (GJS, optional) ──D-Bus──┐
+                                              ├── saveme-daemon (GJS, systemd --user) ── rclone
+SaveMe Settings (GTK4/Adwaita) ───────────────┤                                          │
+                                              └── config, state, logs, notifications     └── local / cloud
+CLI (saveme) ─────────────────────────────────┘
 ```
 
-The extension is a thin UI. The daemon runs independently of the Shell, so
-backups survive Shell restarts, logout and UI crashes.
+The extension is a thin UI and is optional. The daemon runs independently of
+the Shell, so backups survive Shell restarts, logout and UI crashes. The GTK
+app talks directly to the daemon and does not import or require the extension.
+
+### Logs and resource discipline
+
+- daemon, app and run logs have size rotation and a 30-day/50 MiB default policy;
+- credentials are sanitized before writing, displaying or copying diagnostics;
+- the Logs page shows disk usage and lets you prune, clear, sanitize and change
+  the retention policy;
+- the app samples its own RSS, peak RSS and CPU; warnings and samples go to
+  `~/.local/state/saveme/logs/app.log` and are visible in Settings/Debug;
+- `make e2e-app` includes a memory soak that fails if RSS grows beyond the
+  configured budget;
+- normal uninstall removes logs, caches and temporary files; `--purge` also
+  removes configuration, state and the installer log.
 
 ## Install
 
@@ -65,7 +79,8 @@ make setup          # download the pinned rclone for development
 make setup-lint     # create .venv + install Node lint tools
 make lint           # pre-commit on every file, staged or not
 make test           # unit + integration tests
-make tests          # unit + daemon E2E + extension E2E
+make tests          # unit + daemon E2E + extension/app E2E
+make e2e-app        # GTK app headless smoke + memory soak
 make verify         # lint + tests
 make doctor         # check rclone, paths and volumes
 make run ARGS="status"

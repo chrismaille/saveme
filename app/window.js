@@ -5,6 +5,7 @@ import Adw from 'gi://Adw?version=1';
 import {JobEditor} from './job-editor.js';
 import {AccountDialog} from './account-dialog.js';
 import {RestoreDialog} from './restore-dialog.js';
+import {LogDialog} from './log-dialog.js';
 import {RemoteBrowserDialog} from './remote-browser.js';
 import {VolumeResolver} from '../src/volumes.js';
 import {JOB_TYPES, localPathFor} from '../src/jobs.js';
@@ -22,7 +23,7 @@ const ROOT_DIR = GLib.build_filenamev([APP_DIR, '..']);
 export const SaveMeWindow = GObject.registerClass({
     GTypeName: 'SaveMeSettingsWindow',
 }, class SaveMeWindow extends Adw.ApplicationWindow {
-    constructor(app, client) {
+    constructor(app, client, {monitor = null, appLog = null} = {}) {
         super({
             application: app,
             title: 'SaveMe',
@@ -31,12 +32,21 @@ export const SaveMeWindow = GObject.registerClass({
         });
         this.app = app;
         this.client = client;
+        this.monitor = monitor;
+        this.appLog = appLog;
         this.volumes = new VolumeResolver();
         this.launcher = new SystemLauncher();
         this.snapshot = null;
         this._daemonStatus = null;
         this._unsubscribe = null;
+        this._monitorUnsubscribe = null;
         this._buildUI();
+        this._monitorUnsubscribe = this.monitor?.onSample(metrics => {
+            this.settingsPage.updatePerformance(metrics);
+            this.debugPage.updatePerformance(metrics);
+        }) || null;
+        this.settingsPage.updatePerformance(this.monitor?.snapshot());
+        this.debugPage.updatePerformance(this.monitor?.snapshot());
 
         this._unsubscribe = this.client.onSnapshot(json => {
             try {
@@ -48,6 +58,8 @@ export const SaveMeWindow = GObject.registerClass({
         this.connect('close-request', () => {
             this._unsubscribe?.();
             this._unsubscribe = null;
+            this._monitorUnsubscribe?.();
+            this._monitorUnsubscribe = null;
             return false;
         });
         this.refresh();
@@ -194,6 +206,8 @@ export const SaveMeWindow = GObject.registerClass({
             this.stack.set_visible_child_name(name);
         if (name === 'logs' && jobId)
             this.logsPage.selectJob(jobId);
+        if (name === 'logs')
+            this.logsPage.onShown();
         if (name === 'debug')
             this.debugPage.onShown();
     }
@@ -212,6 +226,11 @@ export const SaveMeWindow = GObject.registerClass({
 
     openLogs(jobId = null) {
         this.showView('logs', jobId);
+    }
+
+    openAppLog() {
+        new LogDialog(this, 'Application log',
+            this.appLog?.readTail(1000) || '(empty)').present();
     }
 
     openSource(job) {

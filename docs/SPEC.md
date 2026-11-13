@@ -145,6 +145,8 @@ Regras:
 - Deleções incrementais também passam pelo limite percentual.
 - Cancelamento é gracioso: SIGINT no rclone, estado consistente.
 - Configuração e logs com permissão `0600`; daemon roda como usuário.
+- Logs têm rotação por tamanho, retenção por idade/tamanho e sanitização de
+  credenciais antes de escrever, exibir ou copiar diagnósticos.
 - Nenhum argumento de shell é montado por concatenação; subprocessos usam argv.
 
 ## 7. Backup e restauração
@@ -215,6 +217,8 @@ job começa um novo espelho; os arquivos do destino antigo não são movidos.
 - Cadastro de contas/remotes com fluxo OAuth.
 - Dry-run e resumo antes de salvar/ativar.
 - Logs por job e por execução.
+- Gestão de logs: uso em disco, retenção, limpeza, sanitização e log do app.
+- Performance: RSS, pico, CPU e status do orçamento, com amostras no app log.
 - Restauração atual e de versões.
 - Preferências: notificações, iniciar com a sessão, limites, idioma.
 - Diagnóstico (“Doctor”): rclone, daemon, inotify, keyring, mounts.
@@ -242,6 +246,10 @@ A CLI usa a mesma API D-Bus do daemon.
 - Limite de jobs simultâneos (padrão 1).
 - Estado persistido em JSON; escrita atômica.
 - Logs por execução, com resumo e log bruto do rclone.
+- Rotação por tamanho, retenção padrão de 30 dias/50 MiB, limpeza automática a
+  cada 6 h e sanitização de segredos.
+- O app mede o próprio RSS/pico/CPU, registra amostras e avisa quando o
+  orçamento é excedido.
 - Notificações apenas em transições relevantes: erro, origem/destino ausente,
   reautenticação necessária e resumo opcional de conclusão.
 
@@ -294,12 +302,15 @@ instalação limpa do Ubuntu 26.04:
 11. O popup da extensão mostra status e progresso corretos; executar, pausar e
     cancelar funcionam; configurações e logs abrem.
 12. Logs mostram resumo por execução, erros por arquivo e log bruto; nada de
-    log infinito sem rotação.
+    log infinito sem rotação. O app mostra uso, limpa, sanitiza e aplica a
+    política de retenção.
 13. O primeiro run mostra dry-run com contagens corretas e exige confirmação.
-14. Desinstalar o `.deb` remove binários e serviços; dados do usuário só são
-    removidos com opção explícita.
+14. Desinstalar o `.deb` remove binários, serviços, logs, caches e temporários;
+    configuração/estado só são removidos com `--purge`.
 15. `make test` e o CI passam; documentação de instalação, uso e restore está
     publicada; pt-BR e en funcionam.
+16. O app mantém o uso de memória sob o orçamento no soak E2E e registra
+    amostras de RSS/CPU no próprio log.
 
 ## 14. Riscos conhecidos
 
@@ -308,6 +319,9 @@ instalação limpa do Ubuntu 26.04:
 - Provedores mudam APIs; o rclone pinado reduz surpresas, mas atualizações
   periódicas são necessárias.
 - OAuth depende de navegador e das políticas de cada provedor.
+- Regressões de memória em GJS/GTK são vigiadas por amostras no app log e pelo
+  soak E2E; os limites podem ser ajustados por
+  `SAVEME_SOAK_MAX_RSS_DELTA_MB` e `SAVEME_SOAK_MAX_RSS_MB`.
 - Arquivos abertos/DBs podem ser copiados em estado inconsistente; o app deve
   documentar que não substitui snapshot/dump de aplicação.
 - Real-time em nuvem sofre rate limit; debounce e batching são obrigatórios.

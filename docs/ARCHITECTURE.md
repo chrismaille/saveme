@@ -86,6 +86,7 @@ app/                  SaveMe Settings (GTK4/Adwaita)
   window.js           composição da janela e navegação entre views
   gateway/            DaemonGateway e SystemLauncher
   presentation/       formatação pura (bytes, datas, status, ETA)
+  observability/      métricas de processo, monitor e log do app
   pages/              JobsPage, AccountsPage, LogsPage, SettingsPage,
                       DebugPage
   widgets/            helpers GTK compartilhados (status, linhas, read tail)
@@ -93,16 +94,17 @@ app/                  SaveMe Settings (GTK4/Adwaita)
   style.css
 src/                  daemon e bibliotecas compartilhadas internas
   domain/             regras puras, sem gi:// (backup, retenção, delete guard,
-                      change batching, comandos rclone, parser de log, erros)
+                      change batching, comandos rclone, parser de log, erros,
+                      política de logs)
   ports/              contratos runtime dos ports (transfer, fs, clock, state…)
   adapters/           implementações GI/rclone/JSON/system
     rclone/           transfer engine
     gio/              filesystem, raw log, watcher, volumes
     persistence/      config, state e runs
-    system/           clock, logger, paths
+    system/           clock, logger, paths, log store, arquivo rotativo
     dbus/             DaemonApi fino
   application/        SyncService, BackupService, RestoreService,
-                      RunCoordinator, RunExecutor, DaemonService,
+                      RunCoordinator, RunExecutor, DaemonService, LogService,
                       Scheduler, change planner
   composition/        montagem do runner para daemon e CLI
   main.js
@@ -145,6 +147,9 @@ O app fala somente por `DaemonGateway` e `SystemLauncher`; as páginas recebem
 a janela e não importam `DaemonClient` nem `Gio.Subprocess`. O contrato D-Bus
 continua inalterado.
 
+O app é independente da extensão: não importa `extension/` e funciona sozinho
+com o daemon. A regra `app-no-extension-import` do Omega impede regressões.
+
 ## 5. Configuração, estado e logs
 
 Tudo em XDG:
@@ -161,6 +166,19 @@ Tudo em XDG:
 Config e estado são JSON versionados, validados e gravados com
 `g_file_replace_contents` (atômico). O daemon mantém um backup `.bak` da última
 configuração válida.
+
+Logs:
+
+- daemon: `~/.local/state/saveme/daemon.log` + uma rotação `.1`;
+- app: `~/.local/state/saveme/logs/app.log` + duas rotações;
+- runs: `logs/<job-id>/<run-id>.log` e `.rclone.jsonl`;
+- todos com modo `0600`, sanitização de credenciais e rotação por tamanho;
+- política padrão: 30 dias e 50 MiB no total, com limpeza automática a cada
+  6 horas e ao salvar a política;
+- o app lista uso, maior/menor data, permite limpar run logs, limpar o daemon
+  log, rodar limpeza e sanitizar logs existentes;
+- `--purge` remove config/estado/cache; desinstalação normal remove logs,
+  caches, filtros, temporários e runtime, preservando jobs/estado.
 
 ## 6. Modelo de dados
 
@@ -204,6 +222,11 @@ CancelRemoteAuth(s auth_id)
 CreateRemote(s payload_json) -> s
 DeleteRemote(s name)
 Doctor() -> s                            # JSON
+GetLogsInfo() -> s                       # JSON: uso, áreas, política
+PruneLogs() -> s                         # JSON: removidos/bytes
+ClearLogs(s scope) -> s                  # all|daemon|run-logs
+SanitizeLogs() -> s                      # JSON: arquivos/alterados/pulados
+UpdateSettings(s payload_json) -> s      # JSON: settings aplicadas
 ```
 
 Sinais:
@@ -353,6 +376,8 @@ Para remotes, o caminho equivalente é
 - `RetryPolicy` puro: 1 min, 5 min, 15 min, 1 h (máximo).
 - `JobStateMachine` puro decide `idle`, `paused`, `waiting-source` e
   `disabled`.
+- `LogService` puro aplica a política de retenção/tamanho e roda no startup,
+  a cada 6 h e ao salvar a política.
 - Ao iniciar, jobs `realtime`/`interval` atrasados rodam imediatamente.
 - `logind` (`PrepareForSleep`) dispara reconciliação no resume.
 - `Gio.NetworkMonitor` pausa jobs de nuvem quando offline e retoma ao voltar.
@@ -364,7 +389,13 @@ Para remotes, o caminho equivalente é
 - Daemon e app rodam como o usuário; nunca root.
 - D-Bus só na sessão; sem listener de rede.
 - Config, tokens e logs com `0600`; diretórios `0700`.
-- Nenhum segredo em log.
+- Logs são sanitizados na escrita, na exibição e na cópia de diagnósticos:
+  tokens OAuth, `Authorization: Bearer`, query strings, senhas, chaves de API
+  e blocos de chave privada são redigidos.
+- O app mede RSS, pico e CPU do próprio processo; amostras e violações de
+  orçamento vão para `app.log` e aparecem em Settings/Debug.
+- O soak E2E aplica snapshots sintéticos e falha se o RSS crescer acima do
+  limite configurado (64 MiB por padrão).
 - Argumentos de rclone são array; sem interpolação de shell.
 - Validação de overlap origem/destino e de remotes.
 - Filtros padrão excluem lixeira e arquivos de sistema.
@@ -382,7 +413,12 @@ Para remotes, o caminho equivalente é
 - Daemon: DaemonService com fakes de config/state/manager/auth/transfer;
   DaemonApi fino testado por contrato.
 - Supervisor: Scheduler com clock fake, RetryPolicy e JobStateMachine puros.
-- Adapters: filesystem Gio, raw log, clock, paths e run repository.
+- Adapters: filesystem Gio, raw log, clock, paths, log store, arquivo rotativo
+  e run repository.
+- Logs: política pura de sanitização/retenção, LogService com store fake e
+  LogStore real em diretório temporário.
+- App: métricas de `/proc`, monitor de memória/CPU, log do app com rotação e
+  sanitização, gerador de soak e gateways.
 - Integração com rclone local em diretórios temporários:
   - sync inicial, upsert, rename, delete;
   - backup com versões e retenção;
@@ -393,9 +429,9 @@ Para remotes, o caminho equivalente é
 - D-Bus: daemon em `dbus-run-session`, chamadas reais, sinais e persistência.
 - Watcher: criação/alteração/rename/delete reais com `Gio.FileMonitor`,
   incluindo escrita atômica e temp files.
-- App: gateways e formatação pura em unitários; `make e2e-app` sobe daemon +
-  GNOME Shell headless, abre a janela real com `--smoke-test`, percorre todas
-  as views e encerra com código de saída.
+- App: `make e2e-app` sobe daemon + GNOME Shell headless, abre a janela real
+  com `--smoke-test`, percorre todas as views e roda um soak de snapshots
+  sintéticos com gate de memória.
 - Extensão: gateways e view model puros em unitários; teste manual no GNOME 50
   e `make e2e-extension` headless.
 - Lint: `make lint` roda pre-commit em todos os arquivos, com ESLint (GJS),

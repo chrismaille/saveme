@@ -8,6 +8,9 @@ import GObject from 'gi://GObject';
 import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
 import {DaemonGateway} from './gateway/daemon-gateway.js';
+import {AppLog} from './observability/app-log.js';
+import {AppMonitor} from './observability/app-monitor.js';
+import {buildSoakSnapshot} from './observability/soak.js';
 import {SaveMeWindow} from './window.js';
 
 const APP_ID = 'io.github.chrismaille.SaveMe.Settings';
@@ -23,9 +26,13 @@ const SaveMeApplication = GObject.registerClass({
         });
         this._window = null;
         this._client = null;
+        this._appLog = null;
+        this._monitor = null;
         this._pendingView = null;
         this._pendingJob = null;
         this._smokeTest = false;
+        this._soakTest = false;
+        this._soakIterations = 0;
         this._smokeStarted = false;
         this._smokeChecks = 0;
         this._smokeResult = 1;
@@ -37,6 +44,11 @@ const SaveMeApplication = GObject.registerClass({
             return 0;
         });
         this.connect('shutdown', () => {
+            this._monitor?.stop();
+            this._monitor = null;
+            this._appLog?.logger.info('App stopped');
+            this._appLog?.close();
+            this._appLog = null;
             this._client?.close();
             this._client = null;
         });
@@ -44,6 +56,10 @@ const SaveMeApplication = GObject.registerClass({
 
     _startup() {
         this._loadCss();
+        this._appLog = new AppLog();
+        this._monitor = new AppMonitor({logger: this._appLog.logger});
+        this._monitor.start();
+        this._appLog.logger.info('App started');
         this._client = new DaemonGateway();
     }
 
@@ -69,12 +85,20 @@ const SaveMeApplication = GObject.registerClass({
                 this._pendingJob = args[++i];
             else if (args[i] === '--smoke-test')
                 this._smokeTest = true;
+            else if (args[i] === '--soak-test') {
+                this._smokeTest = true;
+                this._soakTest = true;
+            } else if (args[i] === '--soak-iterations')
+                this._soakIterations = Math.max(1, Number(args[++i]) || 0);
         }
     }
 
     _activate() {
         if (!this._window) {
-            this._window = new SaveMeWindow(this, this._client);
+            this._window = new SaveMeWindow(this, this._client, {
+                monitor: this._monitor,
+                appLog: this._appLog,
+            });
             this._window.connect('close-request', () => {
                 this._window = null;
                 return false;
@@ -125,13 +149,78 @@ const SaveMeApplication = GObject.registerClass({
             this._failSmoke(`cannot show views: ${e.message}`);
             return;
         }
-        this._smokeResult = 0;
         print(`SaveMe app smoke: OK (jobs=${snapshot.jobs?.length || 0})`);
+        if (!this._soakTest) {
+            this._smokeResult = 0;
+            this.quit();
+            return;
+        }
+        this._runSoak(snapshot).catch(e => this._failSmoke(`soak failed: ${e.message}`));
+    }
+
+    _wait(ms) {
+        return new Promise(resolve => {
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => {
+                resolve();
+                return GLib.SOURCE_REMOVE;
+            });
+        });
+    }
+
+    async _runSoak(snapshot) {
+        const before = this._monitor?.sampleNow('soak-before');
+        const iterations = this._soakIterations ||
+            Math.max(1, Number(GLib.getenv('SAVEME_SOAK_ITERATIONS') || 120));
+        this._appLog?.logger.info('Memory soak starting', {iterations});
+        for (let index = 0; index < iterations; index++) {
+            this._window._applySnapshot(buildSoakSnapshot(snapshot, index));
+            if (index % 20 === 0)
+                await this._wait(0);
+        }
+        await this._wait(250);
+        system.gc?.();
+        await this._wait(250);
+        const after = this._monitor?.sampleNow('soak-after');
+        if (!before || !after) {
+            this._failSmoke('performance metrics unavailable during soak');
+            return;
+        }
+        const delta = after.rssBytes - before.rssBytes;
+        const limitMb = Math.max(1,
+            Number(GLib.getenv('SAVEME_SOAK_MAX_RSS_DELTA_MB') || 64));
+        const limit = limitMb * 1024 * 1024;
+        const absoluteLimitMb = Math.max(1,
+            Number(GLib.getenv('SAVEME_SOAK_MAX_RSS_MB') || 512));
+        const absoluteLimit = absoluteLimitMb * 1024 * 1024;
+        this._appLog?.logger.info('Memory soak finished', {
+            iterations,
+            rssDeltaMiB: Number((delta / (1024 * 1024)).toFixed(1)),
+            rssMiB: Number((after.rssBytes / (1024 * 1024)).toFixed(1)),
+            limitMiB: limitMb,
+            absoluteLimitMiB: absoluteLimitMb,
+        });
+        if (after.rssBytes > absoluteLimit) {
+            this._failSmoke(
+                `memory reached ${(after.rssBytes / (1024 * 1024)).toFixed(1)} MiB ` +
+                `(absolute limit ${absoluteLimitMb} MiB)`);
+            return;
+        }
+        if (delta > limit) {
+            this._failSmoke(
+                `memory grew ${(delta / (1024 * 1024)).toFixed(1)} MiB ` +
+                `(limit ${limitMb} MiB)`);
+            return;
+        }
+        print(`SaveMe app soak: OK (rssDelta=${(delta / (1024 * 1024)).toFixed(1)} MiB, ` +
+            `rss=${(after.rssBytes / (1024 * 1024)).toFixed(1)} MiB, ` +
+            `limit=${limitMb} MiB)`);
+        this._smokeResult = 0;
         this.quit();
     }
 
     _failSmoke(message) {
         this._smokeResult = 1;
+        this._appLog?.logger.error(`App smoke failed: ${message}`);
         printerr(`SaveMe app smoke: ${message}`);
         this.quit();
     }

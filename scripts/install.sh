@@ -30,6 +30,7 @@ LOG_OVERRIDE=""
 LOG_FILE=""
 DAEMON_MASKED=0
 EXITING=0
+REMOVE_LOG_ON_EXIT=0
 
 usage() {
     cat <<EOF
@@ -154,6 +155,9 @@ on_exit() {
     EXITING=1
     printf 'exit status: %s\n' "$status" >> "$LOG_FILE" 2>/dev/null || true
     cleanup
+    if [ "$REMOVE_LOG_ON_EXIT" -eq 1 ]; then
+        rm -f "$LOG_FILE" 2>/dev/null || true
+    fi
     exit "$status"
 }
 
@@ -180,6 +184,10 @@ fi
 } >> "$LOG_FILE" 2>/dev/null || true
 
 say "Installation log: $LOG_FILE"
+
+CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
 
 if [ "$(id -u)" -eq 0 ]; then
     say "Run this script as your desktop user, not with sudo."
@@ -333,6 +341,16 @@ stop_daemon() {
     fi
 }
 
+stop_app() {
+    if command -v pkill >/dev/null 2>&1; then
+        if [ "$DRY_RUN" -eq 1 ]; then
+            say "+ pkill -TERM -f '/usr/lib/saveme/app/main.js'"
+        else
+            pkill -TERM -f '/usr/lib/saveme/app/main.js' >/dev/null 2>&1 || true
+        fi
+    fi
+}
+
 start_daemon() {
     if command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1; then
         run systemctl --user daemon-reload || true
@@ -422,6 +440,18 @@ do_install() {
     fi
 }
 
+remove_path() {
+    path="$1"
+    if [ ! -e "$path" ] && [ ! -L "$path" ]; then
+        return 0
+    fi
+    if [ "$DRY_RUN" -eq 1 ]; then
+        say "+ rm -rf $path"
+    else
+        rm -rf "$path"
+    fi
+}
+
 do_uninstall() {
     if [ "$YES" -ne 1 ] && [ "$DRY_RUN" -ne 1 ]; then
         if [ -r /dev/tty ]; then
@@ -439,6 +469,7 @@ do_uninstall() {
 
     say "Uninstalling SaveMe..."
     stop_daemon
+    stop_app
     mask_daemon
     if command -v systemctl >/dev/null 2>&1; then
         if [ "$DRY_RUN" -eq 1 ]; then
@@ -455,31 +486,27 @@ do_uninstall() {
         fi
     fi
     ext_dir="$HOME/.local/share/gnome-shell/extensions/$UUID"
-    if [ -d "$ext_dir" ]; then
-        if [ "$DRY_RUN" -eq 1 ]; then
-            say "+ rm -rf $ext_dir"
-        else
-            rm -rf "$ext_dir"
-        fi
-    fi
+    remove_path "$ext_dir"
 
     if [ "$PURGE" -eq 1 ]; then
-        for path in "$HOME/.config/saveme" "$HOME/.local/state/saveme" \
-            "$HOME/.cache/saveme"; do
-            if [ -e "$path" ]; then
-                if [ "$DRY_RUN" -eq 1 ]; then
-                    say "+ rm -rf $path"
-                else
-                    rm -rf "$path"
-                fi
-            fi
-        done
-        if [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -e "$XDG_RUNTIME_DIR/saveme" ]; then
-            if [ "$DRY_RUN" -eq 1 ]; then
-                say "+ rm -rf $XDG_RUNTIME_DIR/saveme"
-            else
-                rm -rf "$XDG_RUNTIME_DIR/saveme"
-            fi
+        remove_path "$CONFIG_HOME/saveme"
+        remove_path "$STATE_HOME/saveme"
+        remove_path "$CACHE_HOME/saveme"
+        if [ -n "${XDG_RUNTIME_DIR:-}" ]; then
+            remove_path "$XDG_RUNTIME_DIR/saveme"
+        fi
+        if [ -z "$LOG_OVERRIDE" ]; then
+            REMOVE_LOG_ON_EXIT=1
+        fi
+    else
+        # Keep jobs/state and configuration, but do not leave logs, caches,
+        # filters or temporary files behind.
+        remove_path "$STATE_HOME/saveme/logs"
+        remove_path "$STATE_HOME/saveme/tmp"
+        remove_path "$STATE_HOME/saveme/filters"
+        remove_path "$CACHE_HOME/saveme"
+        if [ -n "${XDG_RUNTIME_DIR:-}" ]; then
+            remove_path "$XDG_RUNTIME_DIR/saveme"
         fi
     fi
 
@@ -494,10 +521,11 @@ do_uninstall() {
     if [ "$PURGE" -eq 1 ]; then
         say "SaveMe removed, including user configuration, tokens, logs and history."
     else
-        say "SaveMe removed. User data was kept:"
-        say "  $HOME/.config/saveme"
-        say "  $HOME/.local/state/saveme"
-        say "Use --purge to remove it."
+        say "SaveMe removed. Logs, caches, filters and temporary files were cleaned."
+        say "User configuration and job state were kept:"
+        say "  $CONFIG_HOME/saveme"
+        say "  $STATE_HOME/saveme"
+        say "Use --purge to remove them."
     fi
     say "Uninstall log: $LOG_FILE"
 }

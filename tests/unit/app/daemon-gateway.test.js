@@ -33,6 +33,11 @@ function fakeClient() {
         'cancelRemoteAuth',
         'deleteRemote',
         'doctor',
+        'getLogsInfo',
+        'pruneLogs',
+        'clearLogs',
+        'sanitizeLogs',
+        'updateSettings',
     ];
     const client = {calls};
     for (const name of names)
@@ -108,5 +113,17 @@ export default suite('app/gateway/daemon-gateway', [
             JSON.stringify(['drive', 'me', {}]));
         assertEqual(JSON.stringify(byName(client, 'beginRemoteAuth')[1][1]),
             JSON.stringify(['drive', 'me', {scope: 'x'}]));
+    }),
+    test('log management and settings delegate', async () => {
+        const client = fakeClient();
+        const gateway = new DaemonGateway({client});
+        assertEqual(await gateway.getLogsInfo(), 'getLogsInfo-result');
+        assertEqual(await gateway.pruneLogs(), 'pruneLogs-result');
+        assertEqual(await gateway.clearLogs('daemon'), 'clearLogs-result');
+        assertEqual(await gateway.sanitizeLogs(), 'sanitizeLogs-result');
+        assertEqual(await gateway.updateSettings({logRetentionDays: 7}),
+            'updateSettings-result');
+        assertEqual(byName(client, 'clearLogs')[0][1][0], 'daemon');
+        assertEqual(byName(client, 'updateSettings')[0][1][0].logRetentionDays, 7);
     }),
 ]);

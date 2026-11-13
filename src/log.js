@@ -1,6 +1,7 @@
-import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
-import {ensureDir, nowIso} from './util.js';
+import {sanitizeLogText} from './domain/log-policy.js';
+import {nowIso} from './util.js';
+import {RotatingFile} from './adapters/system/rotating-file.js';
 
 const LEVELS = {
     debug: 10,
@@ -10,33 +11,30 @@ const LEVELS = {
 };
 
 export class Logger {
-    constructor({name = 'saveme', filePath = null, level = 'info', echo = true} = {}) {
+    constructor({
+        name = 'saveme',
+        filePath = null,
+        level = 'info',
+        echo = true,
+        maxBytes = 4 * 1024 * 1024,
+        maxFiles = 1,
+    } = {}) {
         this.name = name;
         this.filePath = filePath;
         this.level = level;
         this.echo = echo;
-        this._stream = null;
-        this._data = null;
+        this.maxBytes = maxBytes;
+        this.maxFiles = maxFiles;
+        this._file = new RotatingFile({
+            path: filePath,
+            maxBytes,
+            maxFiles,
+        });
     }
 
     setFilePath(path) {
-        this.close();
         this.filePath = path;
-    }
-
-    _openFile() {
-        if (this._stream || !this.filePath)
-            return;
-        ensureDir(GLib.path_get_dirname(this.filePath), 0o700);
-        const file = Gio.File.new_for_path(this.filePath);
-        this._stream = file.append_to(Gio.FileCreateFlags.NONE, null);
-        this._data = Gio.DataOutputStream.new(this._stream);
-        try {
-            file.set_attribute_uint32('unix::mode', 0o600,
-                Gio.FileQueryInfoFlags.NONE, null);
-        } catch (_) {
-            // Best effort.
-        }
+        this._file.setPath(path);
     }
 
     _write(level, message, fields = null) {
@@ -45,13 +43,12 @@ export class Logger {
         let line = `${nowIso()} ${level.toUpperCase()} [${this.name}] ${message}`;
         if (fields && Object.keys(fields).length > 0)
             line += ` ${JSON.stringify(fields)}`;
+        line = sanitizeLogText(line);
         if (this.echo)
             printerr(line);
         if (this.filePath) {
             try {
-                this._openFile();
-                this._data.put_string(`${line}\n`, null);
-                this._data.flush(null);
+                this._file.write(`${line}\n`);
             } catch (e) {
                 printerr(`saveme logger error: ${e.message}`);
             }
@@ -80,19 +77,17 @@ export class Logger {
             filePath: filePath ?? this.filePath,
             level: this.level,
             echo: this.echo,
+            maxBytes: this.maxBytes,
+            maxFiles: this.maxFiles,
         });
     }
 
+    clear({removeBackups = true} = {}) {
+        this._file.clear({removeBackups});
+    }
+
     close() {
-        try {
-            this._data?.flush(null);
-            this._data?.close(null);
-            this._stream?.close(null);
-        } catch (_) {
-            // Ignore close errors.
-        }
-        this._data = null;
-        this._stream = null;
+        this._file.close();
     }
 }
 
@@ -102,5 +97,6 @@ export function readTextTail(path, maxLines = 400) {
         return '';
     const [, bytes] = file.load_contents(null);
     const lines = new TextDecoder().decode(bytes).split('\n');
-    return lines.slice(Math.max(0, lines.length - maxLines)).join('\n');
+    return sanitizeLogText(
+        lines.slice(Math.max(0, lines.length - maxLines)).join('\n'));
 }

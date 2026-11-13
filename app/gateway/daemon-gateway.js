@@ -100,4 +100,24 @@ export class DaemonGateway {
     doctor() {
         return this.client.doctor();
     }
+
+    getLogsInfo() {
+        return this.client.getLogsInfo();
+    }
+
+    pruneLogs() {
+        return this.client.pruneLogs();
+    }
+
+    clearLogs(scope) {
+        return this.client.clearLogs(scope);
+    }
+
+    sanitizeLogs() {
+        return this.client.sanitizeLogs();
+    }
+
+    updateSettings(patch) {
+        return this.client.updateSettings(patch);
+    }
 }

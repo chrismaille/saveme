@@ -119,6 +119,7 @@ RULE_DESCRIPTIONS = {
     "domain-no-adapter-import": "domain/application cannot import adapters or composition",
     "extension-no-src-import": "the GNOME extension must talk to the daemon over D-Bus",
     "app-no-runtime-import": "the GTK app must use its daemon gateway, not daemon internals",
+    "app-no-extension-import": "the GTK app must be independent from the extension",
     "tests-not-imported": "production code cannot import test modules",
     "extension-metadata": "extension/metadata.json has the required GNOME Shell fields",
     "focused-tests": "test files must not contain focused (.only) tests",
@@ -269,6 +270,19 @@ def check_import_rules(relative_path: str, text: str) -> list[Violation]:
                     relative_path,
                     line,
                     f"the extension must use D-Bus, not import {resolved}.",
+                    resolved,
+                )
+            )
+
+        if relative_path.startswith(APP_PREFIX) and resolved and resolved.startswith(
+            EXTENSION_PREFIX
+        ):
+            violations.append(
+                Violation(
+                    "app-no-extension-import",
+                    relative_path,
+                    line,
+                    f"the app must be independent from the extension, not import {resolved}.",
                     resolved,
                 )
             )

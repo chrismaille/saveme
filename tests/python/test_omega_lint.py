@@ -95,6 +95,13 @@ class OmegaLintRulesTest(unittest.TestCase):
         self.write("app/window.js", "import {Runner} from '../src/runner.js';\n")
         self.assertEqual(self.rules(), ["app-no-runtime-import"])
 
+    def test_app_cannot_import_extension(self) -> None:
+        self.write(
+            "app/window.js",
+            "import {statusLabel} from '../extension/presentation.js';\n",
+        )
+        self.assertEqual(self.rules(), ["app-no-extension-import"])
+
     def test_production_cannot_import_tests(self) -> None:
         self.write("src/helper.js", "import {x} from '../tests/helpers.js';\n")
         self.assertEqual(self.rules(), ["tests-not-imported"])

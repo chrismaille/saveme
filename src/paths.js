@@ -40,6 +40,14 @@ export function logsDir(jobId = null) {
     return jobId ? GLib.build_filenamev([base, jobId]) : base;
 }
 
+export function daemonLogFile() {
+    return GLib.build_filenamev([stateDir(), 'daemon.log']);
+}
+
+export function appLogFile() {
+    return GLib.build_filenamev([logsDir(), 'app.log']);
+}
+
 export function filtersDir() {
     return GLib.build_filenamev([stateDir(), 'filters']);
 }

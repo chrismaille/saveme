@@ -48,6 +48,7 @@ export class DaemonService {
         transfer,
         volumes,
         logger,
+        logs = null,
         startedAt,
         idFactory,
         getPid,
@@ -65,6 +66,7 @@ export class DaemonService {
         this.transfer = transfer;
         this.volumes = volumes;
         this.logger = logger;
+        this.logs = logs;
         this.startedAt = startedAt;
         this.idFactory = idFactory;
         this.getPid = getPid;
@@ -285,6 +287,39 @@ export class DaemonService {
         this._snapshot(true);
     }
 
+    logsInfoJson() {
+        if (!this.logs)
+            throw new Error('Log management is not available.');
+        return JSON.stringify(this.logs.info());
+    }
+
+    pruneLogsJson() {
+        if (!this.logs)
+            throw new Error('Log management is not available.');
+        return JSON.stringify(this.logs.prune());
+    }
+
+    clearLogsJson(scope) {
+        if (!this.logs)
+            throw new Error('Log management is not available.');
+        return JSON.stringify(this.logs.clear(scope));
+    }
+
+    sanitizeLogsJson() {
+        if (!this.logs)
+            throw new Error('Log management is not available.');
+        return JSON.stringify(this.logs.sanitize());
+    }
+
+    updateSettingsJson(payloadJson) {
+        const payload = JSON.parse(payloadJson);
+        if (!payload || typeof payload !== 'object' || Array.isArray(payload))
+            throw new Error('Invalid settings payload.');
+        const settings = this.config.updateSettings(payload);
+        this.logs?.prune();
+        return JSON.stringify(settings);
+    }
+
     doctorJson() {
         let rcloneInfo;
         try {
@@ -309,6 +344,7 @@ export class DaemonService {
             jobs: this.config.listJobs().length,
             remotes: this.config.listRemoteNames(),
             pausedAll: this.state.pausedAll,
+            logs: this.logs?.info() || null,
         });
     }
 }

@@ -24,7 +24,9 @@ export class LogsPage {
         this.jobIds = [];
         this.pendingJobId = null;
         this.structureKey = null;
+        this.runsKey = null;
         this.loadToken = 0;
+        this.storageLoaded = false;
 
         this.summaryGroup = new Adw.PreferencesGroup({title: 'Status'});
         this.statusRow = new Adw.ActionRow({title: 'Job', subtitle: 'No job selected'});
@@ -75,6 +77,114 @@ export class LogsPage {
         this.summaryGroup.add(this.activeRow);
         this.widget.add(this.summaryGroup);
 
+        const storageGroup = new Adw.PreferencesGroup({
+            title: 'Log storage',
+            description: 'Daemon and run logs are sanitized before display.',
+        });
+        this.storageUsageRow = new Adw.ActionRow({
+            title: 'Daemon and run logs',
+            subtitle: 'Loading…',
+        });
+        const refreshLogs = new Gtk.Button({
+            icon_name: 'view-refresh-symbolic',
+            tooltip_text: 'Refresh log storage',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat'],
+        });
+        refreshLogs.connect('clicked', () => this._refreshStorage());
+        this.storageUsageRow.add_suffix(refreshLogs);
+        this.storagePolicyRow = new Adw.ActionRow({
+            title: 'Retention',
+            subtitle: 'Loading…',
+        });
+        const cleanup = new Gtk.Button({
+            label: 'Clean up',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat'],
+        });
+        cleanup.connect('clicked', () => this._pruneLogs());
+        this.storagePolicyRow.add_suffix(cleanup);
+        this.clearRunsRow = new Adw.ActionRow({
+            title: 'Run logs',
+            subtitle: 'Delete job run logs and rclone traces.',
+        });
+        const clearRuns = new Gtk.Button({
+            label: 'Clear',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat', 'destructive-action'],
+        });
+        clearRuns.connect('clicked', () => {
+            this.window.confirm('Clear run logs?',
+                'Delete all job run logs and rclone traces?',
+                true, () => this._clearLogs('run-logs'));
+        });
+        this.clearRunsRow.add_suffix(clearRuns);
+        this.clearDaemonRow = new Adw.ActionRow({
+            title: 'Daemon log',
+            subtitle: 'Delete the live daemon log.',
+        });
+        const clearDaemon = new Gtk.Button({
+            label: 'Clear',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat', 'destructive-action'],
+        });
+        clearDaemon.connect('clicked', () => {
+            this.window.confirm('Clear daemon log?',
+                'Delete the daemon log? Diagnostics from the current session will be lost.',
+                true, () => this._clearLogs('daemon'));
+        });
+        this.clearDaemonRow.add_suffix(clearDaemon);
+        this.sanitizeRow = new Adw.ActionRow({
+            title: 'Sanitize existing logs',
+            subtitle: 'Redact credentials that may already be on disk.',
+        });
+        const sanitize = new Gtk.Button({
+            label: 'Sanitize',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat'],
+        });
+        sanitize.connect('clicked', () => this._sanitizeLogs());
+        this.sanitizeRow.add_suffix(sanitize);
+        storageGroup.add(this.storageUsageRow);
+        storageGroup.add(this.storagePolicyRow);
+        storageGroup.add(this.clearRunsRow);
+        storageGroup.add(this.clearDaemonRow);
+        storageGroup.add(this.sanitizeRow);
+        this.widget.add(storageGroup);
+
+        const appLogGroup = new Adw.PreferencesGroup({
+            title: 'Application log',
+            description: 'Memory/CPU samples and app errors.',
+        });
+        this.appLogRow = new Adw.ActionRow({
+            title: 'Application log',
+            subtitle: 'Loading…',
+        });
+        const viewAppLog = new Gtk.Button({
+            label: 'View',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat'],
+        });
+        viewAppLog.connect('clicked', () => this.window.openAppLog());
+        const clearAppLog = new Gtk.Button({
+            label: 'Clear',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat', 'destructive-action'],
+        });
+        clearAppLog.connect('clicked', () => {
+            this.window.confirm('Clear application log?',
+                'Delete the app log and its rotated backup?',
+                true, () => {
+                    this.window.appLog?.clear();
+                    this.window.toast('Application log cleared.');
+                    this._refreshStorage();
+                });
+        });
+        this.appLogRow.add_suffix(viewAppLog);
+        this.appLogRow.add_suffix(clearAppLog);
+        appLogGroup.add(this.appLogRow);
+        this.widget.add(appLogGroup);
+
         const filterGroup = new Adw.PreferencesGroup({title: 'Select job'});
         this.jobRow = new Adw.ComboRow({
             title: 'Job',
@@ -92,6 +202,81 @@ export class LogsPage {
         this._updateSummary();
     }
 
+    onShown() {
+        this._refreshStorage();
+        this._loadRuns();
+    }
+
+    async _refreshStorage() {
+        try {
+            const [info, appInfo] = await Promise.all([
+                this.window.client.getLogsInfo(),
+                Promise.resolve(this.window.appLog?.info() || {
+                    files: 0,
+                    totalBytes: 0,
+                }),
+            ]);
+            this._renderStorage(info, appInfo);
+        } catch (e) {
+            this.storageUsageRow.set_subtitle(`Cannot read logs: ${e.message}`);
+        }
+    }
+
+    _renderStorage(info, appInfo) {
+        const oldest = info.oldest ? ` · oldest ${formatWhen(info.oldest)}` : '';
+        this.storageUsageRow.set_subtitle(
+            `${info.files || 0} files · ${formatBytes(info.totalBytes || 0)}${oldest}`);
+        const policy = info.policy || {};
+        this.storagePolicyRow.set_subtitle(
+            `${policy.retentionDays ?? 30} days · max ` +
+            `${formatBytes(policy.maxTotalBytes || 0)}`);
+        this.appLogRow.set_subtitle(
+            `${appInfo.files || 0} files · ${formatBytes(appInfo.totalBytes || 0)}` +
+            (this.window.appLog?.path ? ` · ${this.window.appLog.path}` : ''));
+    }
+
+    async _pruneLogs() {
+        try {
+            const result = await this.window.client.pruneLogs();
+            this.window.toast(
+                `Removed ${result.deleted || 0} log files · ` +
+                `${formatBytes(result.bytesFreed || 0)} freed.`);
+            await this._refreshStorage();
+        } catch (e) {
+            this.window.toast(e.message);
+        }
+    }
+
+    async _clearLogs(scope) {
+        try {
+            const result = await this.window.client.clearLogs(scope);
+            this.window.toast(
+                `Cleared ${result.deleted || 0} log files · ` +
+                `${formatBytes(result.bytesFreed || 0)} freed.`);
+            await this._refreshStorage();
+        } catch (e) {
+            this.window.toast(e.message);
+        }
+    }
+
+    async _sanitizeLogs() {
+        try {
+            const [daemon, app] = await Promise.all([
+                this.window.client.sanitizeLogs(),
+                Promise.resolve(this.window.appLog?.sanitize() || {
+                    files: 0,
+                    changed: 0,
+                }),
+            ]);
+            this.window.toast(
+                `Sanitized ${(daemon.files || 0) + (app.files || 0)} files · ` +
+                `${(daemon.changed || 0) + (app.changed || 0)} changed.`);
+            await this._refreshStorage();
+        } catch (e) {
+            this.window.toast(e.message);
+        }
+    }
+
     _selectedJob() {
         const id = this.jobIds[this.jobRow.selected];
         return this.jobs.find(job => job.id === id) || null;
@@ -99,24 +284,32 @@ export class LogsPage {
 
     update(snapshot) {
         const jobs = snapshot.jobs || [];
-        const key = jobs.map(job =>
-            `${job.id}:${job.name}:${job.state?.lastRunId || ''}:` +
-            `${job.state?.lastRunAt || ''}`)
+        const listKey = jobs.map(job => `${job.id}:${job.name}`).join('|');
+        const runsKey = jobs.map(job =>
+            `${job.id}:${job.state?.lastRunId || ''}:${job.state?.lastRunAt || ''}`)
             .join('|');
         this.jobs = jobs;
         this.jobIds = jobs.map(job => job.id);
         this._updateSummary();
-        if (key === this.structureKey)
-            return;
-        this.structureKey = key;
-        const previous = this.pendingJobId || this.jobIds[this.jobRow.selected];
-        const labels = jobs.map(job => job.name || job.id);
-        this.jobRow.model = Gtk.StringList.new(labels.length ? labels : ['No jobs']);
-        let index = previous ? this.jobIds.indexOf(previous) : 0;
-        if (index < 0)
-            index = 0;
-        this.jobRow.selected = index;
-        this._loadRuns();
+        if (!this.storageLoaded) {
+            this.storageLoaded = true;
+            this._refreshStorage();
+        }
+        const listChanged = listKey !== this.structureKey;
+        if (listChanged) {
+            this.structureKey = listKey;
+            const previous = this.pendingJobId || this.jobIds[this.jobRow.selected];
+            const labels = jobs.map(job => job.name || job.id);
+            this.jobRow.model = Gtk.StringList.new(labels.length ? labels : ['No jobs']);
+            let index = previous ? this.jobIds.indexOf(previous) : 0;
+            if (index < 0)
+                index = 0;
+            this.jobRow.selected = index;
+        }
+        if (listChanged || runsKey !== this.runsKey) {
+            this.runsKey = runsKey;
+            this._loadRuns();
+        }
     }
 
     _updateSummary() {

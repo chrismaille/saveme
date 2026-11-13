@@ -12,7 +12,9 @@ import {
 } from './adapters/rclone/transfer-engine.js';
 import {DaemonApi} from './adapters/dbus/api.js';
 import {SystemClock} from './adapters/system/clock.js';
+import {LogStore} from './adapters/system/log-store.js';
 import {DaemonService} from './application/daemon-service.js';
+import {LogService} from './application/log-service.js';
 import {createJobRunner, createRestoreService} from './composition/runner.js';
 import {JobManager} from './supervisor.js';
 import {RemoteAuthManager} from './auth.js';
@@ -22,6 +24,7 @@ import {
     DAEMON_APP_ID,
     DAEMON_OBJECT_PATH,
     configDir,
+    daemonLogFile,
     rcloneConfigFile,
     stateDir,
 } from './paths.js';
@@ -57,6 +60,9 @@ export const SaveMeDaemonApplication = GObject.registerClass({
         this._restore = null;
         this._manager = null;
         this._service = null;
+        this._logStore = null;
+        this._logService = null;
+        this._logPruneTimer = null;
         this._auth = null;
         this._dbus = null;
         this._api = null;
@@ -74,7 +80,7 @@ export const SaveMeDaemonApplication = GObject.registerClass({
         ensureDir(stateDir(), 0o700);
         this._logger = new Logger({
             name: 'daemon',
-            filePath: GLib.build_filenamev([stateDir(), 'daemon.log']),
+            filePath: daemonLogFile(),
             level: 'info',
             echo: true,
         });
@@ -88,6 +94,16 @@ export const SaveMeDaemonApplication = GObject.registerClass({
         this._state = new StateStore({logger: this._logger});
         this._state.load();
         this._state.resetRunningJobs();
+
+        this._logStore = new LogStore();
+        this._logService = new LogService({
+            store: this._logStore,
+            getSettings: () => this._config.settings,
+            logger: this._logger,
+            clock: new SystemClock(),
+            onClearDaemon: () => this._logger.clear(),
+            onCloseDaemonLog: () => this._logger.close(),
+        });
 
         this._volumes = new VolumeResolver();
         this._rclone = new Rclone({
@@ -135,6 +151,7 @@ export const SaveMeDaemonApplication = GObject.registerClass({
             transfer: this._rclone,
             volumes: this._volumes,
             logger: this._logger,
+            logs: this._logService,
             startedAt: this._startedAt,
             idFactory: prefix => uniqueId(prefix),
             getPid,
@@ -167,6 +184,20 @@ export const SaveMeDaemonApplication = GObject.registerClass({
             this._emitSnapshot();
             return GLib.SOURCE_CONTINUE;
         });
+        this._logPruneTimer = GLib.timeout_add_seconds(
+            GLib.PRIORITY_DEFAULT, 6 * 3600, () => {
+                try {
+                    this._logService?.prune();
+                } catch (e) {
+                    this._logger?.warn(`Log cleanup failed: ${e.message}`);
+                }
+                return GLib.SOURCE_CONTINUE;
+            });
+        try {
+            this._logService?.prune();
+        } catch (e) {
+            this._logger?.warn(`Initial log cleanup failed: ${e.message}`);
+        }
         this._manager.start();
         this._emitSnapshot(true);
         this.hold();
@@ -180,6 +211,10 @@ export const SaveMeDaemonApplication = GObject.registerClass({
         if (this._snapshotTimer) {
             GLib.source_remove(this._snapshotTimer);
             this._snapshotTimer = null;
+        }
+        if (this._logPruneTimer) {
+            GLib.source_remove(this._logPruneTimer);
+            this._logPruneTimer = null;
         }
         this._manager?.stopAll();
         this._auth?.stop();

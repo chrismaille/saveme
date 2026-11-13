@@ -2,8 +2,9 @@ import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
 import {LogDialog} from '../log-dialog.js';
-import {formatWhen} from '../presentation/format.js';
+import {formatBytes, formatWhen} from '../presentation/format.js';
 import {readTail} from '../widgets/common.js';
+import {sanitizeLogText} from '../../src/domain/log-policy.js';
 
 export class DebugPage {
     constructor(window) {
@@ -40,6 +41,27 @@ export class DebugPage {
         systemGroup.add(this.stateRow);
         systemGroup.add(this.volumesRow);
         this.widget.add(systemGroup);
+
+        const performanceGroup = new Adw.PreferencesGroup({title: 'Performance'});
+        this.memoryRow = new Adw.ActionRow({title: 'Memory', subtitle: 'Waiting for sample'});
+        this.cpuRow = new Adw.ActionRow({title: 'CPU', subtitle: 'Waiting for sample'});
+        this.perfStatusRow = new Adw.ActionRow({title: 'Budget', subtitle: 'Waiting for sample'});
+        this.appLogRow = new Adw.ActionRow({
+            title: 'Application log',
+            subtitle: 'Memory/CPU samples and app errors.',
+        });
+        const appLogButton = new Gtk.Button({
+            label: 'View',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat'],
+        });
+        appLogButton.connect('clicked', () => this.window.openAppLog());
+        this.appLogRow.add_suffix(appLogButton);
+        performanceGroup.add(this.memoryRow);
+        performanceGroup.add(this.cpuRow);
+        performanceGroup.add(this.perfStatusRow);
+        performanceGroup.add(this.appLogRow);
+        this.widget.add(performanceGroup);
 
         const logGroup = new Adw.PreferencesGroup({title: 'Daemon log'});
         this.logView = new Gtk.TextView({
@@ -115,6 +137,21 @@ export class DebugPage {
         this.refreshLog(false);
     }
 
+    updatePerformance(metrics) {
+        if (!metrics) {
+            this.memoryRow.set_subtitle('Waiting for sample');
+            this.cpuRow.set_subtitle('Waiting for sample');
+            this.perfStatusRow.set_subtitle('Waiting for sample');
+            return;
+        }
+        this.memoryRow.set_subtitle(
+            `${formatBytes(metrics.rssBytes)} · peak ${formatBytes(metrics.peakRssBytes)}`);
+        this.cpuRow.set_subtitle(`${metrics.cpuPercent.toFixed(1)}%`);
+        this.perfStatusRow.set_subtitle(metrics.budgetExceeded
+            ? 'Budget exceeded — check the application log'
+            : `Within budget · ${metrics.samples} samples`);
+    }
+
     _openPath(path) {
         try {
             this.window.launcher.openPath(path);
@@ -143,6 +180,7 @@ export class DebugPage {
         const parts = [
             `SaveMe ${this.snapshot?.version || '?'}`,
             `Snapshot:\n${JSON.stringify(this.snapshot || {}, null, 2)}`,
+            `Performance:\n${JSON.stringify(this.window.monitor?.snapshot() || {}, null, 2)}`,
         ];
         try {
             parts.push(`Doctor:\n${JSON.stringify(await this.window.client.doctor(), null, 2)}`);
@@ -150,8 +188,9 @@ export class DebugPage {
             parts.push(`Doctor error: ${e.message}`);
         }
         parts.push(`Daemon log:\n${readTail(this.logPath, 400) || '(empty)'}`);
+        parts.push(`Application log:\n${this.window.appLog?.readTail(400) || '(empty)'}`);
         try {
-            this.widget.get_clipboard().set(parts.join('\n\n'));
+            this.widget.get_clipboard().set(sanitizeLogText(parts.join('\n\n')));
             this.window.toast('Diagnostics copied.');
         } catch (e) {
             this.window.toast(`Cannot copy diagnostics: ${e.message}`);

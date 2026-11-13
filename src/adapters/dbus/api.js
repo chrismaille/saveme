@@ -84,6 +84,26 @@ export class DaemonApi {
         return this.service.doctorJson();
     }
 
+    GetLogsInfo() {
+        return this.service.logsInfoJson();
+    }
+
+    PruneLogs() {
+        return this.service.pruneLogsJson();
+    }
+
+    ClearLogs(scope) {
+        return this.service.clearLogsJson(scope);
+    }
+
+    SanitizeLogs() {
+        return this.service.sanitizeLogsJson();
+    }
+
+    UpdateSettings(payloadJson) {
+        return this.service.updateSettingsJson(payloadJson);
+    }
+
     Quit() {
         this.quit?.();
     }

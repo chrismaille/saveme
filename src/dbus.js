@@ -86,6 +86,23 @@ export const DAEMON_INTERFACE = `
     <method name="Doctor">
       <arg type="s" direction="out"/>
     </method>
+    <method name="GetLogsInfo">
+      <arg type="s" direction="out"/>
+    </method>
+    <method name="PruneLogs">
+      <arg type="s" direction="out"/>
+    </method>
+    <method name="ClearLogs">
+      <arg type="s" direction="in"/>
+      <arg type="s" direction="out"/>
+    </method>
+    <method name="SanitizeLogs">
+      <arg type="s" direction="out"/>
+    </method>
+    <method name="UpdateSettings">
+      <arg type="s" direction="in"/>
+      <arg type="s" direction="out"/>
+    </method>
     <method name="Quit"/>
     <signal name="SnapshotChanged">
       <arg type="s"/>

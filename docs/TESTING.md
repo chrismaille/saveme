@@ -8,7 +8,7 @@ make test            # unitários GJS + testes Python do Omega
 make coverage        # GJS lcov + resumo de linha/branch/função
 make e2e             # daemon + D-Bus + sync real-time + backup/restore
 make e2e-extension   # GNOME Shell headless + extensão ACTIVE + sync
-make e2e-app         # daemon + Shell headless + janela GTK smoke
+make e2e-app         # daemon + Shell headless + janela GTK + soak de memória
 make tests           # test + e2e + e2e-extension + e2e-app
 make verify          # lint + tests
 ```
@@ -22,8 +22,10 @@ D-Bus real, rclone real e arquivos reais. O E2E da extensão sobe um GNOME Shell
 headless com monitor virtual e verifica que a extensão fica **ACTIVE**, sem
 erros JS, e que o daemon sincroniza um arquivo. O E2E do app usa o mesmo Shell
 headless, cria um job, abre a janela GTK real com `--smoke-test`, aplica um
-snapshot do daemon, percorre as cinco views e encerra com erro se uma view não
-renderizar.
+snapshot do daemon, percorre as cinco views, roda um soak de snapshots
+sintéticos com limite de RSS e valida a API de logs do daemon. O soak pode ser
+ajustado com `SAVEME_APP_SOAK_ITERATIONS`, `SAVEME_SOAK_MAX_RSS_DELTA_MB` e
+`SAVEME_SOAK_MAX_RSS_MB` (padrão 120 iterações/64 MiB de delta/512 MiB absolutos).
 
 O GJS gera lcov nativo:
 
@@ -60,11 +62,11 @@ adapters e no daemon, e cobertura comportamental E2E nas superfícies visuais.
 
 Estado atual (unit + integration + E2E de daemon):
 
-- domínio puro: **99,2% linha / 98,2% branch / 100% funções**;
-- aplicação: **99,1% linha / 86,8% branch / 100% funções**;
-- adapters Gio/persistência/system: **96,6% linha / 100% branch / 100% funções**;
+- domínio puro: **98,7% linha / 95,5% branch / 100% funções**;
+- aplicação: **99,1% linha / 86,7% branch / 100% funções**;
+- adapters Gio/persistência/system: **97,4% linha / 89,2% branch / 100% funções**;
 - adapter D-Bus (`DaemonApi`): **100% linha / 100% branch / 100% funções**;
-- `src/` global: **86,0% linha / 70,9% branch**.
+- `src/` global: **87,5% linha / 72,6% branch**.
 
 Os gates de domínio, aplicação, adapters e D-Bus rodam no `make coverage`.
 O adapter rclone é um wrapper de subprocesso e é validado por integração/E2E,
@@ -83,8 +85,10 @@ O E2E já cobre:
 - pause/resume com bloqueio de mudanças em tempo real;
 - sinal `SnapshotChanged`;
 - kill -9 do daemon e recuperação de jobs/estado;
-- app GTK headless recebendo snapshot real e renderizando todas as views;
-- extensão ACTIVE em GNOME Shell headless com sync real.
+- app GTK headless recebendo snapshot real, renderizando todas as views e
+  passando pelo soak de memória;
+- extensão ACTIVE em GNOME Shell headless com sync real;
+- retenção, limpeza e sanitização de logs via D-Bus.
 
 Próximos cenários:
 
@@ -112,6 +116,11 @@ Cobre:
   full e incremental sync, full e incremental backup, delete guard,
   cancelamento, retries, restore e limpeza de versões;
 - DaemonService/DaemonApi com fakes de config/state/manager/auth/transfer;
+- política de logs pura (sanitização, idade, tamanho e sumarização);
+- LogService com store fake e LogStore real: inventário, prune, clear e
+  sanitize;
+- rotação e sanitização de logs (Logger, raw log e app log);
+- métricas de `/proc`, CPU por intervalo e monitor de memória do app;
 - Scheduler, RetryPolicy e JobStateMachine puros;
 - adapters Gio: filesystem, raw log, relógio, paths e run repository;
 - adapter D-Bus: conversão de booleanos e delegação;
@@ -143,6 +152,19 @@ Use uma instalação limpa do Ubuntu 26.04.
 - [ ] `saveme-settings` abre
 - [ ] Extensão instala pelo EGO ou pelo zip e fica **ACTIVE**
 - [ ] Ícone aparece no painel e o popup abre sem erros
+
+### Logs e memória
+
+- [ ] Abrir Logs: uso total, retenção e tamanho do app log corretos
+- [ ] Clean up remove logs antigos e mostra bytes liberados
+- [ ] Clear run logs e daemon log funcionam após confirmação
+- [ ] Sanitize redige token antigo em log existente
+- [ ] Editar a política em Settings, salvar e ver o novo valor após reabrir
+- [ ] Settings/Debug mostram RSS, pico, CPU e status do orçamento
+- [ ] `app.log` contém amostras periódicas e nenhum segredo
+- [ ] `make e2e-app` passa com o soak abaixo do limite de 64 MiB
+- [ ] Desinstalar sem `--purge` remove logs/caches/temporários e preserva jobs
+- [ ] Desinstalar com `--purge` remove config, estado, cache e log do instalador
 
 ### Contas
 

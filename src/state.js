@@ -174,10 +174,15 @@ export class StateStore {
             if (seen.has(run.id))
                 continue;
             seen.add(run.id);
+            const logPaths = [
+                GLib.build_filenamev([logsDir(jobId), `${run.id}.log`]),
+                GLib.build_filenamev([logsDir(jobId), `${run.id}.log.1`]),
+                GLib.build_filenamev([logsDir(jobId), `${run.id}.rclone.jsonl`]),
+                GLib.build_filenamev([logsDir(jobId), `${run.id}.rclone.jsonl.1`]),
+            ];
             for (const path of [
                 GLib.build_filenamev([runsDir(jobId), `${run.id}.json`]),
-                GLib.build_filenamev([logsDir(jobId), `${run.id}.log`]),
-                GLib.build_filenamev([logsDir(jobId), `${run.id}.rclone.jsonl`]),
+                ...logPaths,
             ]) {
                 const file = Gio.File.new_for_path(path);
                 if (file.query_exists(null))

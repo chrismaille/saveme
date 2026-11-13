@@ -25,7 +25,10 @@ import {
     EXTENSION_UUID,
     rcloneConfigFile,
     configDir,
+    logsDir,
+    filtersDir,
     stateDir,
+    tmpDir,
 } from '../src/paths.js';
 import {humanBytes, removeRecursive, sleep} from '../src/util.js';
 
@@ -350,7 +353,7 @@ async function commandUninstall(options) {
         if (purge)
             print('It will also delete configuration, OAuth tokens, logs and history.');
         else
-            print('Configuration and logs will be kept.');
+            print('Logs, caches, filters and temporary files will be removed; jobs and configuration will be kept.');
         print('Re-run with --yes to confirm:');
         print(`  saveme uninstall${purge ? ' --purge' : ''} --yes`);
         return 1;
@@ -359,6 +362,7 @@ async function commandUninstall(options) {
     print('Stopping daemon…');
     await quitDaemon();
     await sleep(300);
+    runCommand(['pkill', '-TERM', '-f', '/usr/lib/saveme/app/main.js']);
 
     print('Disabling systemd user service…');
     runCommand(['systemctl', '--user', 'disable', '--now', 'saveme.service']);
@@ -387,6 +391,10 @@ async function commandUninstall(options) {
                 GLib.getenv('XDG_RUNTIME_DIR') || GLib.get_tmp_dir(),
                 'saveme',
             ]),
+            GLib.build_filenamev([
+                GLib.path_get_dirname(stateDir()),
+                'saveme-install.log',
+            ]),
         ];
         for (const path of paths) {
             if (GLib.file_test(path, GLib.FileTest.EXISTS)) {
@@ -396,10 +404,28 @@ async function commandUninstall(options) {
         }
         print('Configuration, tokens, logs and history removed.');
     } else {
-        print(`User data kept at:`);
+        print('Removing logs, caches, filters and temporary files…');
+        const transient = [
+            logsDir(),
+            tmpDir(),
+            filtersDir(),
+            GLib.build_filenamev([GLib.get_user_cache_dir(), 'saveme']),
+        ];
+        const runtime = GLib.build_filenamev([
+            GLib.getenv('XDG_RUNTIME_DIR') || GLib.get_tmp_dir(),
+            'saveme',
+        ]);
+        transient.push(runtime);
+        for (const path of transient) {
+            if (GLib.file_test(path, GLib.FileTest.EXISTS)) {
+                removeRecursive(path);
+                print(`Removed ${path}`);
+            }
+        }
+        print('Jobs, configuration and state kept at:');
         print(`  ${configDir()}`);
         print(`  ${stateDir()}`);
-        print('Use --purge to remove it.');
+        print('Use --purge to remove them.');
     }
 
     print('');

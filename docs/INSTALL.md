@@ -163,13 +163,15 @@ sudo apt remove saveme
 
 O que cada etapa remove:
 
-- `saveme uninstall --yes`: para o daemon, desabilita `saveme.service` e remove
-  a extensão GNOME. Configuração, tokens e logs são mantidos.
+- `saveme uninstall --yes`: para o daemon, desabilita `saveme.service`, remove
+  a extensão GNOME e apaga logs, caches, filtros e temporários. Configuração e
+  jobs/estado são mantidos.
 - `saveme uninstall --purge --yes`: faz o acima e remove também:
   - `~/.config/saveme/` (configuração e `rclone.conf` com tokens OAuth)
   - `~/.local/state/saveme/` (estado, logs e histórico)
   - `~/.cache/saveme/`
   - `$XDG_RUNTIME_DIR/saveme/`
+  - `~/.local/state/saveme-install.log` (quando aplicável)
 - `sudo apt remove saveme`: remove binários, rclone bundled, systemd, D-Bus,
   autostart, ícones e documentação do sistema.
 
@@ -185,6 +187,11 @@ saveme doctor
 
 Logs:
 
-- Daemon: `~/.local/state/saveme/daemon.log`
+- Daemon: `~/.local/state/saveme/daemon.log` (rotação `.1`)
+- App: `~/.local/state/saveme/logs/app.log` (rotação `.1`/`.2`)
 - Execuções: `~/.local/state/saveme/logs/<job-id>/`
 - Journal: `journalctl --user -b | grep -i saveme`
+
+O app mostra uso, limpa e sanitiza esses logs em **Logs**, e permite ajustar a
+retenção em **Settings → Log policy**. Logs antigos são removidos
+automaticamente a cada 6 horas.

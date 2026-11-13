@@ -25,6 +25,10 @@ class FakeConfig {
     }
     removeJob(id) { this.jobs = this.jobs.filter(job => job.id !== id); }
     removeRemote(name) { this.remotes = this.remotes.filter(remote => remote.name !== name); }
+    updateSettings(patch) {
+        Object.assign(this.settings, patch);
+        return this.settings;
+    }
 }
 
 class FakeState {
@@ -93,6 +97,12 @@ function makeService(overrides = {}) {
         transfer,
         volumes: overrides.volumes || {list: () => [{uuid: 'u'}]},
         logger: overrides.logger || {warn() {}, error() {}},
+        logs: overrides.logs === null ? null : (overrides.logs || {
+            info: () => ({totalBytes: 10, files: 1}),
+            prune: () => ({deleted: 1, bytesFreed: 10}),
+            clear: scope => ({scope, deleted: 2}),
+            sanitize: () => ({files: 1, changed: 1}),
+        }),
         startedAt: '2026-01-01T00:00:00.000Z',
         idFactory: prefix => `${prefix}fixed`,
         getPid: () => 42,
@@ -267,6 +277,26 @@ export default suite('application/daemon-service', [
         failed.transfer.version = new Error('missing');
         const bad = JSON.parse(failed.service.doctorJson());
         assertEqual(bad.rclone.ok, false);
+    }),
+    test('log management and settings delegate', async () => {
+        const ctx = makeService();
+        assertEqual(JSON.parse(ctx.service.logsInfoJson()).totalBytes, 10);
+        assertEqual(JSON.parse(ctx.service.pruneLogsJson()).deleted, 1);
+        assertEqual(JSON.parse(ctx.service.clearLogsJson('daemon')).scope, 'daemon');
+        assertEqual(JSON.parse(ctx.service.sanitizeLogsJson()).changed, 1);
+        const settings = JSON.parse(ctx.service.updateSettingsJson(
+            JSON.stringify({logRetentionDays: 7})));
+        assertEqual(settings.logRetentionDays, 7);
+        await assertThrows(() => ctx.service.updateSettingsJson('[]'), /Invalid settings/);
+        const withoutLogs = makeService({logs: null});
+        await assertThrows(() => withoutLogs.service.logsInfoJson(),
+            /Log management is not available/);
+        await assertThrows(() => withoutLogs.service.pruneLogsJson(),
+            /Log management is not available/);
+        await assertThrows(() => withoutLogs.service.clearLogsJson('daemon'),
+            /Log management is not available/);
+        await assertThrows(() => withoutLogs.service.sanitizeLogsJson(),
+            /Log management is not available/);
     }),
     test('listVersions handles empty, missing and errored roots', () => {
         const ctx = makeService();

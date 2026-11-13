@@ -1,43 +1,31 @@
-import Gio from 'gi://Gio';
-import GLib from 'gi://GLib';
-import {ensureDir} from '../../util.js';
+import {sanitizeLogText} from '../../domain/log-policy.js';
+import {RotatingFile} from '../system/rotating-file.js';
 
 export class GioRawLog {
-    constructor(path) {
+    constructor(path, {maxBytes = 20 * 1024 * 1024, maxFiles = 1} = {}) {
         this.path = path;
-        ensureDir(GLib.path_get_dirname(path), 0o700);
-        const file = Gio.File.new_for_path(path);
-        this._stream = file.append_to(Gio.FileCreateFlags.NONE, null);
-        try {
-            file.set_attribute_uint32('unix::mode', 0o600,
-                Gio.FileQueryInfoFlags.NONE, null);
-        } catch (_) {
-            // Best effort.
-        }
-        this._data = Gio.DataOutputStream.new(this._stream);
+        this._file = new RotatingFile({path, maxBytes, maxFiles});
     }
 
     write(line) {
         try {
-            this._data.put_string(`${line}\n`, null);
+            this._file.write(`${sanitizeLogText(line)}\n`);
         } catch (_) {
             // Ignore log write failures.
         }
     }
 
+    clear() {
+        this._file.clear();
+    }
+
     close() {
-        try {
-            this._data.flush(null);
-            this._data.close(null);
-            this._stream.close(null);
-        } catch (_) {
-            // Ignore.
-        }
+        this._file.close();
     }
 }
 
 export class GioRawLogFactory {
-    create(path) {
-        return new GioRawLog(path);
+    create(path, options = {}) {
+        return new GioRawLog(path, options);
     }
 }

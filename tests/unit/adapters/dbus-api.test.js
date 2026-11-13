@@ -41,6 +41,11 @@ export default suite('adapters/dbus/api', [
         api.CancelRemoteAuth('auth');
         api.DeleteRemote('drive');
         assertEqual(api.Doctor(), 'doctorJson-result');
+        assertEqual(api.GetLogsInfo(), 'logsInfoJson-result');
+        assertEqual(api.PruneLogs(), 'pruneLogsJson-result');
+        assertEqual(api.ClearLogs('daemon'), 'clearLogsJson-result');
+        assertEqual(api.SanitizeLogs(), 'sanitizeLogsJson-result');
+        assertEqual(api.UpdateSettings('{}'), 'updateSettingsJson-result');
         api.Quit();
         assertEqual(quit(), true);
 

@@ -84,6 +84,7 @@ Regras atuais:
 - a extensão não pode importar `src/` nem `app/`;
 - o app não pode importar internals do daemon
   (`src/daemon.js`, `src/runner.js`, `src/supervisor.js`, etc.);
+- o app não pode importar `extension/` (independência da extensão);
 - código de produção não pode importar `tests/`;
 - `Gio.Subprocess` só é permitido atrás de adapters/composição,
   `app/gateway` (`SystemLauncher`), `extension/system-launcher.js`, CLI e

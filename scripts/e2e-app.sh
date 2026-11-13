@@ -79,7 +79,8 @@ done
 sleep 2
 
 WAYLAND_DISPLAY=wayland-0 GDK_BACKEND=wayland \
-    gjs -m "$ROOT_DIR/app/main.js" --smoke-test >"$BASE/app.log" 2>&1 &
+    gjs -m "$ROOT_DIR/app/main.js" --smoke-test --soak-test \
+    --soak-iterations "${SAVEME_APP_SOAK_ITERATIONS:-120}" >"$BASE/app.log" 2>&1 &
 APP_PID=$!
 
 i=0
@@ -114,6 +115,75 @@ fi
 if ! grep -q 'jobs=1' "$BASE/app.log"; then
     echo "App smoke test received an unexpected snapshot" >&2
     cat "$BASE/app.log" >&2
+    exit 1
+fi
+
+if ! grep -q 'SaveMe app soak: OK' "$BASE/app.log"; then
+    echo "App memory soak did not report success" >&2
+    cat "$BASE/app.log" >&2
+    exit 1
+fi
+
+grep 'SaveMe app ' "$BASE/app.log" || true
+
+APP_LOG="$XDG_STATE_HOME/saveme/logs/app.log"
+if [ ! -f "$APP_LOG" ] || ! grep -q 'Performance sample' "$APP_LOG"; then
+    echo "App log does not contain performance samples" >&2
+    tail -n 40 "$APP_LOG" 2>/dev/null >&2 || true
+    exit 1
+fi
+
+LOGS_INFO="$(gdbus call --session \
+    --dest io.github.chrismaille.SaveMe.Daemon \
+    --object-path /io/github/chrismaille/SaveMe/Daemon \
+    --method io.github.chrismaille.SaveMe.Daemon.GetLogsInfo)"
+if ! printf '%s' "$LOGS_INFO" | grep -q 'totalBytes'; then
+    echo "GetLogsInfo did not return a log inventory" >&2
+    printf '%s\n' "$LOGS_INFO" >&2
+    exit 1
+fi
+
+SANITIZED="$(gdbus call --session \
+    --dest io.github.chrismaille.SaveMe.Daemon \
+    --object-path /io/github/chrismaille/SaveMe/Daemon \
+    --method io.github.chrismaille.SaveMe.Daemon.SanitizeLogs)"
+if ! printf '%s' "$SANITIZED" | grep -q 'files'; then
+    echo "SanitizeLogs did not return a result" >&2
+    printf '%s\n' "$SANITIZED" >&2
+    exit 1
+fi
+
+PRUNED="$(gdbus call --session \
+    --dest io.github.chrismaille.SaveMe.Daemon \
+    --object-path /io/github/chrismaille/SaveMe/Daemon \
+    --method io.github.chrismaille.SaveMe.Daemon.PruneLogs)"
+if ! printf '%s' "$PRUNED" | grep -q 'deleted'; then
+    echo "PruneLogs did not return a result" >&2
+    printf '%s\n' "$PRUNED" >&2
+    exit 1
+fi
+
+CLEARED="$(gdbus call --session \
+    --dest io.github.chrismaille.SaveMe.Daemon \
+    --object-path /io/github/chrismaille/SaveMe/Daemon \
+    --method io.github.chrismaille.SaveMe.Daemon.ClearLogs 'run-logs')"
+if ! printf '%s' "$CLEARED" | grep -q 'run-logs'; then
+    echo "ClearLogs did not return a result" >&2
+    printf '%s\n' "$CLEARED" >&2
+    exit 1
+fi
+
+gdbus call --session \
+    --dest io.github.chrismaille.SaveMe.Daemon \
+    --object-path /io/github/chrismaille/SaveMe/Daemon \
+    --method io.github.chrismaille.SaveMe.Daemon.UpdateSettings \
+    '{"logRetentionDays":7,"maxLogTotalBytes":1048576}' >/dev/null
+SETTINGS="$(gdbus call --session \
+    --dest io.github.chrismaille.SaveMe.Daemon \
+    --object-path /io/github/chrismaille/SaveMe/Daemon \
+    --method io.github.chrismaille.SaveMe.Daemon.GetSnapshot)"
+if ! printf '%s' "$SETTINGS" | grep -q '"logRetentionDays":7'; then
+    echo "UpdateSettings did not persist the log policy" >&2
     exit 1
 fi
 

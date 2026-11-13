@@ -1,6 +1,7 @@
 import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk?version=4.0';
 import {statusIconName} from '../presentation/format.js';
+import {sanitizeLogText} from '../../src/domain/log-policy.js';
 
 export function readTail(path, maxLines = 800) {
     try {
@@ -8,7 +9,8 @@ export function readTail(path, maxLines = 800) {
         if (!ok)
             return '';
         const lines = new TextDecoder().decode(bytes).split('\n');
-        return lines.slice(Math.max(0, lines.length - maxLines)).join('\n');
+        return sanitizeLogText(
+            lines.slice(Math.max(0, lines.length - maxLines)).join('\n'));
     } catch (_) {
         return '';
     }

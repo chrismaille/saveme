@@ -190,4 +190,31 @@ export class DaemonClient {
         const reply = await this._call('Doctor', null, 30_000);
         return JSON.parse(reply.deepUnpack()[0]);
     }
+
+    async getLogsInfo() {
+        const reply = await this._call('GetLogsInfo');
+        return JSON.parse(reply.deepUnpack()[0]);
+    }
+
+    async pruneLogs() {
+        const reply = await this._call('PruneLogs', null, 60_000);
+        return JSON.parse(reply.deepUnpack()[0]);
+    }
+
+    async clearLogs(scope) {
+        const reply = await this._call('ClearLogs',
+            new GLib.Variant('(s)', [scope]), 60_000);
+        return JSON.parse(reply.deepUnpack()[0]);
+    }
+
+    async sanitizeLogs() {
+        const reply = await this._call('SanitizeLogs', null, 60_000);
+        return JSON.parse(reply.deepUnpack()[0]);
+    }
+
+    async updateSettings(patch) {
+        const reply = await this._call('UpdateSettings',
+            new GLib.Variant('(s)', [JSON.stringify(patch)]));
+        return JSON.parse(reply.deepUnpack()[0]);
+    }
 }
