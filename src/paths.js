@@ -4,6 +4,7 @@ export const APP_ID = 'io.github.chrismaille.SaveMe';
 export const SETTINGS_APP_ID = 'io.github.chrismaille.SaveMe.Settings';
 export const DAEMON_APP_ID = 'io.github.chrismaille.SaveMe.Daemon';
 export const DAEMON_BUS_NAME = 'io.github.chrismaille.SaveMe.Daemon';
+export const DAEMON_INTERFACE = 'io.github.chrismaille.SaveMe.Daemon';
 export const DAEMON_OBJECT_PATH = '/io/github/chrismaille/SaveMe/Daemon';
 export const EXTENSION_UUID = 'saveme@chrismaille.github.io';
 export const GETTEXT_DOMAIN = 'saveme';

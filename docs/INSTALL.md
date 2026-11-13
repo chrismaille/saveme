@@ -83,6 +83,15 @@ Fluxo recomendado:
 5. Usar **Save & Dry Run** no primeiro job e conferir o resultado em **Logs**.
 6. Quando estiver correto, usar **Run now**.
 
+A aba **Debug** do app mostra o log do daemon, o resultado do Doctor, os
+caminhos de configuração/estado e um botão **Copy diagnostics** para relatar
+problemas. Também é possível abrir direto:
+
+```bash
+saveme-settings --view debug
+```
+
+
 ## CLI
 
 ```bash
@@ -97,16 +106,32 @@ saveme run <job-id>
 
 ## Desinstalar
 
+Ordem recomendada:
+
 ```bash
+# 1. Para o daemon, remove a extensão e, opcionalmente, os dados do usuário
+saveme uninstall --purge --yes
+
+# 2. Remove o pacote do sistema
 sudo apt remove saveme
 ```
 
-Dados do usuário não são removidos automaticamente:
+O que cada etapa remove:
 
-- `~/.config/saveme/`
-- `~/.local/state/saveme/`
+- `saveme uninstall --yes`: para o daemon, desabilita `saveme.service` e remove
+  a extensão GNOME. Configuração, tokens e logs são mantidos.
+- `saveme uninstall --purge --yes`: faz o acima e remove também:
+  - `~/.config/saveme/` (configuração e `rclone.conf` com tokens OAuth)
+  - `~/.local/state/saveme/` (estado, logs e histórico)
+  - `~/.cache/saveme/`
+  - `$XDG_RUNTIME_DIR/saveme/`
+- `sudo apt remove saveme`: remove binários, rclone bundled, systemd, D-Bus,
+  autostart, ícones e documentação do sistema.
 
-Remova manualmente se quiser apagar configuração, tokens, logs e histórico.
+`apt purge` não remove dados do usuário; use `saveme uninstall --purge --yes`
+antes. Se a extensão tiver sido instalada pelo extensions.gnome.org e o comando
+não conseguir removê-la, remova pelo app **Extensões** do GNOME.
+
 
 ## Solução de problemas
 

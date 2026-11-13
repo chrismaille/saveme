@@ -258,6 +258,9 @@ export default class SaveMeExtension extends Extension {
         const logsItem = new PopupMenu.PopupMenuItem(_('Logs'));
         logsItem.connect('activate', () => this.openLogs(null));
         menu.addMenuItem(logsItem);
+        const debugItem = new PopupMenu.PopupMenuItem(_('Debug'));
+        debugItem.connect('activate', () => this.openDebug());
+        menu.addMenuItem(debugItem);
     }
 
     _call(method, params, callback = null) {
@@ -416,5 +419,9 @@ export default class SaveMeExtension extends Extension {
         if (jobId)
             args.push('--job', jobId);
         this._openApp(args);
+    }
+
+    openDebug() {
+        this._openApp(['--view', 'debug']);
     }
 }

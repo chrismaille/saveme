@@ -118,6 +118,10 @@ export class DaemonApi {
     Doctor() {
         return this.daemon.doctorJson();
     }
+
+    Quit() {
+        this.daemon.quit();
+    }
 }
 
 export const SaveMeDaemonApplication = GObject.registerClass({

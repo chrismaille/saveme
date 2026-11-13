@@ -60,6 +60,26 @@ function formatWhen(iso) {
     return `${Math.floor(diff / 86_400_000)} d ago`;
 }
 
+function readTail(path, maxLines = 800) {
+    try {
+        const [ok, bytes] = GLib.file_get_contents(path);
+        if (!ok)
+            return '';
+        const lines = new TextDecoder().decode(bytes).split('\n');
+        return lines.slice(Math.max(0, lines.length - maxLines)).join('\n');
+    } catch (_) {
+        return '';
+    }
+}
+
+function openPath(path) {
+    try {
+        Gio.Subprocess.new(['xdg-open', path], Gio.SubprocessFlags.NONE);
+    } catch (_) {
+        // The caller can report a toast if needed.
+    }
+}
+
 function statusLabel(status) {
     return STATUS_LABELS[status] || status || 'Idle';
 }
@@ -492,7 +512,6 @@ class SettingsPage {
         this.window = window;
         this.widget = new Adw.PreferencesPage();
         this.blockPauseUpdate = false;
-
         const daemonGroup = new Adw.PreferencesGroup({title: 'Daemon'});
         this.statusRow = new Adw.ActionRow({title: 'Status', subtitle: 'Unknown'});
         this.rcloneRow = new Adw.ActionRow({title: 'rclone', subtitle: 'Unknown'});
@@ -569,6 +588,152 @@ class SettingsPage {
     }
 }
 
+class DebugPage {
+    constructor(window) {
+        this.window = window;
+        this.widget = new Adw.PreferencesPage();
+        this.snapshot = null;
+        this.configPath = GLib.build_filenamev([GLib.get_user_config_dir(), 'saveme']);
+        this.statePath = GLib.build_filenamev([GLib.get_user_state_dir(), 'saveme']);
+        this.logPath = GLib.build_filenamev([this.statePath, 'daemon.log']);
+
+        const systemGroup = new Adw.PreferencesGroup({title: 'System'});
+        this.daemonRow = new Adw.ActionRow({title: 'Daemon'});
+        this.rcloneRow = new Adw.ActionRow({title: 'rclone'});
+        this.configRow = new Adw.ActionRow({title: 'Configuration', subtitle: this.configPath});
+        const openConfig = new Gtk.Button({
+            label: 'Open',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat'],
+        });
+        openConfig.connect('clicked', () => openPath(this.configPath));
+        this.configRow.add_suffix(openConfig);
+        this.stateRow = new Adw.ActionRow({title: 'State and logs', subtitle: this.statePath});
+        const openState = new Gtk.Button({
+            label: 'Open',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat'],
+        });
+        openState.connect('clicked', () => openPath(this.statePath));
+        this.stateRow.add_suffix(openState);
+        this.volumesRow = new Adw.ActionRow({title: 'Volumes'});
+        systemGroup.add(this.daemonRow);
+        systemGroup.add(this.rcloneRow);
+        systemGroup.add(this.configRow);
+        systemGroup.add(this.stateRow);
+        systemGroup.add(this.volumesRow);
+        this.widget.add(systemGroup);
+
+        const logGroup = new Adw.PreferencesGroup({title: 'Daemon log'});
+        this.logView = new Gtk.TextView({
+            editable: false,
+            monospace: true,
+            wrap_mode: Gtk.WrapMode.NONE,
+            left_margin: 8,
+            right_margin: 8,
+            top_margin: 8,
+            bottom_margin: 8,
+        });
+        this.logView.add_css_class('saveme-log-view');
+        const scrolled = new Gtk.ScrolledWindow({vexpand: true});
+        scrolled.set_size_request(-1, 320);
+        scrolled.set_child(this.logView);
+        logGroup.add(scrolled);
+
+        const refreshRow = new Adw.ActionRow({
+            title: 'Reload log',
+            subtitle: 'Show the last 800 lines of daemon.log',
+        });
+        const refreshButton = new Gtk.Button({
+            label: 'Refresh',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat'],
+        });
+        refreshButton.connect('clicked', () => this.refreshLog(true));
+        refreshRow.add_suffix(refreshButton);
+        logGroup.add(refreshRow);
+        this.widget.add(logGroup);
+
+        const actions = new Adw.PreferencesGroup({title: 'Diagnostics'});
+        const doctorRow = new Adw.ActionRow({
+            title: 'Doctor',
+            subtitle: 'Check rclone, paths, volumes and configuration.',
+        });
+        const doctorButton = new Gtk.Button({
+            label: 'Run',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat'],
+        });
+        doctorButton.connect('clicked', () => this._runDoctor());
+        doctorRow.add_suffix(doctorButton);
+        actions.add(doctorRow);
+
+        const copyRow = new Adw.ActionRow({
+            title: 'Copy diagnostics',
+            subtitle: 'Snapshot, doctor output and recent daemon log.',
+        });
+        const copyButton = new Gtk.Button({
+            label: 'Copy',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat'],
+        });
+        copyButton.connect('clicked', () => this._copyDiagnostics());
+        copyRow.add_suffix(copyButton);
+        actions.add(copyRow);
+        this.widget.add(actions);
+    }
+
+    update(snapshot) {
+        this.snapshot = snapshot;
+        const daemon = snapshot.daemon || {};
+        this.daemonRow.set_subtitle(
+            `Running · PID ${daemon.pid ?? '?'} · started ${formatWhen(daemon.startedAt)}`);
+        this.rcloneRow.set_subtitle(
+            `${daemon.rclone?.version || 'unknown'} · ${daemon.rclone?.path || '-'}`);
+        this.volumesRow.set_subtitle(
+            `${(snapshot.volumes || []).length} mounted volume(s)`);
+    }
+
+    onShown() {
+        this.refreshLog(false);
+    }
+
+    refreshLog(showToast = false) {
+        const text = readTail(this.logPath, 800);
+        this.logView.get_buffer().set_text(text || '(empty)', -1);
+        if (showToast)
+            this.window.toast('Daemon log refreshed.');
+    }
+
+    async _runDoctor() {
+        try {
+            const data = await this.window.client.doctor();
+            new LogDialog(this.window, 'Doctor', JSON.stringify(data, null, 2)).present();
+        } catch (e) {
+            this.window.toast(e.message);
+        }
+    }
+
+    async _copyDiagnostics() {
+        const parts = [
+            `SaveMe ${this.snapshot?.version || '?'}`,
+            `Snapshot:\n${JSON.stringify(this.snapshot || {}, null, 2)}`,
+        ];
+        try {
+            parts.push(`Doctor:\n${JSON.stringify(await this.window.client.doctor(), null, 2)}`);
+        } catch (e) {
+            parts.push(`Doctor error: ${e.message}`);
+        }
+        parts.push(`Daemon log:\n${readTail(this.logPath, 400) || '(empty)'}`);
+        try {
+            this.widget.get_clipboard().set(parts.join('\n\n'));
+            this.window.toast('Diagnostics copied.');
+        } catch (e) {
+            this.window.toast(`Cannot copy diagnostics: ${e.message}`);
+        }
+    }
+}
+
 export const SaveMeWindow = GObject.registerClass({
     GTypeName: 'SaveMeSettingsWindow',
 }, class SaveMeWindow extends Adw.ApplicationWindow {
@@ -627,10 +792,12 @@ export const SaveMeWindow = GObject.registerClass({
         this.accountsPage = new AccountsPage(this);
         this.logsPage = new LogsPage(this);
         this.settingsPage = new SettingsPage(this);
+        this.debugPage = new DebugPage(this);
         this.stack.add_titled(this.jobsPage.widget, 'jobs', 'Jobs');
         this.stack.add_titled(this.accountsPage.widget, 'accounts', 'Accounts');
         this.stack.add_titled(this.logsPage.widget, 'logs', 'Logs');
         this.stack.add_titled(this.settingsPage.widget, 'settings', 'Settings');
+        this.stack.add_titled(this.debugPage.widget, 'debug', 'Debug');
 
         const toolbar = new Adw.ToolbarView();
         toolbar.add_top_bar(header);
@@ -657,6 +824,7 @@ export const SaveMeWindow = GObject.registerClass({
         this.accountsPage.update(snapshot);
         this.logsPage.update(snapshot);
         this.settingsPage.update(snapshot);
+        this.debugPage.update(snapshot);
     }
 
     _showDaemonError(error) {
@@ -716,10 +884,12 @@ export const SaveMeWindow = GObject.registerClass({
     }
 
     showView(name, jobId = null) {
-        if (['jobs', 'accounts', 'logs', 'settings'].includes(name))
+        if (['jobs', 'accounts', 'logs', 'settings', 'debug'].includes(name))
             this.stack.set_visible_child_name(name);
         if (name === 'logs' && jobId)
             this.logsPage.selectJob(jobId);
+        if (name === 'debug')
+            this.debugPage.onShown();
     }
 
     newJob() {

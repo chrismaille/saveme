@@ -18,12 +18,21 @@ import {
     descriptorDisplay,
     localPathFor,
 } from '../src/jobs.js';
-import {rcloneConfigFile, configDir, stateDir} from '../src/paths.js';
-import {humanBytes, sleep} from '../src/util.js';
+import {
+    DAEMON_BUS_NAME,
+    DAEMON_INTERFACE,
+    DAEMON_OBJECT_PATH,
+    EXTENSION_UUID,
+    rcloneConfigFile,
+    configDir,
+    stateDir,
+} from '../src/paths.js';
+import {humanBytes, removeRecursive, sleep} from '../src/util.js';
 
 const VERSION = '1.0.0-dev';
 const BOOLEAN_OPTIONS = new Set([
     'dry-run', 'force', 'help', 'no-initial', 'verbose', 'json',
+    'purge', 'yes',
 ]);
 
 const USAGE = `SaveMe ${VERSION}
@@ -38,6 +47,7 @@ Usage:
   saveme job disable ID
   saveme run ID [--dry-run] [--force]
   saveme watch ID [--no-initial] [--force]
+  saveme uninstall [--purge] --yes
   saveme version
 
 Common options:
@@ -233,8 +243,7 @@ async function commandRun(options) {
     return run.result === 'success' || run.result === 'noop' ? 0 : 1;
 }
 
-async function commandWatch(options) {
-    const {config, runner, volumes, logger} = makeContext(options);
+async function commandWatch(options) {    const {config, runner, volumes, logger} = makeContext(options);
     const id = options._[0];
     if (!id)
         throw new Error('Job id is required');
@@ -296,6 +305,109 @@ async function commandWatch(options) {
     }
 }
 
+function runCommand(argv) {
+    try {
+        const process = Gio.Subprocess.new(argv, Gio.SubprocessFlags.NONE);
+        process.wait(null);
+        return process.get_if_exited() ? process.get_exit_status() : -1;
+    } catch (_) {
+        return -1;
+    }
+}
+
+async function quitDaemon() {
+    try {
+        const bus = Gio.bus_get_sync(Gio.BusType.SESSION, null);
+        await new Promise((resolve, reject) => {
+            bus.call(
+                DAEMON_BUS_NAME,
+                DAEMON_OBJECT_PATH,
+                DAEMON_INTERFACE,
+                'Quit',
+                null,
+                null,
+                Gio.DBusCallFlags.NONE,
+                3000,
+                null,
+                (connection, result) => {
+                    try {
+                        connection.call_finish(result);
+                        resolve();
+                    } catch (e) {
+                        reject(e);
+                    }
+                });
+        });
+    } catch (_) {
+        // The daemon is not running.
+    }
+}
+
+async function commandUninstall(options) {
+    const purge = Boolean(options.purge);
+    if (!options.yes) {
+        print('This will stop the SaveMe daemon and remove the GNOME extension.');
+        if (purge)
+            print('It will also delete configuration, OAuth tokens, logs and history.');
+        else
+            print('Configuration and logs will be kept.');
+        print('Re-run with --yes to confirm:');
+        print(`  saveme uninstall${purge ? ' --purge' : ''} --yes`);
+        return 1;
+    }
+
+    print('Stopping daemon…');
+    await quitDaemon();
+    await sleep(300);
+
+    print('Disabling systemd user service…');
+    runCommand(['systemctl', '--user', 'disable', '--now', 'saveme.service']);
+
+    print('Removing GNOME Shell extension…');
+    const extensionExit = runCommand(['gnome-extensions', 'uninstall', EXTENSION_UUID]);
+    if (extensionExit !== 0) {
+        const extensionDir = GLib.build_filenamev([
+            GLib.get_user_data_dir(), 'gnome-shell', 'extensions', EXTENSION_UUID,
+        ]);
+        if (GLib.file_test(extensionDir, GLib.FileTest.EXISTS)) {
+            removeRecursive(extensionDir);
+            print(`Removed ${extensionDir}`);
+        }
+    } else {
+        print('Extension removed.');
+    }
+
+    if (purge) {
+        print('Removing user data…');
+        const paths = [
+            configDir(),
+            stateDir(),
+            GLib.build_filenamev([GLib.get_user_cache_dir(), 'saveme']),
+            GLib.build_filenamev([
+                GLib.getenv('XDG_RUNTIME_DIR') || GLib.get_tmp_dir(),
+                'saveme',
+            ]),
+        ];
+        for (const path of paths) {
+            if (GLib.file_test(path, GLib.FileTest.EXISTS)) {
+                removeRecursive(path);
+                print(`Removed ${path}`);
+            }
+        }
+        print('Configuration, tokens, logs and history removed.');
+    } else {
+        print(`User data kept at:`);
+        print(`  ${configDir()}`);
+        print(`  ${stateDir()}`);
+        print('Use --purge to remove it.');
+    }
+
+    print('');
+    print('Now remove the system package:');
+    print('  sudo apt remove saveme');
+    return 0;
+}
+
 async function main() {
     const options = parseArgs(system.programArgs);
     if (options.help) {
@@ -335,6 +447,8 @@ async function main() {
         return await commandRun(options);
     case 'watch':
         return await commandWatch(options);
+    case 'uninstall':
+        return await commandUninstall(options);
     default:
         throw new Error(`Unknown command: ${command}`);
     }

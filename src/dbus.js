@@ -73,6 +73,7 @@ export const DAEMON_INTERFACE = `
     <method name="Doctor">
       <arg type="s" direction="out"/>
     </method>
+    <method name="Quit"/>
     <signal name="SnapshotChanged">
       <arg type="s"/>
     </signal>
