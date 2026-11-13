@@ -261,7 +261,20 @@ export const JobEditor = GObject.registerClass({
     _pickRemote(callback, currentDescriptor = null) {
         const remotes = this.parentWindow.snapshot?.remotes || [];
         if (remotes.length === 0) {
-            this.parentWindow.toast('No cloud accounts configured. Add one in Accounts.');
+            const dialog = new Adw.AlertDialog({
+                heading: 'No cloud accounts',
+                body: 'Add Google Drive, OneDrive or Dropbox in the Accounts tab first.',
+            });
+            dialog.add_response('cancel', 'Close');
+            dialog.add_response('accounts', 'Open Accounts');
+            dialog.set_response_appearance('accounts', Adw.ResponseAppearance.SUGGESTED);
+            dialog.connect('response', (_dialog, response) => {
+                if (response === 'accounts') {
+                    this.close();
+                    this.parentWindow.showView('accounts');
+                }
+            });
+            dialog.present(this);
             return;
         }
         const current = currentDescriptor?.kind === 'remote' ? currentDescriptor : null;

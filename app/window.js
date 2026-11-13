@@ -9,6 +9,7 @@ import {RestoreDialog} from './restore-dialog.js';
 import {LogDialog} from './log-dialog.js';
 import {VolumeResolver} from '../src/volumes.js';
 import {descriptorDisplay, JOB_TYPES} from '../src/jobs.js';
+import {sleep} from '../src/util.js';
 
 const APP_DIR = GLib.path_get_dirname(GLib.filename_from_uri(import.meta.url)[0]);
 const ROOT_DIR = GLib.build_filenamev([APP_DIR, '..']);
@@ -793,11 +794,16 @@ export const SaveMeWindow = GObject.registerClass({
         this.logsPage = new LogsPage(this);
         this.settingsPage = new SettingsPage(this);
         this.debugPage = new DebugPage(this);
-        this.stack.add_titled(this.jobsPage.widget, 'jobs', 'Jobs');
-        this.stack.add_titled(this.accountsPage.widget, 'accounts', 'Accounts');
-        this.stack.add_titled(this.logsPage.widget, 'logs', 'Logs');
-        this.stack.add_titled(this.settingsPage.widget, 'settings', 'Settings');
-        this.stack.add_titled(this.debugPage.widget, 'debug', 'Debug');
+        const jobsPage = this.stack.add_titled(this.jobsPage.widget, 'jobs', 'Jobs');
+        jobsPage.set_icon_name('view-list-symbolic');
+        const accountsPage = this.stack.add_titled(this.accountsPage.widget, 'accounts', 'Accounts');
+        accountsPage.set_icon_name('system-users-symbolic');
+        const logsPage = this.stack.add_titled(this.logsPage.widget, 'logs', 'Logs');
+        logsPage.set_icon_name('text-x-generic-symbolic');
+        const settingsPage = this.stack.add_titled(this.settingsPage.widget, 'settings', 'Settings');
+        settingsPage.set_icon_name('emblem-system-symbolic');
+        const debugPage = this.stack.add_titled(this.debugPage.widget, 'debug', 'Debug');
+        debugPage.set_icon_name('utilities-terminal-symbolic');
 
         const toolbar = new Adw.ToolbarView();
         toolbar.add_top_bar(header);
@@ -808,12 +814,20 @@ export const SaveMeWindow = GObject.registerClass({
     }
 
     async refresh() {
-        try {
-            const snapshot = await this.client.getSnapshot();
-            this._applySnapshot(snapshot);
-        } catch (e) {
-            this._showDaemonError(e);
+        let lastError = null;
+        for (let attempt = 0; attempt < 5; attempt++) {
+            try {
+                const snapshot = await this.client.getSnapshot();
+                this._applySnapshot(snapshot);
+                return;
+            } catch (e) {
+                lastError = e;
+                await sleep(250);
+            }
         }
+        if (this.snapshot)
+            return;
+        this._showDaemonError(lastError || new Error('Daemon unavailable'));
     }
 
     _applySnapshot(snapshot) {
@@ -854,7 +868,16 @@ export const SaveMeWindow = GObject.registerClass({
         this.set_content(this._daemonStatus);
     }
 
-    _startDaemon() {
+    async _startDaemon() {
+        // The D-Bus service may already be activating the daemon. Give it a
+        // chance before spawning a second process.
+        try {
+            const snapshot = await this.client.getSnapshot();
+            this._applySnapshot(snapshot);
+            return;
+        } catch (_) {
+            // Continue and spawn it.
+        }
         try {
             const program = GLib.find_program_in_path('saveme-daemon');
             let argv = null;
@@ -869,11 +892,11 @@ export const SaveMeWindow = GObject.registerClass({
                 this.toast('saveme-daemon is not installed.');
                 return;
             }
-            Gio.Subprocess.new(argv, Gio.SubprocessFlags.NONE);
-            GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 2, () => {
-                this.refresh();
-                return GLib.SOURCE_REMOVE;
-            });
+            Gio.Subprocess.new(argv,
+                Gio.SubprocessFlags.STDOUT_SILENCE |
+                Gio.SubprocessFlags.STDERR_SILENCE);
+            await sleep(800);
+            this.refresh();
         } catch (e) {
             this.toast(e.message);
         }

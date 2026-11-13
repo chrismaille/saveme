@@ -21,7 +21,7 @@ Os artefatos ficam em `dist/`:
 ## 2. Instalar o daemon e o app
 
 ```bash
-sudo apt install ./dist/saveme_1.0.0~dev0_amd64.deb
+sudo apt install ./dist/saveme_*.deb
 ```
 
 O pacote instala:
