@@ -34,6 +34,7 @@ export default suite('domain/job-state-machine', [
         assertEqual(machine.transition('cancelled', {sourceAvailable: false}),
             JOB_STATUS.WAITING_SOURCE);
         assertEqual(machine.transition('failure', {message: 'boom'}), JOB_STATUS.ERROR);
+        assertEqual(machine.transition('failure'), JOB_STATUS.ERROR);
         assertEqual(machine.shouldRetry(JOB_STATUS.ERROR, 'realtime'), true);
         assertEqual(machine.shouldRetry(JOB_STATUS.ERROR, 'manual'), false);
         await assertThrows(() => machine.transition('unknown'), /Unknown job state event/);

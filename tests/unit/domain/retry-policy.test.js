@@ -20,5 +20,6 @@ export default suite('domain/retry-policy', [
         policy.reset();
         assertEqual(policy.attempt, 0);
         assertEqual(policy.nextDelay(), 100);
+        assertEqual(new RetryPolicy().nextDelay(), BACKOFF_MS[0]);
     }),
 ]);

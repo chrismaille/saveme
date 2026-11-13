@@ -42,4 +42,25 @@ export default suite('application/scheduler', [
         assert(logger.sink.some(item => /Scheduled task bad failed/.test(item.message)));
         assertEqual(scheduler.size, 0);
     }),
+    test('handles zero/NaN delays and missing loggers', () => {
+        const clock = new FakeClock();
+        const scheduler = new Scheduler({clock});
+        let calls = 0;
+        scheduler.start('zero', 0, () => {
+            calls++;
+        });
+        scheduler.start('nan', Number.NaN, () => {
+            calls++;
+        });
+        scheduler.start('negative', -5, () => {
+            calls++;
+        });
+        clock.tick(0);
+        assertEqual(calls, 3);
+        scheduler.start('bad', 1, () => {
+            throw new Error('boom');
+        });
+        clock.tick(1);
+        assertEqual(scheduler.size, 0);
+    }),
 ]);
