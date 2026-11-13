@@ -4,20 +4,13 @@ import {ChangeQueue} from './queue.js';
 import {RecursiveWatcher, WatcherLimitError} from './watcher.js';
 import {localPathFor, remotePathFor, TRIGGER_MODES} from './jobs.js';
 import {uniqueId} from './util.js';
-
-const BACKOFF_MS = [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000];
-
-function statusFromError(message) {
-    if (/source.*(unavailable|does not exist|not a directory)|source volume/i.test(message))
-        return 'waiting-source';
-    if (/destination.*(unavailable|not a directory)|destination volume/i.test(message))
-        return 'waiting-destination';
-    if (/auth|token|unauthorized|forbidden|\b401\b|\b403\b|reauth/i.test(message))
-        return 'needs-auth';
-    if (/Delete guard/i.test(message))
-        return 'delete-guard';
-    return 'error';
-}
+import {
+    isCancelledRun,
+    isSuccessfulRun,
+    nextBackoffDelay,
+    shouldRetryAfterRun,
+    statusFromError,
+} from './domain/run-state.js';
 
 export class RunPool {
     constructor(limit = 1) {
@@ -226,7 +219,7 @@ export class JobSupervisor {
         if (!run || this._stopped)
             return;
         this.onRunFinished?.(run);
-        if (run.result === 'cancelled') {
+        if (isCancelledRun(run.result)) {
             if (this._paused || this.state.pausedAll || !this.job.enabled)
                 this._setStatus('paused', 'Cancelled');
             else {
@@ -238,7 +231,7 @@ export class JobSupervisor {
             }
             return;
         }
-        if (run.result === 'success' || run.result === 'noop') {
+        if (isSuccessfulRun(run.result)) {
             this._backoffIndex = 0;
             this._lastNotifyKey = null;
             if (this.job.trigger.mode === TRIGGER_MODES.REALTIME) {
@@ -261,15 +254,8 @@ export class JobSupervisor {
         this._stopRealtime();
         this._setStatus(status, message);
         this._notify(status, message);
-        if (status === 'waiting-source' || status === 'waiting-destination') {
+        if (shouldRetryAfterRun(status, this.job.trigger.mode))
             this._scheduleRetry();
-        } else if (status === 'needs-auth') {
-            // Wait for the user to reauthenticate.
-        } else if (status === 'delete-guard') {
-            // Wait for an explicit force.
-        } else if (this.job.trigger.mode !== TRIGGER_MODES.MANUAL) {
-            this._scheduleRetry();
-        }
         this.logger.warn(`Run failed (${status}, incremental=${incremental}): ${message}`);
     }
 
@@ -443,7 +429,7 @@ export class JobSupervisor {
 
     _scheduleRetry() {
         this._clearRetryTimer();
-        const delay = BACKOFF_MS[Math.min(this._backoffIndex, BACKOFF_MS.length - 1)];
+        const delay = nextBackoffDelay(this._backoffIndex);
         this._backoffIndex++;
         this._retryTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, delay, () => {
             this._retryTimer = null;

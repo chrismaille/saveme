@@ -1,7 +1,17 @@
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
-import {isExecutable, toNumber} from './util.js';
+import {isExecutable} from './util.js';
 import {bundledRclone, projectRclone} from './paths.js';
+import {
+    emptyRcloneStats,
+    exitCodeMessage,
+    isSuccessExit,
+    mergeStats,
+    parseRcloneLine,
+    publicStats,
+} from './domain/rclone-log.js';
+
+export {exitCodeMessage, isSuccessExit};
 
 export const RCLONE_MIN_VERSION = '1.60.0';
 
@@ -20,58 +30,6 @@ export function findRclone() {
             return candidate;
     }
     return null;
-}
-
-export function isSuccessExit(code) {
-    return code === 0 || code === 9;
-}
-
-export function exitCodeMessage(code) {
-    switch (code) {
-    case 0:
-        return 'Success';
-    case 1:
-        return 'Syntax or usage error';
-    case 2:
-        return 'Error not otherwise categorised';
-    case 3:
-        return 'Directory not found';
-    case 4:
-        return 'File not found';
-    case 5:
-        return 'Temporary error (retries exhausted)';
-    case 6:
-        return 'Less serious error (some files failed)';
-    case 7:
-        return 'Fatal error';
-    case 8:
-        return 'Transfer exceeded maximum duration';
-    case 9:
-        return 'No files transferred';
-    default:
-        return `rclone exited with code ${code}`;
-    }
-}
-
-function emptyStats() {
-    return {
-        bytes: 0,
-        totalBytes: 0,
-        transfers: 0,
-        totalTransfers: 0,
-        checks: 0,
-        totalChecks: 0,
-        deletes: 0,
-        deletedDirs: 0,
-        renames: 0,
-        errors: 0,
-        listed: 0,
-        elapsedTime: 0,
-        speed: 0,
-        eta: null,
-        fatalError: false,
-        retryError: false,
-    };
 }
 
 export class Rclone {
@@ -103,7 +61,7 @@ export class Rclone {
         this.logger?.debug('spawning rclone', {argv});
         const subprocess = Gio.Subprocess.new(argv,
             Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_MERGE);
-        const stats = emptyStats();
+        const stats = emptyRcloneStats();
         let lastStats = null;
         let lastError = null;
         let readError = null;
@@ -225,43 +183,15 @@ export class Rclone {
     }
 
     _handleLine(line, _stats, callback) {
-        let parsed = null;
-        if (line.startsWith('{')) {
-            try {
-                parsed = JSON.parse(line);
-            } catch (_) {
-                parsed = null;
-            }
-        }
-        callback(parsed);
+        callback(parseRcloneLine(line));
     }
 
     _mergeStats(target, incoming) {
-        for (const [key, value] of Object.entries(incoming)) {
-            if (value !== null && value !== undefined && key in target)
-                target[key] = value;
-        }
+        return mergeStats(target, incoming);
     }
 
     _publicStats(stats) {
-        return {
-            bytes: toNumber(stats.bytes),
-            totalBytes: toNumber(stats.totalBytes),
-            transfers: toNumber(stats.transfers),
-            totalTransfers: toNumber(stats.totalTransfers),
-            checks: toNumber(stats.checks),
-            totalChecks: toNumber(stats.totalChecks),
-            deletes: toNumber(stats.deletes),
-            deletedDirs: toNumber(stats.deletedDirs),
-            renames: toNumber(stats.renames),
-            errors: toNumber(stats.errors),
-            listed: toNumber(stats.listed),
-            elapsedTime: toNumber(stats.elapsedTime),
-            speed: toNumber(stats.speed),
-            eta: stats.eta ?? null,
-            fatalError: Boolean(stats.fatalError),
-            retryError: Boolean(stats.retryError),
-        };
+        return publicStats(stats);
     }
 
     runCapture(args) {

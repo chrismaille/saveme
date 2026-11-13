@@ -84,6 +84,8 @@ app/                  SaveMe Settings (GTK4/Adwaita)
   dialogs/
   widgets/
 src/                  daemon e bibliotecas compartilhadas internas
+  domain/             regras puras, sem gi:// (backup, retenção, delete guard,
+                      change batching, comandos rclone, parser de log, erros)
   main.js
   application.js
   config.js
@@ -111,6 +113,11 @@ docs/
 debian/               empacotamento .deb
 Makefile
 ```
+
+Durante a Fase 2, `jobs.js`, `runner.js`, `queue.js`, `rclone.js` e `util.js`
+permanecem como fachadas que reexportam as funções puras de `src/domain/`.
+A migração para ports/adapters e a remoção dessas fachadas acontecem na
+Fase 3.
 
 ## 5. Configuração, estado e logs
 
@@ -264,7 +271,7 @@ base escolhida:
 
 ```
 <destino>/SaveMe/<job-id>/current/<caminho-relativo>
-<destino>/SaveMe/<job-id>/versions/<YYYYMMDDTHHMMSS>-<run>/<caminho-relativo>
+<destino>/SaveMe/<job-id>/versions/<YYYYMMDDTHHMMSS>-<mmm>-<run>/<caminho-relativo>
 ```
 
 Para remotes, o caminho equivalente é
@@ -281,7 +288,7 @@ Para remotes, o caminho equivalente é
 - Restore:
   - backup atual inteiro: `rclone copy current <target>`;
   - arquivo/pasta de uma versão: `rclone copy
-    versions/<timestamp>/<path> <target>`.
+    versions/<timestamp>-<mmm>-<run>/<path> <target>`.
 - O app lista versões, datas e arquivos via `ListVersions`/`ListBackup` e
   oferece um navegador de backup. O dry-run é padrão.
 - Trocar o destino de um job Sync começa um novo espelho; arquivos do destino

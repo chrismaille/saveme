@@ -34,7 +34,8 @@ python3 scripts/coverage.py build/coverage/coverage.lcov ...
 
 | Camada | Linha | Branch | Como validar |
 |---|---:|---:|---|
-| Núcleo puro (config, jobs, queue, paths, state, util) | 95% | 90% | testes unitários |
+| Domínio puro (`src/domain/`) | 95% | 95% | `make coverage` (gate) |
+| Núcleo legado (config, jobs, queue, paths, state, util) | 95% | 90% | testes unitários |
 | Runner, watcher, rclone, volumes | 95% | 90% | integração + falhas simuladas |
 | Daemon, supervisor, auth, D-Bus | 90% | 85% | E2E em D-Bus privado |
 | App GTK | E2E/smoke | E2E/smoke | Xvfb + AT-SPI (a implementar) |
@@ -44,12 +45,17 @@ python3 scripts/coverage.py build/coverage/coverage.lcov ...
 **95% em tudo, incluindo UI, extensão e APIs de nuvem, não é uma meta
 realista nem útil neste stack.** O GJS lcov conta cada branch de `??`, `||`,
 optional chaining e caminhos defensivos de GI/GTK; a UI e os provedores mudam
-fora do nosso controle. A meta é 95% de linha e 90% de branch no núcleo crítico,
-90/85 no daemon e cobertura comportamental E2E nas superfícies visuais.
+fora do nosso controle. A meta é 95% de linha e 95% de branch no domínio,
+95% de linha e 90% de branch no núcleo legado, 90/85 no daemon e cobertura
+comportamental E2E nas superfícies visuais.
 
-Estado atual (unit + integration + E2E de daemon): **65,2% de linha e 44,8% de
-branch** nos arquivos `src/` executados. Ainda não é 95%; os maiores vazios são
-`auth.js`, `daemon.js`, `supervisor.js` e caminhos de erro do runner.
+Estado atual (unit + integration + E2E de daemon): **75,8% de linha e 59,8% de
+branch** nos arquivos `src/` executados. O domínio puro está em **100% de linha,
+99,2% de branch e 100% de funções**. O gate de 95/95 do domínio roda no
+`make coverage`. O GJS lcov marca cada `extends Error` de `errors.js` como um
+branch não tomável; o arquivo tem 100% de linha/funções e o agregado do domínio
+continua acima de 95% de branch. Os maiores vazios globais ainda são `auth.js`,
+`daemon.js`, `supervisor.js`, `rclone.js` e caminhos de erro do runner.
 
 ## Simulação de backup e restore
 
@@ -82,6 +88,9 @@ Cobre:
 - lint completo, incluindo ESLint, Stylelint, ShellCheck, Ruff, Vulture, Knip,
   Markdownlint, validação de `.desktop` e regras do Omega;
 - testes Python do próprio Omega lint;
+- domínio puro: layout de backup, retenção, delete guard, change batcher,
+  comandos rclone, parser de log, jobs e transições de estado;
+- property-based tests para paths de backup, retenção e delete guard;
 - utilidades, configuração e validação de jobs;
 - fila/debounce do watcher;
 - sync completo, sync incremental, dry-run;

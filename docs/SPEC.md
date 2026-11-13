@@ -153,18 +153,18 @@ Layout no destino:
 
 ```
 <destino>/SaveMe/<job-id>/current/<caminho-relativo>
-<destino>/SaveMe/<job-id>/versions/<timestamp>/<caminho-relativo>
+<destino>/SaveMe/<job-id>/versions/<timestamp>-<mmm>-<run>/<caminho-relativo>
 ```
 
 Para remote:
 
 ```
 <remote>:<destino>/SaveMe/<job-id>/current/...
-<remote>:<destino>/SaveMe/<job-id>/versions/<timestamp>/...
+<remote>:<destino>/SaveMe/<job-id>/versions/<timestamp>-<mmm>-<run>/...
 ```
 
 - `current` é o espelho do último backup.
-- `versions/<timestamp>` contém os arquivos sobrescritos ou removidos naquele
+- `versions/<timestamp>-<mmm>-<run>` contém os arquivos sobrescritos ou removidos naquele
   lote. Não é um snapshot completo; é o histórico incremental.
 - Cada execução com mudanças gera um diretório de versão com timestamp.
 - A limpeza de retenção remove diretórios de versão antigos.

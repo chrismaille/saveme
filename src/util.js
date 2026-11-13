@@ -1,5 +1,9 @@
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
+import {deepClone, isPlainObject, mergeDeep, toNumber} from './domain/object.js';
+import {versionTimestamp} from './domain/time.js';
+
+export {deepClone, isPlainObject, mergeDeep, toNumber, versionTimestamp};
 
 export function expandUser(path) {
     if (!path)
@@ -132,12 +136,6 @@ export function nowIso() {
     return new Date().toISOString();
 }
 
-export function versionTimestamp(date = new Date()) {
-    const pad = value => String(value).padStart(2, '0');
-    return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}` +
-        `T${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
-}
-
 export function uniqueId(prefix = '') {
     const random = Math.random().toString(36).slice(2, 8);
     return `${prefix}${Date.now().toString(36)}_${random}`;
@@ -161,32 +159,6 @@ export function humanBytes(value) {
         unit++;
     }
     return `${n.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
-}
-
-export function deepClone(value) {
-    return JSON.parse(JSON.stringify(value));
-}
-
-export function isPlainObject(value) {
-    return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-export function mergeDeep(base, override) {
-    const result = deepClone(base);
-    if (!isPlainObject(override))
-        return result;
-    for (const [key, value] of Object.entries(override)) {
-        if (isPlainObject(value) && isPlainObject(result[key]))
-            result[key] = mergeDeep(result[key], value);
-        else
-            result[key] = deepClone(value);
-    }
-    return result;
-}
-
-export function toNumber(value, fallback = 0) {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : fallback;
 }
 
 export function basename(path) {

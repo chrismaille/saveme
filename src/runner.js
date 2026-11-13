@@ -15,159 +15,54 @@ import {
     nowIso,
     relativePath,
     uniqueId,
-    versionTimestamp,
 } from './util.js';
 import {filtersDir, logsDir, tmpDir} from './paths.js';
+import {
+    DeleteGuardError,
+    DestinationUnavailableError,
+    EmptySourceError,
+    SourceUnavailableError,
+} from './domain/errors.js';
+import {
+    backupCurrentFor,
+    backupRootFor,
+    joinRclonePath,
+    versionsRootFor,
+    versionDirFor,
+} from './domain/backup-layout.js';
+import {parseVersionTimestamp} from './domain/time.js';
+import {selectExpiredVersions} from './domain/retention.js';
+import {assertDeleteAllowed, evaluateDeleteGuard} from './domain/delete-guard.js';
+import {
+    backupArgs,
+    commonJobArgs,
+    copyArgs,
+    deleteArgs,
+    escapeFilterPath,
+    filterRules,
+    moveArgs,
+    rmdirsArgs,
+    syncArgs,
+    withDryRun,
+    withFastList,
+    withMaxDelete,
+} from './domain/rclone-command.js';
+import {accumulateStats, emptyStats, progressFromStats} from './domain/rclone-log.js';
 
-export class SourceUnavailableError extends Error {
-    constructor(message) {
-        super(message);
-        this.name = 'SourceUnavailableError';
-    }
-}
-
-export class DestinationUnavailableError extends Error {
-    constructor(message) {
-        super(message);
-        this.name = 'DestinationUnavailableError';
-    }
-}
-
-export class EmptySourceError extends Error {
-    constructor(lastCount) {
-        super(`Source is empty but the last run saw ${lastCount} files. Aborting to prevent data loss.`);
-        this.name = 'EmptySourceError';
-        this.lastCount = lastCount;
-    }
-}
-
-export class DeleteGuardError extends Error {
-    constructor(deletes, allowed, total, percent) {
-        super(`Delete guard: ${deletes} file(s) would be deleted, ` +
-            `limit is ${allowed} (${percent}% of ${total}). Use force to override.`);
-        this.name = 'DeleteGuardError';
-        this.deletes = deletes;
-        this.allowed = allowed;
-        this.total = total;
-        this.percent = percent;
-    }
-}
-
-const DEFAULT_EXCLUDES = [
-    '.saveme/**',
-    '.saveme-versions/**',
-    '.Trash-*/**',
-    '.DS_Store',
-    'Thumbs.db',
-    'desktop.ini',
-    '*.tmp',
-    '*.partial',
-    '~$*',
-];
-
-export function backupRootFor(job, dest) {
-    if (job.destination.kind === 'remote') {
-        const colon = dest.indexOf(':');
-        if (colon < 0)
-            throw new Error(`Invalid remote destination: ${dest}`);
-        const remote = dest.slice(0, colon);
-        const remotePath = dest.slice(colon + 1).replace(/\/+$/, '');
-        const base = remotePath
-            ? `${remotePath}/SaveMe/${job.id}`
-            : `SaveMe/${job.id}`;
-        return `${remote}:${base}`;
-    }
-    const base = dest.replace(/\/+$/, '');
-    return `${base}/SaveMe/${job.id}`;
-}
-
-export function backupCurrentFor(job, dest) {
-    return `${backupRootFor(job, dest)}/current`;
-}
-
-export function versionsRootFor(job, dest) {
-    return `${backupRootFor(job, dest)}/versions`;
-}
-
-export function joinRclonePath(base, rel) {
-    if (!rel)
-        return base;
-    if (base.endsWith(':') || base.endsWith('/'))
-        return `${base}${rel}`;
-    return `${base}/${rel}`;
-}
-
-export function parseVersionTimestamp(name) {
-    const match = String(name).replace(/\/$/, '').match(
-        /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(?:-.*)?$/);
-    if (!match)
-        return null;
-    const [, y, month, day, hour, minute, second] = match;
-    const date = new Date(Number(y), Number(month) - 1, Number(day),
-        Number(hour), Number(minute), Number(second));
-    return Number.isNaN(date.getTime()) ? null : date;
-}
-
-export function escapeFilterPath(path) {
-    return String(path)
-        .replace(/\\/g, '\\\\')
-        .replace(/\*/g, '\\*')
-        .replace(/\?/g, '\\?')
-        .replace(/\[/g, '\\[')
-        .replace(/\]/g, '\\]');
-}
-
-export function filterRules(job) {
-    const all = [...DEFAULT_EXCLUDES, ...(job.filters?.exclude ?? [])];
-    const rules = [];
-    for (const raw of all) {
-        const value = String(raw).trim();
-        if (!value || value.startsWith('#'))
-            continue;
-        if (value.startsWith('- ') || value.startsWith('+ '))
-            rules.push(value);
-        else
-            rules.push(`- ${value}`);
-    }
-    return [...new Set(rules)];
-}
-
-export function commonJobArgs(job, filterFile, {copy = true} = {}) {
-    const args = [
-        '--filter-from', filterFile,
-        '--transfers', String(job.options?.transfers || 4),
-        '--checkers', String(job.options?.checkers || 8),
-    ];
-    if (copy)
-        args.push('--create-empty-src-dirs');
-    if (job.options?.preserveMetadata)
-        args.push('--metadata');
-    if (job.options?.followSymlinks)
-        args.push('--copy-links');
-    if (job.options?.bandwidthLimit)
-        args.push('--bwlimit', String(job.options.bandwidthLimit));
-    return args;
-}
-
-function emptyStats() {
-    return {
-        bytes: 0,
-        totalBytes: 0,
-        transfers: 0,
-        totalTransfers: 0,
-        checks: 0,
-        totalChecks: 0,
-        deletes: 0,
-        deletedDirs: 0,
-        renames: 0,
-        errors: 0,
-        listed: 0,
-        elapsedTime: 0,
-        speed: 0,
-        eta: null,
-        fatalError: false,
-    };
-}
+export {
+    DeleteGuardError,
+    DestinationUnavailableError,
+    EmptySourceError,
+    SourceUnavailableError,
+    backupCurrentFor,
+    backupRootFor,
+    commonJobArgs,
+    escapeFilterPath,
+    filterRules,
+    joinRclonePath,
+    parseVersionTimestamp,
+    versionsRootFor,
+};
 
 class RawLog {
     constructor(path) {
@@ -431,26 +326,12 @@ export class JobRunner {
     }
 
     _onStats(ctx, phase, stats) {
-        const total = stats.totalBytes > 0 ? stats.totalBytes : stats.totalTransfers;
-        const done = stats.totalBytes > 0 ? stats.bytes : stats.transfers;
-        const percent = total > 0 ? Math.max(0, Math.min(100, (done / total) * 100)) : 0;
-        const currentPath = ctx.currentFile || null;
-        const progress = {
+        const progress = progressFromStats(stats, {
             jobId: ctx.job.id,
             runId: ctx.runId,
             phase,
-            percent,
-            files: stats.transfers,
-            totalFiles: stats.totalTransfers,
-            bytes: stats.bytes,
-            totalBytes: stats.totalBytes,
-            deletes: stats.deletes,
-            errors: stats.errors,
-            speed: stats.speed,
-            eta: stats.eta,
-            currentFile: currentPath ? GLib.path_get_basename(currentPath) : null,
-            currentPath,
-        };
+            currentPath: ctx.currentFile || null,
+        });
         try {
             this.state?.updateProgress(ctx.job.id, progress);
         } catch (_) {
@@ -460,14 +341,7 @@ export class JobRunner {
     }
 
     _mergeStats(ctx, stats) {
-        for (const key of ['bytes', 'totalBytes', 'transfers', 'totalTransfers',
-            'checks', 'totalChecks', 'deletes', 'deletedDirs', 'renames',
-            'errors', 'listed', 'elapsedTime']) {
-            ctx.stats[key] += Number(stats[key] || 0);
-        }
-        ctx.stats.speed = stats.speed ?? ctx.stats.speed;
-        ctx.stats.eta = stats.eta ?? ctx.stats.eta;
-        ctx.stats.fatalError = ctx.stats.fatalError || Boolean(stats.fatalError);
+        accumulateStats(ctx.stats, stats);
     }
 
     _topLevelEntryCount(path) {
@@ -517,7 +391,7 @@ export class JobRunner {
     }
 
     _versionDir(job, dest, ctx) {
-        return `${versionsRootFor(job, dest)}/${versionTimestamp()}-${ctx.runId.slice(-6)}`;
+        return versionDirFor(versionsRootFor(job, dest), ctx.runId);
     }
 
     async _listVersionDirs(ctx, root, cancellable) {
@@ -554,12 +428,12 @@ export class JobRunner {
             ctx.logger.warn(`Cannot list versions: ${e.message}`);
             return;
         }
-        const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+        const expired = selectExpiredVersions(names, {
+            nowMs: Date.now(),
+            retentionDays: days,
+        });
         let removed = 0;
-        for (const name of names) {
-            const date = parseVersionTimestamp(name);
-            if (!date || date.getTime() >= cutoff)
-                continue;
+        for (const name of expired) {
             const result = await this._runRclone(ctx, ['purge', joinRclonePath(root, name)], {
                 phase: 'cleanup',
                 cancellable,
@@ -599,31 +473,30 @@ export class JobRunner {
             this._checkEmptySource(job, sourceCount, force);
 
             const filterFile = this._filterFile(job);
-            const args = [];
+            let args;
             let allowedDeletes = null;
             if (job.type === JOB_TYPES.SYNC) {
-                args.push('sync', prep.source, prep.dest, ...commonJobArgs(job, filterFile));
+                args = syncArgs(prep.source, prep.dest, filterFile, job);
                 if (!force && !dryRun && Number.isFinite(sourceCount)) {
-                    const percent = Number(job.options?.maxDeletePercent ?? 10);
-                    const minimum = Number(job.options?.maxDeleteMinimum ?? 10);
-                    allowedDeletes = Math.min(sourceCount,
-                        Math.max(minimum, Math.floor(sourceCount * percent / 100)));
+                    allowedDeletes = evaluateDeleteGuard({
+                        deletes: 0,
+                        total: sourceCount,
+                        maxDeletePercent: job.options?.maxDeletePercent ?? 10,
+                        maxDeleteMinimum: job.options?.maxDeleteMinimum ?? 10,
+                    }).allowed;
                 }
             } else {
                 const current = backupCurrentFor(job, prep.dest);
                 const versionDir = this._versionDir(job, prep.dest, ctx);
                 ctx.versionsDir = versionDir;
-                args.push('sync', prep.source, current,
-                    ...commonJobArgs(job, filterFile),
-                    '--backup-dir', versionDir);
+                args = backupArgs(prep.source, current, versionDir, filterFile, job);
             }
             if (!prep.sourceIsLocal || !prep.destIsLocal)
-                args.push('--fast-list');
+                args = withFastList(args);
 
             if (job.type === JOB_TYPES.SYNC && !force && !dryRun &&
                 allowedDeletes !== null) {
-                const preflightArgs = [...args, '--dry-run'];
-                const preflight = await this._runRclone(ctx, preflightArgs, {
+                const preflight = await this._runRclone(ctx, withDryRun(args), {
                     phase: 'checking',
                     cancellable,
                     mergeStats: false,
@@ -638,14 +511,16 @@ export class JobRunner {
                         preflight.lastError || exitCodeMessage(preflight.exitCode));
                 const deleteCount = Number(preflight.stats.deletes || 0);
                 ctx.logger.info(`Preflight: ${deleteCount} delete(s), limit ${allowedDeletes}`);
-                if (deleteCount > allowedDeletes) {
-                    throw new DeleteGuardError(deleteCount, allowedDeletes,
-                        sourceCount, Number(job.options?.maxDeletePercent ?? 10));
-                }
-                args.push('--max-delete', String(allowedDeletes));
+                const guard = assertDeleteAllowed({
+                    deletes: deleteCount,
+                    total: sourceCount,
+                    maxDeletePercent: job.options?.maxDeletePercent ?? 10,
+                    maxDeleteMinimum: job.options?.maxDeleteMinimum ?? 10,
+                });
+                args = withMaxDelete(args, guard.allowed);
             }
             if (dryRun)
-                args.push('--dry-run');
+                args = withDryRun(args);
 
             const result = await this._runRclone(ctx, args, {
                 phase: 'syncing',
@@ -852,21 +727,18 @@ export class JobRunner {
             const isBackup = job.type === JOB_TYPES.BACKUP;
             const current = isBackup ? backupCurrentFor(job, prep.dest) : prep.dest;
             const normalFilter = this._filterFile(job);
-            const commonNormal = commonJobArgs(job, normalFilter);
             const versionDir = isBackup && (hasUpserts || hasDeletes)
                 ? this._versionDir(job, prep.dest, ctx)
                 : null;
             if (versionDir)
                 ctx.versionsDir = versionDir;
-            const backupArgs = versionDir ? ['--backup-dir', versionDir] : [];
 
             for (const rel of plan.dirUpserts) {
                 const sourcePath = joinPath(prep.source, rel);
                 const destPath = joinRclonePath(current, rel);
-                const dirBackupArgs = versionDir
-                    ? ['--backup-dir', joinRclonePath(versionDir, rel)]
-                    : [];
-                const args = ['copy', sourcePath, destPath, ...commonNormal, ...dirBackupArgs];
+                const args = copyArgs(sourcePath, destPath, normalFilter, job, {
+                    backupDir: versionDir ? joinRclonePath(versionDir, rel) : null,
+                });
                 const result = await this._runRclone(ctx, args, {
                     phase: 'syncing',
                     cancellable,
@@ -882,9 +754,10 @@ export class JobRunner {
                 const includeFilter = this._writeIncludeFilter(ctx, 'upserts', job, {
                     files: plan.upserts,
                 });
-                const common = commonJobArgs(job, includeFilter);
-                const args = ['copy', prep.source, current, '--no-traverse',
-                    ...common, ...backupArgs];
+                const args = copyArgs(prep.source, current, includeFilter, job, {
+                    noTraverse: true,
+                    backupDir: versionDir,
+                });
                 const result = await this._runRclone(ctx, args, {
                     phase: 'syncing',
                     cancellable,
@@ -901,9 +774,8 @@ export class JobRunner {
                     files: plan.deletes,
                     dirs: plan.dirDeletes,
                 });
-                const common = commonJobArgs(job, deleteFilter, {copy: false});
                 const moved = await this._runRclone(ctx,
-                    ['move', current, versionDir, '--no-traverse', ...common], {
+                    moveArgs(current, versionDir, deleteFilter, job, {noTraverse: true}), {
                         phase: 'backing-up',
                         cancellable,
                     });
@@ -913,7 +785,7 @@ export class JobRunner {
                     ctx.logger.warn('Could not move all deleted files to versions: ' +
                         (moved.lastError || exitCodeMessage(moved.exitCode)));
                 const rmdirs = await this._runRclone(ctx,
-                    ['rmdirs', current, '--leave-root', ...common], {
+                    rmdirsArgs(current, deleteFilter, job), {
                         phase: 'backing-up',
                         cancellable,
                     });
@@ -925,20 +797,20 @@ export class JobRunner {
                 const deleteCount = await this._countDeletes(plan, prep, ctx, cancellable);
                 const sourceCount = await this._sourceCountForGuard(job, prep, cancellable);
                 ctx.sourceFileCount = sourceCount;
-                const percent = Number(job.options?.maxDeletePercent ?? 10);
-                const minimum = Number(job.options?.maxDeleteMinimum ?? 10);
-                const allowed = Math.min(sourceCount,
-                    Math.max(minimum, Math.floor(sourceCount * percent / 100)));
-                if (!force && deleteCount > allowed)
-                    throw new DeleteGuardError(deleteCount, allowed, sourceCount, percent);
+                assertDeleteAllowed({
+                    deletes: deleteCount,
+                    total: sourceCount,
+                    maxDeletePercent: job.options?.maxDeletePercent ?? 10,
+                    maxDeleteMinimum: job.options?.maxDeleteMinimum ?? 10,
+                    force,
+                });
 
                 const deleteFilter = this._writeIncludeFilter(ctx, 'deletes', job, {
                     files: plan.deletes,
                     dirs: plan.dirDeletes,
                 });
-                const common = commonJobArgs(job, deleteFilter, {copy: false});
                 const result = await this._runRclone(ctx,
-                    ['delete', current, ...common], {
+                    deleteArgs(current, deleteFilter, job), {
                         phase: 'deleting',
                         cancellable,
                     });
@@ -949,7 +821,7 @@ export class JobRunner {
                         result.lastError || exitCodeMessage(result.exitCode));
 
                 const rmdirs = await this._runRclone(ctx,
-                    ['rmdirs', current, '--leave-root', ...common], {
+                    rmdirsArgs(current, deleteFilter, job), {
                         phase: 'deleting',
                         cancellable,
                     });

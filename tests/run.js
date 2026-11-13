@@ -5,6 +5,17 @@ import utilSuite from './unit/util.test.js';
 import jobsSuite from './unit/jobs.test.js';
 import queueSuite from './unit/queue.test.js';
 import configSuite from './unit/config.test.js';
+import objectSuite from './unit/domain/object.test.js';
+import timeSuite from './unit/domain/time.test.js';
+import backupLayoutSuite from './unit/domain/backup-layout.test.js';
+import deleteGuardSuite from './unit/domain/delete-guard.test.js';
+import retentionSuite from './unit/domain/retention.test.js';
+import changeBatcherSuite from './unit/domain/change-batcher.test.js';
+import rcloneCommandSuite from './unit/domain/rclone-command.test.js';
+import rcloneLogSuite from './unit/domain/rclone-log.test.js';
+import jobSuite from './unit/domain/job.test.js';
+import runStateSuite from './unit/domain/run-state.test.js';
+import errorsSuite from './unit/domain/errors.test.js';
 import runnerSuite from './integration/runner.test.js';
 import watcherSuite from './integration/watcher.test.js';
 
@@ -19,6 +30,17 @@ const suites = [
     jobsSuite,
     queueSuite,
     configSuite,
+    objectSuite,
+    timeSuite,
+    backupLayoutSuite,
+    deleteGuardSuite,
+    retentionSuite,
+    changeBatcherSuite,
+    rcloneCommandSuite,
+    rcloneLogSuite,
+    jobSuite,
+    runStateSuite,
+    errorsSuite,
     runnerSuite,
     watcherSuite,
 ];
