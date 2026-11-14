@@ -73,6 +73,12 @@ usa polling a cada 5 minutos (configurável) e reconciliação completa periódi
     "volumeUuid": "6e192d2d-0de8-4939-b7d7-a8976c7e5448",
     "relativePath": "Documentos"
   },
+  "sources": [
+    {
+      "kind": "local",
+      "path": "/home/user/Documentos"
+    }
+  ],
   "destination": {
     "kind": "remote",
     "remote": "gdrive-pessoal",
@@ -91,7 +97,8 @@ usa polling a cada 5 minutos (configurável) e reconciliação completa periódi
     "transfers": 4,
     "checkers": 8,
     "preserveMetadata": false,
-    "followSymlinks": false
+    "followSymlinks": false,
+    "notifyOnComplete": true
   },
   "backup": {
     "retentionDays": 30
@@ -164,6 +171,11 @@ Layout no destino:
 <destino>/SaveMe/<job-id>/versions/<timestamp>-<mmm>-<run>/<caminho-relativo>
 ```
 
+O destino escolhido é a pasta-base; o app cria `SaveMe` dentro dela e recusa o
+job se essa pasta já existir. Cada job grava `manifest.json` para recuperação.
+Com múltiplas origens, `current` e `versions` têm uma subpasta por origem
+(nomes duplicados recebem sufixo).
+
 Para remote:
 
 ```
@@ -224,8 +236,10 @@ job começa um novo espelho; os arquivos do destino antigo não são movidos.
 - Dry-run e resumo antes de salvar/ativar.
 - Logs por job e por execução.
 - Gestão de logs: uso em disco, retenção, limpeza, sanitização e log do app.
-- Performance: RSS, pico, CPU e status do orçamento, com amostras no app log.
-- Restauração atual e de versões.
+- Performance: RSS, pico, CPU do app/daemon e CPU/memória da máquina.
+- Backup com múltiplas origens locais e notificação de conclusão por job.
+- Recuperação: indicar uma pasta `SaveMe`, importar o job pelo manifesto e
+  restaurar para uma pasta local diferente da original.
 - Preferências: notificações, iniciar com a sessão, limites, idioma.
 - Diagnóstico (“Doctor”): rclone, daemon, inotify, keyring, mounts.
 
@@ -323,6 +337,12 @@ instalação limpa do Ubuntu 26.04:
 17. Sync da raiz do Google Drive para destino local com espaço insuficiente
     para como `no-space` sem escrever arquivos; o browser recusa listagens
     acima do limite e orienta abrir uma subpasta.
+18. Criar backup com duas pastas locais e destino OneDrive; o app cria
+    `SaveMe/<job-id>` e o layout por origem; o job roda a cada hora.
+19. Durante o backup, o app mostra arquivo, velocidade, ETA, CPU e memória da
+    máquina; ao concluir, notifica se a opção do job estiver ligada.
+20. Em uma instalação nova, indicar a pasta `SaveMe`, importar o manifesto,
+    escolher o backup e restaurar para outra pasta local.
 
 ## 14. Riscos conhecidos
 

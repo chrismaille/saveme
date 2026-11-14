@@ -14,6 +14,7 @@ import {DaemonApi} from './adapters/dbus/api.js';
 import {SystemClock} from './adapters/system/clock.js';
 import {LogStore} from './adapters/system/log-store.js';
 import {cpuPercent, readProcessMetrics} from './adapters/system/process-metrics.js';
+import {readSystemMetrics} from './adapters/system/system-metrics.js';
 import {DaemonService} from './application/daemon-service.js';
 import {LogService} from './application/log-service.js';
 import {createJobRunner, createRestoreService} from './composition/runner.js';
@@ -69,6 +70,8 @@ export const SaveMeDaemonApplication = GObject.registerClass({
         this._lastProcessMetrics = null;
         this._processSamples = 0;
         this._processWarned = false;
+        this._systemMetrics = null;
+        this._lastSystemSample = null;
         this._auth = null;
         this._dbus = null;
         this._api = null;
@@ -166,6 +169,7 @@ export const SaveMeDaemonApplication = GObject.registerClass({
             logger: this._logger,
             logs: this._logService,
             processMetrics: () => this._processMetrics,
+            systemMetrics: () => this._systemMetrics,
             startedAt: this._startedAt,
             idFactory: prefix => uniqueId(prefix),
             getPid,
@@ -273,6 +277,10 @@ export const SaveMeDaemonApplication = GObject.registerClass({
             return null;
         const cpu = cpuPercent(this._lastProcessMetrics, current);
         this._lastProcessMetrics = current;
+        this._systemMetrics = readSystemMetrics({
+            previous: this._lastSystemSample,
+        });
+        this._lastSystemSample = this._systemMetrics?.cpu || null;
         this._processSamples++;
         const metrics = {
             rssBytes: Number(current.rssBytes) || 0,
@@ -289,6 +297,11 @@ export const SaveMeDaemonApplication = GObject.registerClass({
                 rssMiB: Number(rssMiB.toFixed(1)),
                 peakMiB: Number((metrics.peakRssBytes / (1024 * 1024)).toFixed(1)),
                 cpuPercent: Number(cpu.toFixed(1)),
+                systemCpuPercent: this._systemMetrics
+                    ? Number(this._systemMetrics.cpuPercent.toFixed(1)) : null,
+                systemMemoryUsedMiB: this._systemMetrics
+                    ? Number((this._systemMetrics.memory.usedBytes / (1024 * 1024)).toFixed(1))
+                    : null,
                 samples: metrics.samples,
             });
         }

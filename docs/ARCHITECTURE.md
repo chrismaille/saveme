@@ -89,19 +89,21 @@ app/                  SaveMe Settings (GTK4/Adwaita)
   observability/      métricas de processo, monitor e log do app
   pages/              JobsPage, AccountsPage, LogsPage, SettingsPage,
                       DebugPage
+  recover-dialog.js   importação de jobs a partir de uma pasta SaveMe
   widgets/            helpers GTK compartilhados (status, linhas, read tail)
   job-editor.js       diálogos de job, conta, restore, logs e browser
   style.css
 src/                  daemon e bibliotecas compartilhadas internas
   domain/             regras puras, sem gi:// (backup, retenção, delete guard,
                       change batching, comandos rclone, parser de log, erros,
-                      política de logs)
+                      política de logs, espaço em disco, manifesto de backup)
   ports/              contratos runtime dos ports (transfer, fs, clock, state…)
   adapters/           implementações GI/rclone/JSON/system
     rclone/           transfer engine
     gio/              filesystem, raw log, watcher, volumes
     persistence/      config, state e runs
-    system/           clock, logger, paths, log store, arquivo rotativo
+    system/           clock, logger, paths, log store, arquivo rotativo,
+                      métricas de processo e do sistema
     dbus/             DaemonApi fino
   application/        SyncService, BackupService, RestoreService,
                       RunCoordinator, RunExecutor, DaemonService, LogService,
@@ -188,6 +190,8 @@ Entidades:
 
 - **Remote**: nome, tipo, label, conta. O segredo fica no `rclone.conf`.
 - **Job**: origem, destino, tipo, trigger, filtros, opções, retenção.
+  Jobs de backup podem ter `sources[]` (duas ou mais pastas locais); `source`
+  continua espelhando a primeira origem para compatibilidade.
 - **Run**: id, job, kind (`sync`, `backup`, `reconcile`, `dry-run`, `restore`),
   início/fim, resultado, exit code, estatísticas, arquivos com erro, log.
 - **JobState**: status, último run, próximo run, progresso, mensagem.
@@ -227,6 +231,9 @@ PruneLogs() -> s                         # JSON: removidos/bytes
 ClearLogs(s scope) -> s                  # all|daemon|run-logs
 SanitizeLogs() -> s                      # JSON: arquivos/alterados/pulados
 UpdateSettings(s payload_json) -> s      # JSON: settings aplicadas
+SaveJob(s payload_json) -> s             # JSON: job salvo
+ImportJob(s payload_json) -> s           # recupera job de manifesto
+InspectBackup(s path) -> s               # JSON: jobs/manifestos na pasta SaveMe
 ```
 
 Sinais:
@@ -245,6 +252,19 @@ Na Fase 4, `adapters/dbus/api.js` é um adapter fino: cada método converte
 booleanos/GVariant e delega ao `DaemonService`. O contrato completo está em
 `src/dbus.js`; o daemon só cuida de ciclo de vida, sinais, notificações,
 energia e rede.
+
+### Backup, manifesto e recuperação
+
+- O destino escolhido é a base; o daemon cria `<base>/SaveMe/<job-id>/`.
+- Se `SaveMe` já existir na base, o novo job é recusado.
+- Cada job de backup grava `manifest.json` com id, fontes, destino, trigger,
+  filtros, opções e retenção.
+- Job com uma fonte usa `current/<arquivos>` e `versions/<data>/...`.
+- Job com múltiplas fontes usa `current/<fonte>/...` e
+  `versions/<data>/<fonte>/...`; nomes duplicados recebem sufixo.
+- `InspectBackup` lê os manifestos; o app importa o job como desabilitado/manual
+  e abre o fluxo de restauração, que aceita qualquer pasta local de destino.
+- Backups antigos sem manifesto aparecem no inventário como não recuperáveis.
 
 ## 8. Watcher em tempo real
 
@@ -388,6 +408,10 @@ Para remotes, o caminho equivalente é
   abrir uma subpasta, evitando `lsjson`/`lsf` gigantes na memória.
 - O daemon amostra o próprio RSS/pico/CPU a cada 5 s, loga a cada 60 s e avisa
   acima de 256 MiB; o snapshot expõe as métricas para o app.
+- O daemon também amostra CPU e memória da máquina via `/proc/stat` e
+  `/proc/meminfo`; o app mostra em Settings/Debug e nos detalhes do job.
+- Notificações de conclusão de backup são por job
+  (`options.notifyOnComplete`, padrão ligado).
 - Ao iniciar, jobs `realtime`/`interval` atrasados rodam imediatamente.
 - `logind` (`PrepareForSleep`) dispara reconciliação no resume.
 - `Gio.NetworkMonitor` pausa jobs de nuvem quando offline e retoma ao voltar.

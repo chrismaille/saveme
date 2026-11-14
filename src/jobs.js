@@ -12,6 +12,7 @@ import {
     isRemoteDescriptor,
     jobDefaults,
     jobRemoteNames,
+    jobSources,
     localPathFor,
     normalizeJobFields,
     remotePathFor,
@@ -26,6 +27,7 @@ export {
     isLocalDescriptor,
     isRemoteDescriptor,
     jobRemoteNames,
+    jobSources,
     localPathFor,
     remotePathFor,
 };
@@ -64,7 +66,13 @@ export function validateJob(job, {remotes = [], volumes = null, checkPaths = fal
     if (!job || typeof job !== 'object')
         return errors;
 
-    for (const [label, descriptor] of [['origem', job.source], ['destino', job.destination]]) {
+    for (const [label, descriptor] of [
+        ...jobSources(job).map((source, index) => [
+            jobSources(job).length > 1 ? `origem ${index + 1}` : 'origem',
+            source,
+        ]),
+        ['destino', job.destination],
+    ]) {
         if (descriptor?.kind === 'local' && checkPaths && descriptor.path &&
             !descriptor.volumeUuid &&
             !GLib.file_test(descriptor.path, GLib.FileTest.EXISTS)) {
@@ -72,11 +80,17 @@ export function validateJob(job, {remotes = [], volumes = null, checkPaths = fal
         }
     }
 
-    if (job.source?.kind === 'local' && job.destination?.kind === 'local') {
-        const sourcePath = localPathFor(job.source, volumes);
+    if (job.destination?.kind === 'local') {
         const destPath = localPathFor(job.destination, volumes);
-        if (sourcePath && destPath && pathsOverlap(sourcePath, destPath))
-            errors.push('Origem e destino não podem ser iguais nem um dentro do outro.');
+        for (const [index, source] of jobSources(job).entries()) {
+            if (source?.kind !== 'local')
+                continue;
+            const sourcePath = localPathFor(source, volumes);
+            if (sourcePath && destPath && pathsOverlap(sourcePath, destPath)) {
+                const label = jobSources(job).length > 1 ? `origem ${index + 1}` : 'origem';
+                errors.push(`${label} e destino não podem ser iguais nem um dentro do outro.`);
+            }
+        }
     }
 
     return errors;

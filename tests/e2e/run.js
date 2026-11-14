@@ -209,6 +209,7 @@ async function syncScenario() {
 
     await waitFor(() => fileEquals(path('sync-dst', 'a.txt'), 'one'));
     ok('sync: initial copy through daemon');
+    await sleep(500);
 
     write(path('sync-src', 'a.txt'), 'two');
     await waitFor(() => fileEquals(path('sync-dst', 'a.txt'), 'two'));
@@ -255,6 +256,7 @@ async function backupScenario() {
         source: {kind: 'local', path: source},
         destination: {kind: 'local', path: destination},
         trigger: {mode: 'manual'},
+        options: {notifyOnComplete: false},
         backup: {retentionDays: 0},
     });
     await client.saveJob(job);
@@ -366,6 +368,73 @@ async function pauseResumeScenario() {
     await client.deleteJob(job.id);
 }
 
+async function multiSourceBackupScenario() {
+    const sourceA = path('multi-a');
+    const sourceB = path('multi-b');
+    const destination = path('multi-dst');
+    GLib.mkdir_with_parents(sourceA, 0o700);
+    GLib.mkdir_with_parents(sourceB, 0o700);
+    GLib.mkdir_with_parents(destination, 0o700);
+    write(path('multi-a', 'a.txt'), 'alpha');
+    write(path('multi-b', 'b.txt'), 'beta');
+    const job = defaultJob({
+        name: 'E2E Multi Backup',
+        type: JOB_TYPES.BACKUP,
+        sources: [
+            {kind: 'local', path: sourceA},
+            {kind: 'local', path: sourceB},
+        ],
+        destination: {kind: 'local', path: destination},
+        trigger: {mode: 'interval', intervalMinutes: 60},
+        options: {notifyOnComplete: false},
+        backup: {retentionDays: 0},
+    });
+    const saved = await client.saveJob(job);
+    await waitFor(() =>
+        fileEquals(path('multi-dst', 'SaveMe', saved.id, 'current', 'multi-a', 'a.txt'), 'alpha') &&
+        fileEquals(path('multi-dst', 'SaveMe', saved.id, 'current', 'multi-b', 'b.txt'), 'beta'));
+    ok('backup: multi-source current tree');
+
+    const manifest = path('multi-dst', 'SaveMe', saved.id, 'manifest.json');
+    if (!GLib.file_test(manifest, GLib.FileTest.EXISTS))
+        throw new Error('multi-source manifest missing');
+    const inspected = await client.inspectBackup(path('multi-dst', 'SaveMe'));
+    if (!inspected.jobs.some(entry => entry.job?.id === saved.id))
+        throw new Error('multi-source job not recovered');
+    ok('backup: manifest and recovery inventory');
+
+    let rejected = false;
+    try {
+        await client.saveJob(defaultJob({
+            name: 'E2E Duplicate Container',
+            type: JOB_TYPES.BACKUP,
+            sources: [{kind: 'local', path: sourceA}],
+            destination: {kind: 'local', path: destination},
+            trigger: {mode: 'manual'},
+        }));
+    } catch (e) {
+        rejected = /already exists/.test(e.message);
+    }
+    if (!rejected)
+        throw new Error('existing SaveMe container was not rejected');
+    ok('backup: existing SaveMe container rejected');
+
+    const restoreTarget = path('multi-restore');
+    GLib.mkdir_with_parents(restoreTarget, 0o700);
+    await client.restore({
+        jobId: saved.id,
+        version: '',
+        path: '',
+        target: restoreTarget,
+        dryRun: false,
+    });
+    await waitFor(() =>
+        fileEquals(path('multi-restore', 'multi-a', 'a.txt'), 'alpha') &&
+        fileEquals(path('multi-restore', 'multi-b', 'b.txt'), 'beta'));
+    ok('backup: multi-source restore to a new local folder');
+    await client.deleteJob(saved.id);
+}
+
 async function restartScenario() {
     const oldDaemon = daemon;
     await stopDaemon(oldDaemon);
@@ -411,6 +480,13 @@ async function main() {
         snapshot = await client.getSnapshot();
     } catch (e) {
         fail('backup scenario', e);
+    }
+
+    try {
+        await multiSourceBackupScenario();
+        snapshot = await client.getSnapshot();
+    } catch (e) {
+        fail('multi-source backup scenario', e);
     }
 
     try {

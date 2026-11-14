@@ -28,6 +28,14 @@ export const DAEMON_INTERFACE = `
       <arg type="s" direction="in"/>
       <arg type="s" direction="out"/>
     </method>
+    <method name="ImportJob">
+      <arg type="s" direction="in"/>
+      <arg type="s" direction="out"/>
+    </method>
+    <method name="InspectBackup">
+      <arg type="s" direction="in"/>
+      <arg type="s" direction="out"/>
+    </method>
     <method name="DeleteJob">
       <arg type="s" direction="in"/>
     </method>

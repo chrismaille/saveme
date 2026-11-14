@@ -8,6 +8,8 @@ import GObject from 'gi://GObject';
 import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
 import {DaemonGateway} from './gateway/daemon-gateway.js';
+import {JobEditor} from './job-editor.js';
+import {defaultJob} from '../src/jobs.js';
 import {AppLog} from './observability/app-log.js';
 import {AppMonitor} from './observability/app-monitor.js';
 import {buildSoakSnapshot} from './observability/soak.js';
@@ -143,6 +145,16 @@ const SaveMeApplication = GObject.registerClass({
             return;
         }
         try {
+            const editor = new JobEditor(this._window, null);
+            editor.close();
+            const backupEditor = new JobEditor(this._window, defaultJob({
+                name: 'Smoke backup',
+                type: 'backup',
+                source: {kind: 'local', path: '/tmp/saveme-smoke'},
+                destination: {kind: 'local', path: '/tmp/saveme-smoke-dest'},
+                trigger: {mode: 'interval', intervalMinutes: 60},
+            }));
+            backupEditor.close();
             for (const view of ['jobs', 'accounts', 'logs', 'settings', 'debug'])
                 this._window.showView(view);
         } catch (e) {

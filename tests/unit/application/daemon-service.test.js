@@ -69,6 +69,9 @@ class FakeTransfer {
         this.deleted = [];
         this.sizes = new Map();
         this.lastSize = null;
+        this.paths = new Set();
+        this.files = new Map();
+        this.dirs = new Map();
     }
     getVersion() { if (this.version instanceof Error) throw this.version; return this.version; }
     checkVersion() { return true; }
@@ -76,6 +79,15 @@ class FakeTransfer {
         this.lastSize = {path, ...options};
         return this.sizes.get(path) ?? {count: 0, bytes: 0};
     }
+    exists(path) { return this.paths.has(path); }
+    mkdir(path) { this.paths.add(path); }
+    writeText(path, text) { this.files.set(path, text); this.paths.add(path); }
+    readText(path) {
+        if (!this.files.has(path))
+            throw new Error(`Cannot read ${path}`);
+        return this.files.get(path);
+    }
+    listDirs(path) { return this.dirs.get(path) ?? []; }
     runCapture(args) {
         this.captures.push(args);
         if (this.captureHandler) return this.captureHandler(args);
@@ -109,6 +121,8 @@ function makeService(overrides = {}) {
             clear: scope => ({scope, deleted: 2}),
             sanitize: () => ({files: 1, changed: 1}),
         }),
+        processMetrics: overrides.processMetrics || null,
+        systemMetrics: overrides.systemMetrics || null,
         startedAt: '2026-01-01T00:00:00.000Z',
         idFactory: prefix => `${prefix}fixed`,
         getPid: () => 42,
@@ -146,9 +160,20 @@ export default suite('application/daemon-service', [
         assertEqual(snapshot.version, '1.0.0-dev');
         assertEqual(snapshot.daemon.pid, 42);
         assertEqual(snapshot.daemon.process, null);
+        assertEqual(snapshot.system, null);
         assertEqual(snapshot.jobs[0].state.status, 'idle');
         assertEqual(snapshot.remotes.length, 1);
         assertEqual(snapshot.volumes.length, 1);
+    }),
+    test('snapshotJson includes process and machine metrics when available', () => {
+        const ctx = makeService({
+            processMetrics: () => ({rssBytes: 1024}),
+            systemMetrics: () => ({cpuPercent: 12, memory: {usedBytes: 1}}),
+        });
+        const snapshot = JSON.parse(ctx.service.snapshotJson());
+        assertEqual(snapshot.daemon.process.rssBytes, 1024);
+        assertEqual(snapshot.system.cpuPercent, 12);
+        assertEqual(new DaemonService({}).logs, null);
     }),
     test('snapshotJson reports a missing rclone', () => {
         const ctx = makeService();
@@ -193,6 +218,64 @@ export default suite('application/daemon-service', [
         assertEqual(ctx.config.getJob('old').name, 'Updated');
         assertEqual(ctx.manager.calls[0][0], 'addJob');
         assertEqual(ctx.manager.calls[1][0], 'addJob');
+    }),
+    test('new backup creates SaveMe, rejects an existing container and writes manifest', () => {
+        const ctx = makeService();
+        const payload = {...backupJob(), sources: [backupJob().source]};
+        delete payload.state;
+        const saved = JSON.parse(ctx.service.saveJob(JSON.stringify(payload)));
+        assertEqual(saved.type, 'backup');
+        assert(ctx.transfer.paths.has('/dst/SaveMe'));
+        assert(ctx.transfer.paths.has('/dst/SaveMe/job_1/current'));
+        assert(ctx.transfer.files.has('/dst/SaveMe/job_1/manifest.json'));
+
+        const updated = JSON.parse(ctx.service.saveJob(JSON.stringify({
+            ...saved,
+            name: 'Renamed',
+        })));
+        assertEqual(updated.name, 'Renamed');
+        assert(ctx.transfer.files.has('/dst/SaveMe/job_1/manifest.json'));
+
+        const other = makeService();
+        other.transfer.paths.add('/dst/SaveMe');
+        assertThrows(() => other.service.saveJob(JSON.stringify({
+            id: 'job_2', name: 'Other', type: 'backup',
+            source: {kind: 'local', path: '/src'},
+            destination: {kind: 'local', path: '/dst'},
+        })), /already exists/);
+        assertEqual(other.config.getJob('job_2'), null);
+    }),
+    test('manifest write failures remove a new backup job', () => {
+        const ctx = makeService();
+        ctx.transfer.writeText = () => {
+            throw new Error('remote offline');
+        };
+        assertThrows(() => ctx.service.saveJob(JSON.stringify({
+            ...backupJob(), sources: [backupJob().source],
+        })), /remote offline/);
+        assertEqual(ctx.config.getJob('job_1'), null);
+    }),
+    test('import and inspect backup jobs', () => {
+        const ctx = makeService();
+        const job = {...backupJob(), sources: [backupJob().source]};
+        const manifest = JSON.stringify({
+            version: 1,
+            job,
+        });
+        ctx.transfer.dirs.set('/dst/SaveMe', ['job_1', 'broken']);
+        ctx.transfer.files.set('/dst/SaveMe/job_1/manifest.json', manifest);
+        const inspected = JSON.parse(ctx.service.inspectBackup('/dst/SaveMe'));
+        assertEqual(inspected.jobs.length, 2);
+        assertEqual(inspected.jobs[0].job.id, 'job_1');
+        assert(/Cannot read/.test(inspected.jobs[1].error));
+        assertThrows(() => ctx.service.inspectBackup(''), /Backup folder is required/);
+        const imported = JSON.parse(ctx.service.importJob(JSON.stringify(job)));
+        assertEqual(imported.id, 'job_1');
+        assertEqual(ctx.manager.calls.at(-1)[0], 'addJob');
+        const importedAgain = JSON.parse(ctx.service.importJob(JSON.stringify(job)));
+        assertEqual(importedAgain.id, 'job_1');
+        assertThrows(() => ctx.service.importJob(JSON.stringify({id: 'x', type: 'sync'})),
+            /Only backup/);
     }),
     test('runs and logs use the state/read adapter', () => {
         const ctx = makeService();
@@ -240,6 +323,11 @@ export default suite('application/daemon-service', [
         ctx.transfer.sizes.set('drive:', {count: 10000, bytes: 100});
         assertThrows(() => ctx.service.listRemote('drive', '', false),
             /open a subfolder/);
+        ctx.transfer.sizes.clear();
+        ctx.transfer.size = () => {
+            throw new Error('size unavailable');
+        };
+        assertEqual(JSON.parse(ctx.service.listRemote('drive', '', true)).length, 1);
     }),
     test('listBackup handles current, version and invalid inputs', () => {
         const ctx = makeService();

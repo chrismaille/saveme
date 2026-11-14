@@ -1,6 +1,7 @@
 import {
     backupCurrentFor,
     joinRclonePath,
+    uniqueSourceFolderNames,
 } from '../domain/backup-layout.js';
 import {exitCodeMessage, isSuccessExit} from '../domain/rclone-log.js';
 import {
@@ -38,37 +39,51 @@ export class BackupService {
         ctx.onProgress = onProgress;
         try {
             const prep = resolveJobTargets(job, {files: this.files, volumes: this.volumes});
-            const exact = prep.destIsLocal;
-            const source = await this.executor.sourceStats(job, prep, {
-                exact,
-                cancellable,
-            });
-            const sourceCount = source.count;
+            const stats = await Promise.all(prep.sources.map(source =>
+                this.executor.sourceStats(job, {
+                    source: source.path,
+                    sourceIsLocal: source.isLocal,
+                }, {
+                    exact: true,
+                    cancellable,
+                })));
+            const sourceCount = stats.reduce((sum, item) => sum + item.count, 0);
+            const sourceBytes = stats.reduce((sum, item) => sum + item.bytes, 0);
             if (Number.isFinite(sourceCount))
                 ctx.sourceFileCount = sourceCount;
             this.executor.checkEmptySource(job, sourceCount, force);
             if (!dryRun)
-                this.executor.checkDiskSpace(job, prep, source.bytes);
+                this.executor.checkDiskSpace(job, prep, sourceBytes);
 
             const filterFile = this.executor.filterFile(job);
-            const current = backupCurrentFor(job, prep.dest);
-            const versionDir = this.executor.versionDir(job, prep.dest, ctx);
-            ctx.versionsDir = versionDir;
-            let args = backupArgs(prep.source, current, versionDir, filterFile, job);
-            if (!prep.sourceIsLocal || !prep.destIsLocal)
-                args = withFastList(args);
-            if (dryRun)
-                args = withDryRun(args);
+            const baseCurrent = backupCurrentFor(job, prep.dest);
+            const versionBase = this.executor.versionDir(job, prep.dest, ctx);
+            ctx.versionsDir = versionBase;
+            const labels = uniqueSourceFolderNames(job);
+            const multi = prep.sources.length > 1;
 
-            const result = await this.executor.runRclone(ctx, args, {
-                phase: 'syncing',
-                cancellable,
-            });
-            if (result.cancelled)
-                return this.executor.endRun(ctx, 'cancelled', 'Cancelled');
-            if (!isSuccessExit(result.exitCode))
-                return this.executor.endRun(ctx, 'error',
-                    result.lastError || exitCodeMessage(result.exitCode));
+            for (const [index, source] of prep.sources.entries()) {
+                const current = multi
+                    ? joinRclonePath(baseCurrent, labels[index])
+                    : baseCurrent;
+                const versionDir = multi
+                    ? joinRclonePath(versionBase, labels[index])
+                    : versionBase;
+                let args = backupArgs(source.path, current, versionDir, filterFile, job);
+                if (!source.isLocal || !prep.destIsLocal)
+                    args = withFastList(args);
+                if (dryRun)
+                    args = withDryRun(args);
+                const result = await this.executor.runRclone(ctx, args, {
+                    phase: 'syncing',
+                    cancellable,
+                });
+                if (result.cancelled)
+                    return this.executor.endRun(ctx, 'cancelled', 'Cancelled');
+                if (!isSuccessExit(result.exitCode))
+                    return this.executor.endRun(ctx, 'error',
+                        result.lastError || exitCodeMessage(result.exitCode));
+            }
             if (!dryRun)
                 await this.executor.cleanupVersions(ctx, job, prep.dest, cancellable);
             return this.executor.endRun(ctx, 'success');
@@ -95,6 +110,8 @@ export class BackupService {
         ctx.onProgress = onProgress;
         try {
             const prep = resolveJobTargets(job, {files: this.files, volumes: this.volumes});
+            if (prep.sources.length > 1)
+                throw new Error('Multi-source backups require interval or manual mode.');
             if (!prep.sourceIsLocal)
                 throw new Error('Incremental backup requires a local source.');
             const plan = planChanges({

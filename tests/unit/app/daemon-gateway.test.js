@@ -20,6 +20,8 @@ function fakeClient() {
         'setJobEnabled',
         'pauseAll',
         'saveJob',
+        'importJob',
+        'inspectBackup',
         'deleteJob',
         'getRun',
         'getRunLog',
@@ -101,6 +103,8 @@ export default suite('app/gateway/daemon-gateway', [
         const gateway = new DaemonGateway({client});
         const job = {id: 'job', name: 'Daily'};
         assertEqual(await gateway.saveJob(job), 'saveJob-result');
+        assertEqual(await gateway.importJob(job), 'importJob-result');
+        assertEqual(await gateway.inspectBackup('/SaveMe'), 'inspectBackup-result');
         assertEqual(await gateway.beginRemoteAuth('drive', 'me'), 'beginRemoteAuth-result');
         assertEqual(await gateway.beginRemoteAuth('drive', 'me', {scope: 'x'}),
             'beginRemoteAuth-result');

@@ -190,6 +190,10 @@ if ! printf '%s' "$SETTINGS" | grep -q '"process"'; then
     echo "Daemon snapshot does not expose process metrics" >&2
     exit 1
 fi
+if ! printf '%s' "$SETTINGS" | grep -q '"system"'; then
+    echo "Daemon snapshot does not expose machine metrics" >&2
+    exit 1
+fi
 if ! printf '%s' "$SETTINGS" | grep -q '"diskSafetyPercent"'; then
     echo "Daemon snapshot does not expose disk safety settings" >&2
     exit 1

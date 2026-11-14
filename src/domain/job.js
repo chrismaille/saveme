@@ -21,6 +21,7 @@ export function jobDefaults(input = {}, {
         type: JOB_TYPES.SYNC,
         enabled: true,
         source: {kind: 'local', path: ''},
+        sources: [],
         destination: {kind: 'local', path: ''},
         trigger: {mode: TRIGGER_MODES.REALTIME},
         filters: {exclude: []},
@@ -32,6 +33,7 @@ export function jobDefaults(input = {}, {
             checkers: 8,
             preserveMetadata: false,
             followSymlinks: false,
+            notifyOnComplete: true,
         },
         backup: {retentionDays: 30},
         createdAt: now(),
@@ -43,6 +45,11 @@ export function jobDefaults(input = {}, {
 export function normalizeJobFields(job) {
     job.id = job.id || '';
     job.type = Object.values(JOB_TYPES).includes(job.type) ? job.type : JOB_TYPES.SYNC;
+    const sources = Array.isArray(job.sources) ? job.sources.filter(Boolean) : [];
+    if (sources.length === 0 && job.source)
+        sources.push(job.source);
+    job.sources = sources;
+    job.source = sources[0] || job.source;
     job.trigger.mode = Object.values(TRIGGER_MODES).includes(job.trigger.mode)
         ? job.trigger.mode
         : TRIGGER_MODES.REALTIME;
@@ -51,9 +58,18 @@ export function normalizeJobFields(job) {
     job.options.maxDeleteMinimum = toNumber(job.options.maxDeleteMinimum, 10);
     job.options.transfers = toNumber(job.options.transfers, 4);
     job.options.checkers = toNumber(job.options.checkers, 8);
+    job.options.notifyOnComplete = job.options.notifyOnComplete !== false;
     job.backup.retentionDays = toNumber(job.backup.retentionDays, 30);
     job.enabled = Boolean(job.enabled);
     return job;
+}
+
+export function jobSources(job) {
+    if (!job)
+        return [];
+    if (Array.isArray(job.sources) && job.sources.length > 0)
+        return job.sources.filter(Boolean);
+    return job.source ? [job.source] : [];
 }
 
 export function isLocalDescriptor(descriptor) {
@@ -163,8 +179,20 @@ export function validateJobFields(job, {remotes = []} = {}) {
     if (!Object.values(JOB_TYPES).includes(job.type))
         errors.push('O tipo deve ser "sync" ou "backup".');
 
+    const sources = jobSources(job);
+    if (sources.length === 0)
+        errors.push('A origem é obrigatória.');
+    if (job.type === JOB_TYPES.SYNC && sources.length > 1)
+        errors.push('Sync jobs have exactly one source. Use Backup for multiple sources.');
+    if (job.type === JOB_TYPES.BACKUP && sources.length > 1 &&
+        job.trigger?.mode === TRIGGER_MODES.REALTIME)
+        errors.push('Backup with multiple sources requires interval or manual mode.');
+
     const descriptors = [
-        {label: 'origem', descriptor: job.source},
+        ...sources.map((descriptor, index) => ({
+            label: sources.length > 1 ? `origem ${index + 1}` : 'origem',
+            descriptor,
+        })),
         {label: 'destino', descriptor: job.destination},
     ];
     for (const item of descriptors) {
@@ -182,14 +210,24 @@ export function validateJobFields(job, {remotes = []} = {}) {
         } else {
             if (!descriptor.remote)
                 errors.push(`A ${label} remota precisa de um remote.`);
-            else if (remotes.length > 0 && !remotes.includes(descriptor.remote))
+            else if (remotes.length > 0 && !remotes.includes(descriptor.remote) && !job.recovered)
                 errors.push(`Remote desconhecido na ${label}: ${descriptor.remote}`);
         }
     }
 
-    if (job.source?.kind === 'remote' && job.destination?.kind === 'remote') {
-        if (remotePathsOverlap(job.source, job.destination))
-            errors.push('Origem e destino remotos não podem apontar para o mesmo caminho.');
+    const sourceKeys = new Set();
+    for (const source of sources) {
+        const key = descriptorKey(source);
+        if (key && sourceKeys.has(key))
+            errors.push('As origens não podem ser duplicadas.');
+        sourceKeys.add(key);
+    }
+
+    for (const source of sources) {
+        if (source?.kind === 'remote' && job.destination?.kind === 'remote') {
+            if (remotePathsOverlap(source, job.destination))
+                errors.push('Origem e destino remotos não podem apontar para o mesmo caminho.');
+        }
     }
 
     if (!Object.values(TRIGGER_MODES).includes(job.trigger?.mode))
@@ -215,8 +253,10 @@ export function validateJobFields(job, {remotes = []} = {}) {
 
 export function jobRemoteNames(job) {
     const names = new Set();
-    if (job.source?.kind === 'remote')
-        names.add(job.source.remote);
+    for (const source of jobSources(job)) {
+        if (source?.kind === 'remote')
+            names.add(source.remote);
+    }
     if (job.destination?.kind === 'remote')
         names.add(job.destination.remote);
     return [...names];

@@ -1,19 +1,9 @@
 import {parseVersionTimestamp, versionTimestamp} from './time.js';
 
 export function backupRootFor(job, dest) {
-    if (job.destination.kind === 'remote') {
-        const colon = dest.indexOf(':');
-        if (colon < 0)
-            throw new Error(`Invalid remote destination: ${dest}`);
-        const remote = dest.slice(0, colon);
-        const remotePath = dest.slice(colon + 1).replace(/\/+$/, '');
-        const base = remotePath
-            ? `${remotePath}/SaveMe/${job.id}`
-            : `SaveMe/${job.id}`;
-        return `${remote}:${base}`;
-    }
-    const base = dest.replace(/\/+$/, '');
-    return `${base}/SaveMe/${job.id}`;
+    if (job.destination?.kind === 'remote' && !String(dest).includes(':'))
+        throw new Error(`Invalid remote destination: ${dest}`);
+    return `${backupContainerFor(dest)}/${job.id}`;
 }
 
 export function backupCurrentFor(job, dest) {
@@ -60,4 +50,36 @@ export function isValidVersionName(name) {
 
 export function isSafeRelativePath(path) {
     return !String(path).split('/').some(part => part === '..');
+}
+
+export function backupContainerFor(dest) {
+    if (String(dest).includes(':') && /^[^/]+:/.test(String(dest))) {
+        const colon = String(dest).indexOf(':');
+        const remote = String(dest).slice(0, colon);
+        const remotePath = String(dest).slice(colon + 1).replace(/\/+$/, '');
+        return remotePath ? `${remote}:${remotePath}/SaveMe` : `${remote}:SaveMe`;
+    }
+    return `${String(dest).replace(/\/+$/, '')}/SaveMe`;
+}
+
+export function sourceFolderName(descriptor, index = 0) {
+    const raw = descriptor?.path || '';
+    const base = rcloneBasename(raw);
+    const safe = base
+        .replace(/[^A-Za-z0-9._-]+/g, '-')
+        .replace(/^[-.]+|[-.]+$/g, '');
+    return safe || `source-${index + 1}`;
+}
+
+export function uniqueSourceFolderNames(job) {
+    const used = new Set();
+    return (job.sources?.length ? job.sources : [job.source]).map((source, index) => {
+        const base = sourceFolderName(source, index);
+        let name = base;
+        let suffix = 2;
+        while (used.has(name))
+            name = `${base}-${suffix++}`;
+        used.add(name);
+        return name;
+    });
 }

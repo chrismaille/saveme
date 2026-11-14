@@ -1,9 +1,16 @@
 import {
     backupCurrentFor,
+    backupContainerFor,
+    backupRootFor,
     isValidVersionName,
     joinRclonePath,
     versionsRootFor,
 } from '../domain/backup-layout.js';
+import {
+    BACKUP_MANIFEST_FILE,
+    parseBackupManifest,
+    serializeBackupManifest,
+} from '../domain/backup-manifest.js';
 import {JOB_TYPES, jobRemoteNames, localPathFor, remotePathFor} from '../domain/job.js';
 import {exitCodeMessage, isSuccessExit} from '../domain/rclone-log.js';
 import {parseVersionTimestamp} from '../domain/time.js';
@@ -52,6 +59,7 @@ export class DaemonService {
         logger,
         logs = null,
         processMetrics = null,
+        systemMetrics = null,
         startedAt,
         idFactory,
         getPid,
@@ -71,6 +79,7 @@ export class DaemonService {
         this.logger = logger;
         this.logs = logs;
         this.processMetrics = processMetrics;
+        this.systemMetrics = systemMetrics;
         this.startedAt = startedAt;
         this.idFactory = idFactory;
         this.getPid = getPid;
@@ -140,6 +149,7 @@ export class DaemonService {
             remotes: this.config.listRemotes(),
             jobs,
             volumes: this.volumes.list(),
+            system: this.systemMetrics?.() || null,
         });
     }
 
@@ -183,14 +193,97 @@ export class DaemonService {
     saveJob(payloadJson) {
         const payload = JSON.parse(payloadJson);
         delete payload.state;
+        const existing = payload.id ? this.config.getJob(payload.id) : null;
         let saved;
-        if (payload.id && this.config.getJob(payload.id))
+        if (payload.id && existing)
             saved = this.config.updateJob(payload.id, payload);
         else
             saved = this.config.addJob(payload);
+        if (saved.type === JOB_TYPES.BACKUP) {
+            try {
+                if (!existing)
+                    this._createBackupContainer(saved);
+                else
+                    this._writeManifest(saved);
+            } catch (e) {
+                if (!existing) {
+                    try {
+                        this.config.removeJob(saved.id);
+                    } catch (_) {
+                        // Best effort.
+                    }
+                }
+                throw e;
+            }
+        }
         this.manager.addJob(saved);
         this._snapshot(true);
         return JSON.stringify(saved);
+    }
+
+    importJob(payloadJson) {
+        const payload = JSON.parse(payloadJson);
+        delete payload.state;
+        if (!payload.id || payload.type !== JOB_TYPES.BACKUP)
+            throw new Error('Only backup jobs can be recovered.');
+        // A recovered job points at paths from another installation. Keep it
+        // stopped until the user confirms or edits the sources.
+        payload.enabled = false;
+        payload.recovered = true;
+        payload.trigger = {...payload.trigger, mode: 'manual'};
+        const existing = this.config.getJob(payload.id);
+        const saved = existing
+            ? this.config.updateJob(payload.id, payload)
+            : this.config.addJob(payload);
+        this.manager.addJob(saved);
+        this._snapshot(true);
+        return JSON.stringify(saved);
+    }
+
+    inspectBackup(path) {
+        const root = String(path || '').replace(/\/+$/, '');
+        if (!root)
+            throw new Error('Backup folder is required.');
+        const jobs = [];
+        for (const name of this.transfer.listDirs(root)) {
+            const backupPath = joinRclonePath(root, name);
+            const manifestPath = joinRclonePath(backupPath, BACKUP_MANIFEST_FILE);
+            try {
+                const job = parseBackupManifest(this.transfer.readText(manifestPath));
+                jobs.push({id: name, backupPath, job});
+            } catch (e) {
+                jobs.push({id: name, backupPath, error: e.message});
+            }
+        }
+        return JSON.stringify({path: root, jobs});
+    }
+
+    _createBackupContainer(job) {
+        const destination = this._resolveJobDestination(job);
+        const container = backupContainerFor(destination);
+        if (this.transfer.exists(container)) {
+            throw new Error(`Backup folder already exists: ${container}`);
+        }
+        const root = backupRootFor(job, destination);
+        this.transfer.mkdir(container);
+        this.transfer.mkdir(root);
+        this.transfer.mkdir(`${root}/current`);
+        this.transfer.mkdir(`${root}/versions`);
+        this._writeManifest(job, {strict: true});
+    }
+
+    _writeManifest(job, {strict = false} = {}) {
+        try {
+            const destination = this._resolveJobDestination(job);
+            const root = backupRootFor(job, destination);
+            this.transfer.writeText(
+                `${root}/${BACKUP_MANIFEST_FILE}`,
+                serializeBackupManifest(job));
+        } catch (e) {
+            if (strict)
+                throw e;
+            this.logger?.warn(`Cannot write backup manifest: ${e.message}`);
+        }
     }
 
     deleteJob(jobId) {
@@ -375,6 +468,7 @@ export class DaemonService {
             pausedAll: this.state.pausedAll,
             logs: this.logs?.info() || null,
             process: this.processMetrics?.() || null,
+            system: this.systemMetrics?.() || null,
         });
     }
 }

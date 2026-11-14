@@ -60,11 +60,21 @@ export class SettingsPage {
             title: 'Daemon memory',
             subtitle: 'Waiting for daemon sample',
         });
+        this.machineCpuRow = new Adw.ActionRow({
+            title: 'Machine CPU',
+            subtitle: 'Waiting for sample',
+        });
+        this.machineMemoryRow = new Adw.ActionRow({
+            title: 'Machine memory',
+            subtitle: 'Waiting for sample',
+        });
         this.perfStatusRow = new Adw.ActionRow({title: 'App budget', subtitle: 'Waiting for sample'});
         this.perfSamplesRow = new Adw.ActionRow({title: 'App samples', subtitle: '-'});
         performanceGroup.add(this.memoryRow);
         performanceGroup.add(this.cpuRow);
         performanceGroup.add(this.daemonMemoryRow);
+        performanceGroup.add(this.machineCpuRow);
+        performanceGroup.add(this.machineMemoryRow);
         performanceGroup.add(this.perfStatusRow);
         performanceGroup.add(this.perfSamplesRow);
         this.widget.add(performanceGroup);
@@ -163,6 +173,13 @@ export class SettingsPage {
         this.daemonMemoryRow.set_subtitle(process
             ? `${formatBytes(process.rssBytes)} · peak ${formatBytes(process.peakRssBytes)}`
             : 'Waiting for daemon sample');
+        const system = snapshot.system;
+        this.machineCpuRow.set_subtitle(system
+            ? `${Number(system.cpuPercent).toFixed(1)}%`
+            : 'Waiting for sample');
+        this.machineMemoryRow.set_subtitle(system?.memory
+            ? `${formatBytes(system.memory.usedBytes)} / ${formatBytes(system.memory.totalBytes)}`
+            : 'Waiting for sample');
         this.blockPauseUpdate = true;
         this.pauseAllRow.active = Boolean(snapshot.pausedAll);
         this.blockPauseUpdate = false;

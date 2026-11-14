@@ -62,11 +62,11 @@ adapters e no daemon, e cobertura comportamental E2E nas superfícies visuais.
 
 Estado atual (unit + integration + E2E de daemon):
 
-- domínio puro: **98,8% linha / 95,4% branch / 100% funções**;
-- aplicação: **98,4% linha / 85,0% branch / 100% funções**;
-- adapters Gio/persistência/system: **97,1% linha / 85,8% branch / 100% funções**;
+- domínio puro: **99,0% linha / 95,4% branch / 100% funções**;
+- aplicação: **98,7% linha / 85,0% branch / 100% funções**;
+- adapters Gio/persistência/system: **97,2% linha / 90,7% branch / 100% funções**;
 - adapter D-Bus (`DaemonApi`): **100% linha / 100% branch / 100% funções**;
-- `src/` global: **87,7% linha / 72,6% branch**.
+- `src/` global: **80,0% linha / 66,1% branch**.
 
 Os gates de domínio, aplicação, adapters e D-Bus rodam no `make coverage`.
 O adapter rclone é um wrapper de subprocesso e é validado por integração/E2E,
@@ -90,7 +90,9 @@ O E2E já cobre:
 - extensão ACTIVE em GNOME Shell headless com sync real;
 - retenção, limpeza e sanitização de logs via D-Bus;
 - sync remoto grande bloqueado por espaço local insuficiente;
-- browser remoto recusando pasta com muitas entradas.
+- browser remoto recusando pasta com muitas entradas;
+- backup multi-origem, manifesto, recuperação e restore para outra pasta;
+- recusa de um segundo job quando `SaveMe` já existe.
 
 Próximos cenários:
 
@@ -129,6 +131,9 @@ Cobre:
 - pré-checagem de espaço em disco (margem, mínimo e fator de backup);
 - pré-checagem de cota remota via `rclone about` quando disponível;
 - monitoramento de RSS/pico/CPU do daemon e exposição no snapshot;
+- métricas de CPU/memória da máquina via `/proc`;
+- manifesto de backup, importação de jobs recuperados e validação de fontes;
+- backup multi-origem e notificação de conclusão por job;
 - adapters Gio: filesystem, raw log, relógio, paths e run repository;
 - adapter D-Bus: conversão de booleanos e delegação;
 - gateways do app (`DaemonGateway`, `SystemLauncher`) e da extensão
@@ -208,6 +213,11 @@ Use uma instalação limpa do Ubuntu 26.04.
 - [ ] Sync da raiz do Drive para disco local com espaço insuficiente: job para
       como `no-space`, não escreve e mostra livre/exigido no Logs
 - [ ] Browser remoto de pasta com >2.000 entradas pede para abrir subpasta
+- [ ] Backup para OneDrive com duas pastas locais; conferir
+      `SaveMe/<job-id>/current/<fonte>/`
+- [ ] Criar outro job no mesmo destino; deve falhar porque `SaveMe` já existe
+- [ ] No app, abrir **Recover backup**, escolher a pasta `SaveMe`, importar o
+      job e restaurar para uma pasta local diferente
 - [ ] Sync nuvem → nuvem
 - [ ] Backup local → nuvem com versões
 - [ ] Ficar offline; job tenta com backoff e recupera depois

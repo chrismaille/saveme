@@ -34,6 +34,11 @@ export const JobEditor = GObject.registerClass({
             ? JSON.parse(JSON.stringify(job))
             : defaultJob());
         delete this.job.state;
+        this.sources = (this.job.sources?.length ? this.job.sources : [this.job.source])
+            .filter(Boolean)
+            .map(source => JSON.parse(JSON.stringify(source)));
+        if (this.sources.length === 0)
+            this.sources.push({kind: 'local', path: ''});
         this._build();
     }
 
@@ -56,6 +61,7 @@ export const JobEditor = GObject.registerClass({
         toolbar.add_top_bar(header);
 
         const page = new Adw.PreferencesPage();
+        this.page = page;
         const general = new Adw.PreferencesGroup({
             title: 'General',
             description: this.isNew ? '' : 'The job type cannot be changed after creation.',
@@ -76,19 +82,28 @@ export const JobEditor = GObject.registerClass({
         page.add(general);
 
         const locations = new Adw.PreferencesGroup({
-            title: 'Source and destination',
-            description: 'Changing the destination of an existing sync job does not move files already copied; the next run starts a fresh mirror at the new destination.',
+            title: 'Sources and destination',
+            description: 'The backup container SaveMe is created inside the destination; it must not already exist.',
         });
-        this.sourceRow = new Adw.ActionRow({
-            title: 'Source',
-            subtitle: descriptorDisplay(this.job.source, this.volumes),
+        this.sourcesGroup = new Adw.PreferencesGroup({
+            title: 'Sources',
+            description: 'Backup can combine multiple local folders. Sync uses one source.',
         });
-        this._addChooseButton(this.sourceRow, () => {
-            this._chooseDescriptor('Source', this.job.source, descriptor => {
-                this.job.source = descriptor;
-                this.sourceRow.set_subtitle(descriptorDisplay(descriptor, this.volumes));
-            });
+        this.sourceRows = [];
+        this.addSourceRow = new Adw.ActionRow({
+            title: 'Add another source',
+            subtitle: 'Combine another local folder in this backup.',
         });
+        const addSource = new Gtk.Button({
+            label: 'Add',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat'],
+        });
+        addSource.connect('clicked', () => this._addSource());
+        this.addSourceRow.add_suffix(addSource);
+        this._renderSources();
+        page.add(this.sourcesGroup);
+
         this.destinationRow = new Adw.ActionRow({
             title: 'Destination',
             subtitle: descriptorDisplay(this.job.destination, this.volumes),
@@ -99,7 +114,6 @@ export const JobEditor = GObject.registerClass({
                 this.destinationRow.set_subtitle(descriptorDisplay(descriptor, this.volumes));
             });
         });
-        locations.add(this.sourceRow);
         locations.add(this.destinationRow);
         page.add(locations);
 
@@ -200,6 +214,11 @@ export const JobEditor = GObject.registerClass({
             title: 'Follow symbolic links',
             active: Boolean(this.job.options.followSymlinks),
         });
+        this.notifyRow = new Adw.SwitchRow({
+            title: 'Notify when the job finishes',
+            subtitle: 'Show a desktop notification after a completed run.',
+            active: this.job.options.notifyOnComplete !== false,
+        });
         options.add(this.maxDeleteRow);
         options.add(this.maxDeleteMinimumRow);
         options.add(this.transfersRow);
@@ -207,6 +226,7 @@ export const JobEditor = GObject.registerClass({
         options.add(this.bandwidthRow);
         options.add(this.metadataRow);
         options.add(this.symlinkRow);
+        options.add(this.notifyRow);
         page.add(options);
 
         const filters = new Adw.PreferencesGroup({title: 'Filters'});
@@ -232,10 +252,71 @@ export const JobEditor = GObject.registerClass({
         row.add_suffix(button);
     }
 
+    _renderSources() {
+        let child = this.sourcesGroup.get_first_child();
+        while (child) {
+            const next = child.get_next_sibling();
+            this.sourcesGroup.remove(child);
+            child = next;
+        }
+        this.sourceRows = [];
+        const backup = this.typeRow?.selected === 1;
+        for (const [index, source] of this.sources.entries()) {
+            const row = new Adw.ActionRow({
+                title: `Source ${index + 1}`,
+                subtitle: descriptorDisplay(source, this.volumes),
+            });
+            this._addChooseButton(row, () => {
+                this._chooseDescriptor(`Source ${index + 1}`, this.sources[index],
+                    descriptor => {
+                        this.sources[index] = descriptor;
+                        this._renderSources();
+                    });
+            });
+            if (backup && this.sources.length > 1) {
+                const remove = new Gtk.Button({
+                    icon_name: 'list-remove-symbolic',
+                    tooltip_text: `Remove source ${index + 1}`,
+                    valign: Gtk.Align.CENTER,
+                    css_classes: ['flat', 'destructive-action'],
+                });
+                remove.connect('clicked', () => {
+                    this.sources.splice(index, 1);
+                    if (this.sources.length === 0)
+                        this.sources.push({kind: 'local', path: ''});
+                    this._renderSources();
+                });
+                row.add_suffix(remove);
+            }
+            this.sourcesGroup.add(row);
+            this.sourceRows.push(row);
+        }
+        this.addSourceRow.visible = backup;
+        if (backup)
+            this.sourcesGroup.add(this.addSourceRow);
+        this.sourcesGroup.visible = true;
+    }
+
+    _addSource() {
+        if (this.typeRow.selected !== 1) {
+            this.parentWindow.toast('Multiple sources are only available for backups.');
+            return;
+        }
+        this.sources.push({kind: 'local', path: ''});
+        this._renderSources();
+    }
+
     _updateVisibility() {
         const type = this.typeRow.selected === 1 ? JOB_TYPES.BACKUP : JOB_TYPES.SYNC;
+        if (type !== JOB_TYPES.BACKUP && this.sources.length > 1)
+            this.sources = [this.sources[0]];
         this.backupGroup.visible = type === JOB_TYPES.BACKUP;
         this.intervalRow.visible = this.triggerRow.selected === 1;
+        if (type === JOB_TYPES.BACKUP && this.isNew && this.triggerRow.selected === 0) {
+            this.triggerRow.selected = 1;
+            this.intervalRow.value = 60;
+        }
+        this._renderSources();
     }
 
     _chooseDescriptor(title, current, callback) {
@@ -290,7 +371,8 @@ export const JobEditor = GObject.registerClass({
             ...this.job,
             name: this.nameRow.text.trim(),
             type,
-            source: this.job.source,
+            source: this.sources[0],
+            sources: this.sources,
             destination: this.job.destination,
             trigger: {
                 mode: triggerMode,
@@ -311,6 +393,7 @@ export const JobEditor = GObject.registerClass({
                 bandwidthLimit: this.bandwidthRow.text.trim(),
                 preserveMetadata: this.metadataRow.active,
                 followSymlinks: this.symlinkRow.active,
+                notifyOnComplete: this.notifyRow.active,
             },
             backup: {
                 retentionDays: Number(this.retentionRow.value),

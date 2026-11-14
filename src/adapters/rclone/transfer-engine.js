@@ -317,4 +317,71 @@ export class RcloneTransferEngine {
     configDelete(name) {
         return this.runCapture(['config', 'delete', name]);
     }
+
+    exists(path) {
+        const result = this.runCapture(['lsf', path, '--max-depth', '1']);
+        if (result.exitCode === 3)
+            return false;
+        if (!isSuccessExit(result.exitCode)) {
+            throw new Error(result.stderr.trim() ||
+                `Cannot check ${path}: ${exitCodeMessage(result.exitCode)}`);
+        }
+        return true;
+    }
+
+    mkdir(path) {
+        const result = this.runCapture(['mkdir', path]);
+        if (!isSuccessExit(result.exitCode)) {
+            throw new Error(result.stderr.trim() ||
+                `Cannot create ${path}: ${exitCodeMessage(result.exitCode)}`);
+        }
+        return result;
+    }
+
+    listDirs(path) {
+        const result = this.runCapture(['lsf', path, '--dirs-only', '--max-depth', '1']);
+        if (result.exitCode === 3)
+            return [];
+        if (!isSuccessExit(result.exitCode)) {
+            throw new Error(result.stderr.trim() ||
+                `Cannot list ${path}: ${exitCodeMessage(result.exitCode)}`);
+        }
+        return result.stdout.split('\n')
+            .map(line => line.trim().replace(/\/$/, ''))
+            .filter(Boolean);
+    }
+
+    readText(path) {
+        const result = this.runCapture(['cat', path]);
+        if (!isSuccessExit(result.exitCode)) {
+            throw new Error(result.stderr.trim() ||
+                `Cannot read ${path}: ${exitCodeMessage(result.exitCode)}`);
+        }
+        return result.stdout;
+    }
+
+    writeText(path, text) {
+        const directory = GLib.dir_make_tmp('saveme-write-XXXXXX');
+        const temporary = GLib.build_filenamev([directory, 'payload']);
+        try {
+            GLib.file_set_contents(temporary, String(text));
+            const result = this.runCapture(['copyto', temporary, path]);
+            if (!isSuccessExit(result.exitCode)) {
+                throw new Error(result.stderr.trim() ||
+                    `Cannot write ${path}: ${exitCodeMessage(result.exitCode)}`);
+            }
+            return result;
+        } finally {
+            try {
+                Gio.File.new_for_path(temporary).delete(null);
+            } catch (_) {
+                // Ignore.
+            }
+            try {
+                Gio.File.new_for_path(directory).delete(null);
+            } catch (_) {
+                // Ignore.
+            }
+        }
+    }
 }

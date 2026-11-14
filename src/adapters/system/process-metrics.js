@@ -55,10 +55,10 @@ export function readProcessMetrics({
 } = {}) {
     try {
         const read = path => {
-            const [ok, bytes] = GLib.file_get_contents(path);
-            if (!ok)
+            const result = GLib.file_get_contents(path);
+            if (!result[0])
                 throw new Error(`Cannot read ${path}`);
-            return new TextDecoder().decode(bytes);
+            return new TextDecoder().decode(result[1]);
         };
         return {
             ...parseProcStatus(read(statusPath)),

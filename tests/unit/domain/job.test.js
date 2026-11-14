@@ -10,7 +10,10 @@ import {
     isRemoteDescriptor,
     jobDefaults,
     jobRemoteNames,
+    jobSources,
+    localPathFor,
     normalizeJobFields,
+    remotePathFor,
     remotePathsOverlap,
     validateJobFields,
 } from '../../../src/domain/job.js';
@@ -69,6 +72,103 @@ export default suite('domain/job', [
         assertEqual(job.options.transfers, 2);
         assertEqual(job.options.checkers, 8);
         assertEqual(JSON.stringify(job.filters.exclude), JSON.stringify(['*.tmp']));
+    }),
+    test('normalizeJobFields fills sources from the legacy source field', () => {
+        const job = normalizeJobFields(baseJob());
+        assertEqual(job.sources.length, 1);
+        assertEqual(job.sources[0].path, '/tmp/source');
+        assertEqual(job.source.path, '/tmp/source');
+        assertEqual(job.options.notifyOnComplete, true);
+        const multi = normalizeJobFields(baseJob({
+            type: JOB_TYPES.BACKUP,
+            sources: [
+                {kind: 'local', path: '/a'},
+                {kind: 'local', path: '/b'},
+            ],
+        }));
+        assertEqual(jobSources(multi).length, 2);
+        assertEqual(multi.source.path, '/a');
+    }),
+    test('validation distinguishes sync and multi-source backup rules', () => {
+        const sync = baseJob({
+            sources: [
+                {kind: 'local', path: '/a'},
+                {kind: 'local', path: '/b'},
+            ],
+        });
+        assert(validateJobFields(sync).some(error => /exactly one source/.test(error)));
+        const backup = baseJob({
+            type: JOB_TYPES.BACKUP,
+            trigger: {mode: TRIGGER_MODES.INTERVAL, intervalMinutes: 60},
+            sources: [
+                {kind: 'local', path: '/a'},
+                {kind: 'local', path: '/b'},
+            ],
+        });
+        assertEqual(validateJobFields(backup).length, 0);
+        const realtime = {...backup, trigger: {mode: TRIGGER_MODES.REALTIME}};
+        assert(validateJobFields(realtime).some(error => /interval or manual/.test(error)));
+    }),
+    test('jobRemoteNames includes every remote source', () => {
+        const job = baseJob({
+            sources: [
+                {kind: 'remote', remote: 'drive', path: 'a'},
+                {kind: 'remote', remote: 'onedrive', path: 'b'},
+            ],
+            destination: {kind: 'remote', remote: 'dropbox', path: 'c'},
+        });
+        assertEqual(JSON.stringify(jobRemoteNames(job).sort()),
+            JSON.stringify(['drive', 'dropbox', 'onedrive']));
+    }),
+    test('jobSources and path helpers tolerate missing descriptors', () => {
+        assertEqual(jobSources(null).length, 0);
+        assertEqual(jobSources({source: {kind: 'local', path: '/a'}}).length, 1);
+        assertEqual(localPathFor(null), null);
+        assertEqual(localPathFor({kind: 'local', path: ''}), null);
+        assertEqual(remotePathFor(null), null);
+        assertEqual(remotePathFor({kind: 'remote', remote: 'drive'}), 'drive:');
+        const empty = normalizeJobFields(baseJob({sources: [], source: null}));
+        assertEqual(empty.sources.length, 0);
+        assertEqual(empty.source, null);
+    }),
+    test('jobRemoteNames ignores local sources and missing destination remotes', () => {
+        const job = baseJob({
+            sources: [{kind: 'local', path: '/a'}],
+            destination: {kind: 'local', path: '/b'},
+        });
+        assertEqual(jobRemoteNames(job).length, 0);
+    }),
+    test('validation rejects duplicates and realtime multi-source backup', () => {
+        const duplicate = baseJob({
+            type: JOB_TYPES.BACKUP,
+            trigger: {mode: TRIGGER_MODES.INTERVAL, intervalMinutes: 60},
+            sources: [
+                {kind: 'local', path: '/a'},
+                {kind: 'local', path: '/a'},
+            ],
+        });
+        assert(validateJobFields(duplicate).some(error => /duplicadas/.test(error)));
+        const realtime = baseJob({
+            type: JOB_TYPES.BACKUP,
+            trigger: {mode: TRIGGER_MODES.REALTIME},
+            sources: [
+                {kind: 'remote', remote: 'drive', path: 'a'},
+                {kind: 'remote', remote: 'drive', path: 'b'},
+            ],
+            destination: {kind: 'remote', remote: 'drive', path: 'a/b'},
+        });
+        assert(validateJobFields(realtime).some(error => /interval or manual/.test(error)));
+        assert(validateJobFields(realtime).some(error => /mesmo caminho/.test(error)));
+    }),
+    test('recovered jobs tolerate remotes not yet configured', () => {
+        const job = baseJob({
+            type: JOB_TYPES.BACKUP,
+            recovered: true,
+            trigger: {mode: TRIGGER_MODES.MANUAL},
+            sources: [{kind: 'remote', remote: 'onedrive', path: 'a'}],
+            destination: {kind: 'remote', remote: 'onedrive', path: 'b'},
+        });
+        assertEqual(validateJobFields(job, {remotes: ['drive']}).length, 0);
     }),
     test('normalizeJobFields repairs invalid values', () => {
         const job = normalizeJobFields(baseJob({

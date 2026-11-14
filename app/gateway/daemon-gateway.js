@@ -49,6 +49,14 @@ export class DaemonGateway {
         return this.client.saveJob(job);
     }
 
+    importJob(job) {
+        return this.client.importJob(job);
+    }
+
+    inspectBackup(path) {
+        return this.client.inspectBackup(path);
+    }
+
     deleteJob(jobId) {
         return this.client.deleteJob(jobId);
     }

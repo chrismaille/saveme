@@ -2,7 +2,8 @@ import Pango from 'gi://Pango';
 import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
 import Gio from 'gi://Gio';
-import {JOB_TYPES, descriptorDisplay, localPathFor} from '../../src/jobs.js';
+import {JOB_TYPES, descriptorDisplay, jobSources, localPathFor} from '../../src/jobs.js';
+import {RecoverDialog} from '../recover-dialog.js';
 import {
     backupRootDisplay,
     formatBytes,
@@ -65,6 +66,13 @@ export class JobsPage {
         });
         add.connect('clicked', () => this.window.newJob());
         header.append(add);
+        const recover = new Gtk.Button({
+            icon_name: 'document-revert-symbolic',
+            tooltip_text: 'Recover backup',
+            css_classes: ['flat'],
+        });
+        recover.connect('clicked', () => new RecoverDialog(this.window).present());
+        header.append(recover);
         sidebar.append(header);
 
         this.listBox = new Gtk.ListBox({
@@ -208,7 +216,10 @@ export class JobsPage {
     }
 
     _sidebarPaths(job, short = true) {
-        const source = descriptorDisplay(job.source, this.window.volumes);
+        const sources = jobSources(job);
+        const source = sources.length === 1
+            ? descriptorDisplay(sources[0], this.window.volumes)
+            : sources.map(item => descriptorDisplay(item, this.window.volumes)).join(' + ');
         const destination = job.type === JOB_TYPES.BACKUP
             ? backupRootDisplay(job)
             : descriptorDisplay(job.destination, this.window.volumes);
@@ -275,7 +286,19 @@ export class JobsPage {
                 css_classes: ['suggested-action'],
             });
             button.connect('clicked', () => this.window.newJob());
-            page.set_child(button);
+            const recover = new Gtk.Button({
+                label: 'Recover backup',
+                halign: Gtk.Align.CENTER,
+            });
+            recover.connect('clicked', () => new RecoverDialog(this.window).present());
+            const actions = new Gtk.Box({
+                orientation: Gtk.Orientation.HORIZONTAL,
+                spacing: 8,
+                halign: Gtk.Align.CENTER,
+            });
+            actions.append(button);
+            actions.append(recover);
+            page.set_child(actions);
             scroll.set_child(page);
             return;
         }
@@ -322,15 +345,19 @@ export class JobsPage {
         page.add(statusGroup);
 
         const paths = new Adw.PreferencesGroup({title: 'Source and destination'});
-        const sourceRow = new Adw.ActionRow({
-            title: 'Source',
-            subtitle: descriptorDisplay(job.source, this.window.volumes),
-        });
-        const sourceOpen = iconLabelButton('Open', 'folder-open-symbolic', {
-            cssClasses: ['flat'],
-        });
-        sourceOpen.connect('clicked', () => this.window.openSource(job));
-        sourceRow.add_suffix(sourceOpen);
+        const sources = jobSources(job);
+        for (const [index, source] of sources.entries()) {
+            const sourceRow = new Adw.ActionRow({
+                title: sources.length > 1 ? `Source ${index + 1}` : 'Source',
+                subtitle: descriptorDisplay(source, this.window.volumes),
+            });
+            const sourceOpen = iconLabelButton('Open', 'folder-open-symbolic', {
+                cssClasses: ['flat'],
+            });
+            sourceOpen.connect('clicked', () => this.window.openSource(job, source));
+            sourceRow.add_suffix(sourceOpen);
+            paths.add(sourceRow);
+        }
         const destinationRow = new Adw.ActionRow({
             title: 'Destination',
             subtitle: job.type === JOB_TYPES.BACKUP
@@ -342,7 +369,6 @@ export class JobsPage {
         });
         destinationOpen.connect('clicked', () => this.window.openDestination(job));
         destinationRow.add_suffix(destinationOpen);
-        paths.add(sourceRow);
         paths.add(destinationRow);
         if (job.type === JOB_TYPES.BACKUP) {
             const backupRow = new Adw.ActionRow({
@@ -363,6 +389,8 @@ export class JobsPage {
             files: this._statRow('Files'),
             data: this._statRow('Data'),
             speed: this._statRow('Speed / ETA'),
+            machineCpu: this._statRow('Machine CPU'),
+            machineMemory: this._statRow('Machine memory'),
             deletes: this._statRow('Deletes / errors'),
             free: this._statRow('Destination free'),
             last: this._statRow('Last run'),
@@ -521,6 +549,14 @@ export class JobsPage {
             : '-');
         this.detail.stats.speed.set_subtitle(progress
             ? `${formatBytes(progress.speed)}/s · ETA ${formatEta(progress.eta)}`
+            : '-');
+        const system = this.window.snapshot?.system;
+        this.detail.stats.machineCpu.set_subtitle(system?.cpuPercent !== undefined
+            ? `${Number(system.cpuPercent).toFixed(1)}%`
+            : '-');
+        this.detail.stats.machineMemory.set_subtitle(system?.memory
+            ? `${formatBytes(system.memory.usedBytes)} / ` +
+                `${formatBytes(system.memory.totalBytes)}`
             : '-');
         this.detail.stats.deletes.set_subtitle(progress
             ? `${progress.deletes || 0} / ${progress.errors || 0}`

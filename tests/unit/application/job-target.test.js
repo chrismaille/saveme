@@ -46,8 +46,13 @@ export default suite('application/job-target', [
             files: new FakeFileSystem(), volumes: null,
         }), /required/);
     }),
-    test('resolves remote and mixed targets without touching the filesystem', () => {
-        const files = new FakeFileSystem();
+    test('rejects a source descriptor without a path', async () => {
+        await assertThrows(() => resolveJobTargets({
+            source: {kind: 'local', path: ''},
+            destination: {kind: 'local', path: '/dst'},
+        }, {files: new FakeFileSystem(), volumes: null}), /required/);
+    }),
+    test('resolves remote and mixed targets without touching the filesystem', () => {        const files = new FakeFileSystem();
         files.addDir('/src');
         files.addDir('/dst');
 

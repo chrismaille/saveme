@@ -2,7 +2,7 @@ import Gio from 'gi://Gio';
 import {ChangeQueue} from './queue.js';
 import {RecursiveWatcher, WatcherLimitError} from './adapters/gio/watcher.js';
 import {localPathFor, remotePathFor, TRIGGER_MODES} from './jobs.js';
-import {uniqueId} from './util.js';
+import {humanBytes, uniqueId} from './util.js';
 import {
     isCancelledRun,
     isSuccessfulRun,
@@ -91,6 +91,13 @@ export class JobSupervisor {
     }
 
     async _start() {
+        if (this._running && this._runningPromise) {
+            try {
+                await this._runningPromise;
+            } catch (_) {
+                // The new configuration still needs to start.
+            }
+        }
         if (this._stopped)
             return;
         this._clearTimers();
@@ -205,6 +212,7 @@ export class JobSupervisor {
             'needs-auth': 'SaveMe: authentication required',
             'delete-guard': 'SaveMe: deletion blocked',
             'paused': 'SaveMe: job paused',
+            'success': 'SaveMe: backup completed',
         };
         this.onNotify?.({
             job: this.job,
@@ -248,6 +256,12 @@ export class JobSupervisor {
                 this._scheduleInterval();
             }
             this._setIdleStatus();
+            if (run.kind === 'backup' && this.job.options?.notifyOnComplete !== false) {
+                const stats = run.stats || {};
+                this._notify('success',
+                    `${this.job.name || this.job.id}: ${stats.transfers || 0} file(s), ` +
+                    `${humanBytes(stats.bytes || 0)}`);
+            }
             return;
         }
 

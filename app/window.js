@@ -233,8 +233,8 @@ export const SaveMeWindow = GObject.registerClass({
             this.appLog?.readTail(1000) || '(empty)').present();
     }
 
-    openSource(job) {
-        this._openJobPath(job.source);
+    openSource(job, source = null) {
+        this._openJobPath(source || job.source);
     }
 
     openDestination(job) {

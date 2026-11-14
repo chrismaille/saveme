@@ -28,6 +28,8 @@ export default suite('adapters/dbus/api', [
         api.SetJobEnabled('job', 0);
         api.PauseAll(1);
         assertEqual(api.SaveJob('{}'), 'saveJob-result');
+        assertEqual(api.ImportJob('{}'), 'importJob-result');
+        assertEqual(api.InspectBackup('/SaveMe'), 'inspectBackup-result');
         api.DeleteJob('job');
         assertEqual(api.GetRun('job', 'run'), 'getRun-result');
         assertEqual(api.GetRunLog('job', 'run'), 'getRunLog-result');

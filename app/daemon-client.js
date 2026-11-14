@@ -120,6 +120,18 @@ export class DaemonClient {
         return JSON.parse(reply.deepUnpack()[0]);
     }
 
+    async importJob(job) {
+        const reply = await this._call('ImportJob',
+            new GLib.Variant('(s)', [JSON.stringify(job)]));
+        return JSON.parse(reply.deepUnpack()[0]);
+    }
+
+    async inspectBackup(path) {
+        const reply = await this._call('InspectBackup',
+            new GLib.Variant('(s)', [path]), 60_000);
+        return JSON.parse(reply.deepUnpack()[0]);
+    }
+
     async deleteJob(jobId) {
         await this._call('DeleteJob', new GLib.Variant('(s)', [jobId]));
     }

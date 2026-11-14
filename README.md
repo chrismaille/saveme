@@ -10,6 +10,9 @@ deliberately different modes:
   renames and deletions propagate. No versions.
 - **Backup** — copies changes to the destination and keeps previous versions of
   overwritten files. Deletions in the source do not delete the destination.
+  A backup job can combine multiple local source folders.
+- **Recovery** — import backup jobs from an existing `SaveMe` folder and
+  restore to a different local folder.
 
 The heavy lifting (cloud APIs, OAuth, retries, checksums, rate limits) is done
 by [rclone](https://rclone.org/). SaveMe owns the UX, scheduling, real-time

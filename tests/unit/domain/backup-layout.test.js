@@ -3,6 +3,8 @@ import {
     backupRootFor,
     joinRclonePath,
     rcloneBasename,
+    sourceFolderName,
+    uniqueSourceFolderNames,
     versionDirFor,
     versionName,
     versionsRootFor,
@@ -37,6 +39,25 @@ export default suite('domain/backup-layout', [
     }),
     test('rejects a remote destination without a colon', () => {
         assertThrows(() => backupRootFor(remoteJob(), 'Backups'), /Invalid remote destination/);
+    }),
+    test('names source folders safely and disambiguates duplicates', () => {
+        assertEqual(sourceFolderName({kind: 'local', path: '/home/me/Photos'}), 'Photos');
+        assertEqual(sourceFolderName({kind: 'local', path: '/'}), 'source-1');
+        assertEqual(sourceFolderName({kind: 'remote', remote: 'drive', path: ''}), 'source-1');
+        assertEqual(sourceFolderName(null, 3), 'source-4');
+        assertEqual(versionDirFor('/versions', 'run').includes('/versions/'), true);
+        assertEqual(JSON.stringify(uniqueSourceFolderNames({
+            source: {kind: 'local', path: '/a/Single'},
+        })), JSON.stringify(['Single']));
+        const names = uniqueSourceFolderNames({
+            sources: [
+                {kind: 'local', path: '/a/Photos'},
+                {kind: 'local', path: '/b/Photos'},
+                {kind: 'local', path: '/c/Docs'},
+            ],
+        });
+        assertEqual(JSON.stringify(names),
+            JSON.stringify(['Photos', 'Photos-2', 'Docs']));
     }),
     test('joinRclonePath handles roots, remote roots and relative paths', () => {
         assertEqual(joinRclonePath('drive:', 'a/b'), 'drive:a/b');

@@ -32,6 +32,14 @@ export class DaemonApi {
         return this.service.saveJob(payloadJson);
     }
 
+    ImportJob(payloadJson) {
+        return this.service.importJob(payloadJson);
+    }
+
+    InspectBackup(path) {
+        return this.service.inspectBackup(path);
+    }
+
     DeleteJob(jobId) {
         this.service.deleteJob(jobId);
     }

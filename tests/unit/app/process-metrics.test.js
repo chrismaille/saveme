@@ -32,6 +32,8 @@ export default suite('app/observability/process-metrics', [
         assertEqual(parsed.stimeTicks, 3);
         assertEqual(parsed.startTicks, 99);
         assertEqual(parseProcStat('bad').utimeTicks, 0);
+        assertEqual(parseProcStatus(null).rssBytes, 0);
+        assertEqual(parseProcStat(null).stimeTicks, 0);
     }),
     test('computes CPU percentage from tick deltas', () => {
         const previous = {utimeTicks: 10, stimeTicks: 10, sampledAtMs: 1000};

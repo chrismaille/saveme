@@ -29,6 +29,14 @@ Com um checkout local:
 ./scripts/install.sh --with-extension # incluir/atualizar a extensão GNOME
 ```
 
+Para um teste de instalação realmente limpa, remova antes os dados da instalação
+anterior:
+
+```bash
+./scripts/uninstall.sh --purge --yes
+./scripts/install.sh
+```
+
 O script:
 
 - detecta se o SaveMe já está instalado e atualiza automaticamente;

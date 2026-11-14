@@ -24,6 +24,32 @@ export default suite('application/backup-service', [
         assert(args[args.indexOf('--backup-dir') + 1].includes('/versions/'));
         assert(run.versionsDir.includes('/versions/'));
     }),
+    test('multi-source backup writes one current/version subtree per source', async () => {
+        const services = makeServices();
+        services.files.addDir('/photos');
+        services.files.addDir('/docs');
+        services.files.addDir('/dst');
+        services.transfer.sizes.set('/photos', {count: 2, bytes: 20});
+        services.transfer.sizes.set('/docs', {count: 3, bytes: 30});
+        const job = makeJob('backup', {
+            sources: [
+                {kind: 'local', path: '/photos'},
+                {kind: 'local', path: '/docs'},
+            ],
+            trigger: {mode: 'interval', intervalMinutes: 60},
+        });
+        const run = await services.backup.runFull(job);
+        assertEqual(run.result, 'success');
+        assertEqual(services.transfer.runs.length, 2);
+        assertEqual(services.transfer.runs[0].args[2],
+            '/dst/SaveMe/job_test/current/photos');
+        assertEqual(services.transfer.runs[1].args[2],
+            '/dst/SaveMe/job_test/current/docs');
+        assert(services.transfer.runs[0].args.includes('--backup-dir'));
+        assert(services.transfer.runs[0].args[
+            services.transfer.runs[0].args.indexOf('--backup-dir') + 1]
+            .includes('/versions/'));
+    }),
     test('full backup dry-run only adds --dry-run and skips cleanup', async () => {
         const {services, job} = backupContext({retentionDays: 30});
         const run = await services.backup.runFull(job, {dryRun: true});
@@ -88,6 +114,28 @@ export default suite('application/backup-service', [
         assertEqual(services.transfer.runs[1].args[0], 'move');
         assertEqual(services.transfer.runs[2].args[0], 'rmdirs');
         assert(run.versionsDir.includes('/versions/'));
+    }),
+    test('incremental multi-source backup is rejected', async () => {
+        const {services} = backupContext();
+        services.files.addDir('/src-b');
+        const job = makeJob('backup', {
+            sources: [
+                {kind: 'local', path: '/src'},
+                {kind: 'local', path: '/src-b'},
+            ],
+            trigger: {mode: 'interval', intervalMinutes: 60},
+        });
+        const run = await services.backup.runIncremental(job, [
+            {path: '/src/a.txt', kind: 'upsert'},
+        ]);
+        assertEqual(run.result, 'error');
+        assert(/Multi-source/.test(run.message));
+    }),
+    test('full backup survives unknown source counts', async () => {
+        const {services, job} = backupContext();
+        services.transfer.sizeAsync = async () => ({count: Number.NaN, bytes: 0});
+        const run = await services.backup.runFull(job);
+        assertEqual(run.result, 'success');
     }),
     test('incremental backup handles directory upserts', async () => {
         const {services, job} = backupContext();
