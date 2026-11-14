@@ -17,11 +17,37 @@ import {parseVersionTimestamp} from '../domain/time.js';
 
 export const MAX_BROWSER_ENTRIES = 2000;
 
+function rcloneErrorMessage(result, fallback) {
+    const text = String(result.stderr || result.stdout || '').trim();
+    if (!text)
+        return fallback;
+    let lastError = null;
+    for (const line of text.split('\n')) {
+        try {
+            const parsed = JSON.parse(line.trim());
+            if (parsed.level === 'error' || parsed.level === 'critical' || parsed.level === 'fatal')
+                lastError = parsed.msg || parsed.message || line;
+        } catch (_) {
+            // Not a JSON log line.
+        }
+    }
+    const message = lastError || text;
+    if (/drive_id|drive_type/i.test(message)) {
+        return 'The OneDrive account is misconfigured or the browser selected a different ' +
+            'account than the one requested. Delete the account in Accounts, reconnect, ' +
+            'and choose the correct Microsoft account in the browser (use a private window ' +
+            'if needed).';
+    }
+    return message;
+}
+
 function entriesFromList(result, {dirsOnly = false} = {}) {
     if (result.exitCode === 3)
         return [];
-    if (!isSuccessExit(result.exitCode))
-        throw new Error(result.stderr.trim() || exitCodeMessage(result.exitCode));
+    if (!isSuccessExit(result.exitCode)) {
+        throw new Error(rcloneErrorMessage(result,
+            exitCodeMessage(result.exitCode)));
+    }
     if (dirsOnly) {
         return result.stdout.split('\n')
             .map(line => line.trim().replace(/\/$/, ''))
@@ -318,7 +344,7 @@ export class DaemonService {
         if (result.exitCode === 3)
             return JSON.stringify([]);
         if (!isSuccessExit(result.exitCode))
-            throw new Error(result.stderr.trim() || exitCodeMessage(result.exitCode));
+            throw new Error(rcloneErrorMessage(result, exitCodeMessage(result.exitCode)));
         const versions = result.stdout.split('\n')
             .map(line => line.trim().replace(/\/$/, ''))
             .filter(Boolean)
@@ -401,8 +427,8 @@ export class DaemonService {
         }
         const result = this.transfer.configDelete(name);
         if (!isSuccessExit(result.exitCode)) {
-            throw new Error(result.stderr.trim() ||
-                `Cannot delete remote ${name}: ${exitCodeMessage(result.exitCode)}`);
+            throw new Error(rcloneErrorMessage(result,
+                `Cannot delete remote ${name}: ${exitCodeMessage(result.exitCode)}`));
         }
         this.config.removeRemote(name);
         this.secureFile?.(this.transfer.configPath);

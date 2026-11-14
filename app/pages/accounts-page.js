@@ -51,44 +51,28 @@ export class AccountsPage {
                     icon_name: 'folder-remote-symbolic',
                     pixel_size: 16,
                 }));
-                const menu = new Gtk.MenuButton({
+                const reauth = new Gtk.Button({
+                    label: 'Reconnect',
                     valign: Gtk.Align.CENTER,
                     css_classes: ['flat'],
                 });
-                menu.set_child(new Gtk.Image({icon_name: 'view-more-symbolic'}));
-                const popover = new Gtk.Popover();
-                const box = new Gtk.Box({
-                    orientation: Gtk.Orientation.VERTICAL,
-                    spacing: 2,
-                    margin_top: 6,
-                    margin_bottom: 6,
-                    margin_start: 6,
-                    margin_end: 6,
-                });
-                const reauth = new Gtk.Button({label: 'Reauthenticate', css_classes: ['flat']});
-                reauth.connect('clicked', () => {
-                    popover.popdown();
-                    this.window.addAccount(remote);
-                });
+                reauth.connect('clicked', () => this.window.addAccount(remote));
                 const remove = new Gtk.Button({
                     label: 'Delete',
+                    valign: Gtk.Align.CENTER,
                     css_classes: ['flat', 'destructive-action'],
                 });
                 remove.connect('clicked', () => {
-                    popover.popdown();
                     this.window.confirm('Delete account?',
                         `Delete ${remote.name}? Jobs using it must be removed or edited first.`,
                         true, () => {
                             this.window.client.deleteRemote(remote.name)
                                 .then(() => this.window.toast('Account deleted.'))
-                                .catch(e => this.window.toast(e.message));
+                                .catch(e => this._showError('Cannot delete account', e.message));
                         });
                 });
-                box.append(reauth);
-                box.append(remove);
-                popover.set_child(box);
-                menu.set_popover(popover);
-                row.add_suffix(menu);
+                row.add_suffix(reauth);
+                row.add_suffix(remove);
                 this.group.add(row);
             }
             const addRow = new Adw.ActionRow({
@@ -105,5 +89,11 @@ export class AccountsPage {
             this.group.add(addRow);
         }
         this.widget.add(this.group);
+    }
+
+    _showError(title, message) {
+        const dialog = new Adw.AlertDialog({heading: title, body: message});
+        dialog.add_response('ok', 'OK');
+        dialog.present(this.window);
     }
 }

@@ -133,13 +133,14 @@ export const AccountDialog = GObject.registerClass({
     }
 
     _options() {
-        if (this.existing?.options?.drive_type)
-            return {...this.existing.options};
         if (this._provider() === 'onedrive') {
             return {
+                ...(this.existing?.options || {}),
                 drive_type: this.oneDriveTypeRow.selected === 1 ? 'business' : 'personal',
             };
         }
+        if (this.existing?.options?.drive_type)
+            return {...this.existing.options};
         return {};
     }
 
@@ -201,7 +202,7 @@ export const AccountDialog = GObject.registerClass({
             return;
         this.statusRow.set_subtitle(auth.status);
         if (auth.url) {
-            this.urlLabel.set_text(auth.url);
+            this.urlLabel.set_text(this._authUrl(auth.url));
             this.urlLabel.visible = true;
             this.urlRow.visible = true;
             if (!this.openedUrl) {
@@ -239,6 +240,14 @@ export const AccountDialog = GObject.registerClass({
         } catch (e) {
             this._showError(e.message);
         }
+    }
+
+    _authUrl(url) {
+        if (this._provider() === 'onedrive' && !/[?&]prompt=/i.test(url)) {
+            const separator = url.includes('?') ? '&' : '?';
+            return `${url}${separator}prompt=select_account`;
+        }
+        return url;
     }
 
     _showError(message) {

@@ -208,6 +208,36 @@ export class RcloneTransferEngine {
         };
     }
 
+    fetchJson(url, {headers = {}} = {}) {
+        const directory = GLib.dir_make_tmp('saveme-http-XXXXXX');
+        const configPath = GLib.build_filenamev([directory, 'curl.conf']);
+        const escape = value => String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        const lines = [`url = "${escape(url)}"`];
+        for (const [name, value] of Object.entries(headers))
+            lines.push(`header = "${escape(name)}: ${escape(value)}"`);
+        try {
+            GLib.file_set_contents(configPath, `${lines.join('\n')}\n`);
+            Gio.File.new_for_path(configPath).set_attribute_uint32(
+                'unix::mode', 0o600, Gio.FileQueryInfoFlags.NONE, null);
+            const subprocess = Gio.Subprocess.new(
+                ['curl', '-fsS', '--config', configPath],
+                Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
+            const [ok, stdout, stderr] = subprocess.communicate_utf8(null, null);
+            if (!ok) {
+                throw new Error(stderr.trim() ||
+                    `HTTP request failed with code ${subprocess.get_exit_status()}`);
+            }
+            return JSON.parse(stdout);
+        } finally {
+            try {
+                Gio.File.new_for_path(configPath).delete(null);
+                Gio.File.new_for_path(directory).delete(null);
+            } catch (_) {
+                // Best effort.
+            }
+        }
+    }
+
     getVersion() {
         if (this._version)
             return this._version;

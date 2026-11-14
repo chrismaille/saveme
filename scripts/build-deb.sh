@@ -79,7 +79,7 @@ Version: ${VERSION}
 Architecture: ${ARCH}
 Maintainer: ${MAINTAINER}
 Installed-Size: ${INSTALLED_SIZE}
-Depends: gjs (>= 1.80), gir1.2-glib-2.0, gir1.2-gtk-4.0, gir1.2-adw-1, libglib2.0-bin, dbus-user-session, systemd, xdg-utils
+Depends: gjs (>= 1.80), gir1.2-glib-2.0, gir1.2-gtk-4.0, gir1.2-adw-1, libglib2.0-bin, dbus-user-session, systemd, xdg-utils, curl
 Section: utils
 Priority: optional
 Homepage: https://github.com/chrismaille/save_me

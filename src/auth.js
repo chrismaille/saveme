@@ -231,6 +231,8 @@ export class RemoteAuthManager {
     }
 
     _createRemote(session) {
+        if (session.provider === 'onedrive')
+            this._prepareOneDrive(session);
         const token = JSON.stringify(session.token);
         const existing = this.config.getRemote(session.name);
         const optionArgs = Object.entries(session.options || {})
@@ -244,9 +246,9 @@ export class RemoteAuthManager {
                 session.provider, 'token', token, ...optionArgs, '--non-interactive']);
         }
         if (result.exitCode !== 0) {
-            throw new Error(result.stderr.trim() ||
-                result.stdout.trim() ||
-                `rclone config exited with code ${result.exitCode}`);
+            const message = result.stderr.trim() || result.stdout.trim() ||
+                `rclone config exited with code ${result.exitCode}`;
+            throw new Error(this._friendlyRemoteError(message));
         }
         try {
             Gio.File.new_for_path(this.rclone.configPath).set_attribute_uint32(
@@ -268,6 +270,71 @@ export class RemoteAuthManager {
                 label,
                 options: session.options || {},
             });
+        this._verifyRemote(session);
         this.logger?.info(`Remote ${session.name} configured`);
+    }
+
+    _prepareOneDrive(session) {
+        const requested = session.options?.drive_type || 'personal';
+        const drive = this._graphDrive(session.token, session.name);
+        if (!drive)
+            return;
+        if (drive.type && requested && drive.type !== requested) {
+            throw new Error(
+                `The Microsoft account selected in the browser is ${drive.type}, ` +
+                `but the app was configured for ${requested}. None was saved. ` +
+                'Reconnect and choose the correct account in the browser ' +
+                '(use a private window if needed).');
+        }
+        session.options = {
+            ...(session.options || {}),
+            drive_id: drive.id,
+            drive_type: drive.type || requested,
+        };
+    }
+
+    _graphDrive(token, remoteName) {
+        if (!token?.access_token)
+            return null;
+        try {
+            const data = this.rclone.fetchJson(
+                'https://graph.microsoft.com/v1.0/me/drive', {
+                    headers: {
+                        Authorization: `Bearer ${token.access_token}`,
+                    },
+                });
+            if (!data?.id)
+                return null;
+            return {
+                id: data.id,
+                type: data.driveType || null,
+            };
+        } catch (e) {
+            this.logger?.warn(`Cannot query OneDrive drive for ${remoteName}: ${e.message}`);
+            return null;
+        }
+    }
+
+    _verifyRemote(session) {
+        if (session.provider !== 'onedrive')
+            return;
+        const result = this.rclone.runCapture([
+            'lsd', `${session.name}:`, '--max-depth', '1',
+        ]);
+        if (result.exitCode === 0)
+            return;
+        const message = result.stderr.trim() || result.stdout.trim() ||
+            `rclone could not read ${session.name}.`;
+        throw new Error(this._friendlyRemoteError(`OneDrive verification failed: ${message}`));
+    }
+
+    _friendlyRemoteError(message) {
+        if (/drive_id|drive_type/i.test(message)) {
+            return 'OneDrive was authenticated, but rclone could not identify the drive. ' +
+                'This usually means the browser used a different account than the one ' +
+                'selected. Delete this account in Accounts, then reconnect and choose the ' +
+                'correct Microsoft account (use a private window if needed).';
+        }
+        return message;
     }
 }
