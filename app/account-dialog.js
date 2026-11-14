@@ -6,6 +6,7 @@ import Adw from 'gi://Adw?version=1';
 
 const PROVIDERS = ['drive', 'onedrive', 'dropbox'];
 const PROVIDER_LABELS = ['Google Drive', 'Microsoft OneDrive', 'Dropbox'];
+const DEFAULT_NAMES = {drive: 'drive', onedrive: 'onedrive', dropbox: 'dropbox'};
 
 export const AccountDialog = GObject.registerClass({
     GTypeName: 'SaveMeAccountDialog',
@@ -21,6 +22,7 @@ export const AccountDialog = GObject.registerClass({
         this.window = parentWindow;
         this.client = parentWindow.client;
         this.onDone = options.onDone || null;
+        this.initialProvider = options.provider || null;
         this.existing = existing;
         this.authId = null;
         this.done = false;
@@ -54,7 +56,7 @@ export const AccountDialog = GObject.registerClass({
         const group = new Adw.PreferencesGroup({title: 'Account'});
         const providerIndex = this.existing
             ? Math.max(0, PROVIDERS.indexOf(this.existing.type))
-            : 0;
+            : Math.max(0, PROVIDERS.indexOf(this.initialProvider || 'drive'));
         this.providerRow = new Adw.ComboRow({
             title: 'Provider',
             model: Gtk.StringList.new(PROVIDER_LABELS),
@@ -64,7 +66,7 @@ export const AccountDialog = GObject.registerClass({
         this.providerRow.connect('notify::selected', () => this._updateVisibility());
         this.nameRow = new Adw.EntryRow({
             title: 'Remote name',
-            text: this.existing?.name || 'drive',
+            text: this.existing?.name || DEFAULT_NAMES[PROVIDERS[providerIndex]],
         });
         this.nameRow.sensitive = !this.existing;
         this.oneDriveTypeRow = new Adw.ComboRow({

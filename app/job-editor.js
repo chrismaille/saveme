@@ -2,6 +2,7 @@ import GObject from 'gi://GObject';
 import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
 import {VolumeResolver} from '../src/volumes.js';
+import {AccountDialog} from './account-dialog.js';
 import {RemoteBrowserDialog} from './remote-browser.js';
 import {
     JOB_TYPES,
@@ -154,14 +155,14 @@ export const JobEditor = GObject.registerClass({
         const page = this._page();
         const group = new Adw.PreferencesGroup({
             title: 'Destination',
-            description: 'Choose where SaveMe will create its backup folder. The SaveMe folder must not already exist.',
+            description: 'Choose the provider and the base folder. SaveMe will create its backup folder inside that base folder; it must not already exist.',
         });
         this.providerButtons = new Map();
         const providers = [
             ['local', 'Local folder', 'drive-harddisk-symbolic'],
+            ['dropbox', 'Dropbox', 'folder-remote-symbolic'],
             ['onedrive', 'OneDrive', 'folder-remote-symbolic'],
             ['drive', 'Google Drive', 'folder-remote-symbolic'],
-            ['dropbox', 'Dropbox', 'folder-remote-symbolic'],
         ];
         const flow = new Gtk.FlowBox({
             selection_mode: Gtk.SelectionMode.NONE,
@@ -190,7 +191,7 @@ export const JobEditor = GObject.registerClass({
         }
         group.add(flow);
         this.destinationRow = new Adw.ActionRow({
-            title: 'Selected destination',
+            title: 'Base folder in destination',
             subtitle: descriptorDisplay(this.job.destination, this.volumes) || 'Not selected',
         });
         const choose = new Gtk.Button({
@@ -410,7 +411,7 @@ export const JobEditor = GObject.registerClass({
                 subtitle: descriptorDisplay(source, this.volumes) || 'Not selected',
             });
             this._addChooseButton(row, () => {
-                this._chooseDescriptor(`Source ${index + 1}`, this.sources[index],
+                this._chooseSourceDescriptor(index, this.sources[index],
                     descriptor => {
                         this.sources[index] = descriptor;
                         this._renderSources();
@@ -495,8 +496,11 @@ export const JobEditor = GObject.registerClass({
         const remotes = (this.parentWindow.snapshot?.remotes || [])
             .filter(remote => remote.type === type);
         if (remotes.length === 0) {
-            this._showError(`No ${type === 'drive' ? 'Google Drive' : type} account configured. ` +
-                'Add it in Accounts first.');
+            new AccountDialog(this.parentWindow, null, {
+                provider: type,
+                transientFor: this,
+                onDone: () => this._pickProvider(type),
+            }).present();
             return;
         }
         const current = this.job.destination?.kind === 'remote' &&
@@ -505,10 +509,58 @@ export const JobEditor = GObject.registerClass({
             : null;
         new RemoteBrowserDialog(this.parentWindow, {
             mode: 'pick',
+            remoteType: type,
             remote: current?.remote || remotes[0].name,
             path: current?.path || '',
             transientFor: this,
             onSelect: descriptor => this._setDestination(descriptor),
+        }).present();
+    }
+
+    _chooseSourceDescriptor(index, current, callback) {
+        const dialog = new Adw.AlertDialog({
+            heading: `Source ${index + 1}`,
+            body: `Current: ${descriptorDisplay(current, this.volumes) || 'Not selected'}`,
+        });
+        dialog.add_response('cancel', 'Cancel');
+        dialog.add_response('drive', 'Google Drive');
+        dialog.add_response('onedrive', 'OneDrive');
+        dialog.add_response('dropbox', 'Dropbox');
+        dialog.add_response('local', 'Local folder');
+        dialog.set_response_appearance('local', Adw.ResponseAppearance.SUGGESTED);
+        dialog.connect('response', (_dialog, response) => {
+            if (response === 'local') {
+                this._pickLocalFolder(callback);
+                return;
+            }
+            if (['dropbox', 'onedrive', 'drive'].includes(response))
+                this._pickSourceProvider(response, callback, current);
+        });
+        dialog.present(this);
+    }
+
+    _pickSourceProvider(type, callback, currentDescriptor = null) {
+        const remotes = (this.parentWindow.snapshot?.remotes || [])
+            .filter(remote => remote.type === type);
+        if (remotes.length === 0) {
+            new AccountDialog(this.parentWindow, null, {
+                provider: type,
+                transientFor: this,
+                onDone: () => this._pickSourceProvider(type, callback, currentDescriptor),
+            }).present();
+            return;
+        }
+        const current = currentDescriptor?.kind === 'remote' &&
+            this._providerForRemote(currentDescriptor.remote) === type
+            ? currentDescriptor
+            : null;
+        new RemoteBrowserDialog(this.parentWindow, {
+            mode: 'pick',
+            remoteType: type,
+            remote: current?.remote || remotes[0].name,
+            path: current?.path || '',
+            transientFor: this,
+            onSelect: descriptor => callback(descriptor),
         }).present();
     }
 

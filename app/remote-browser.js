@@ -24,6 +24,7 @@ export const RemoteBrowserDialog = GObject.registerClass({
         path = '',
         jobId = null,
         version = '',
+        remoteType = null,
         transientFor = null,
         onSelect = null,
     } = {}) {
@@ -43,6 +44,7 @@ export const RemoteBrowserDialog = GObject.registerClass({
         this.path = String(path || '').replace(/^\/+|\/+$/g, '');
         this.jobId = jobId;
         this.version = version || '';
+        this.remoteType = remoteType;
         this.backupMode = Boolean(jobId);
         this.remotes = [];
         this.loadToken = 0;
@@ -186,6 +188,8 @@ export const RemoteBrowserDialog = GObject.registerClass({
             return;
         }
         this.remotes = this.mainWindow.snapshot?.remotes || [];
+        if (this.remoteType)
+            this.remotes = this.remotes.filter(remote => remote.type === this.remoteType);
         const labels = this.remotes.map(remote => remote.label || remote.name);
         this._updating = true;
         this.remoteDropDown.model = Gtk.StringList.new(
