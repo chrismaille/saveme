@@ -304,22 +304,27 @@ export class DaemonService {
     _createBackupContainer(job) {
         const destination = this._resolveJobDestination(job);
         const container = backupContainerFor(destination);
-        if (this.transfer.exists(container)) {
+        const root = backupRootFor(job, destination);
+        const adopting = this.transfer.exists(container);
+        if (adopting && !this.transfer.exists(root)) {
             throw new Error(`Backup folder already exists: ${container}`);
         }
-        const root = backupRootFor(job, destination);
         try {
-            this.transfer.mkdir(container);
+            if (!adopting)
+                this.transfer.mkdir(container);
             this.transfer.mkdir(root);
             this.transfer.mkdir(`${root}/current`);
             this.transfer.mkdir(`${root}/versions`);
             this._writeManifest(job, {strict: true});
         } catch (e) {
             // Do not leave a partial SaveMe folder that would block a retry.
-            try {
-                this.transfer.runCapture(['purge', container]);
-            } catch (cleanupError) {
-                this.logger?.warn(`Cannot clean up ${container}: ${cleanupError.message}`);
+            // If we adopted an existing container, leave it untouched.
+            if (!adopting) {
+                try {
+                    this.transfer.runCapture(['purge', container]);
+                } catch (cleanupError) {
+                    this.logger?.warn(`Cannot clean up ${container}: ${cleanupError.message}`);
+                }
             }
             throw e;
         }

@@ -47,6 +47,7 @@ export const JobEditor = GObject.registerClass({
         this._ready = false;
         this._saved = false;
         this._closing = false;
+        this._saving = false;
         this.job = normalizeJob(job
             ? JSON.parse(JSON.stringify(job))
             : defaultJob());
@@ -107,9 +108,9 @@ export const JobEditor = GObject.registerClass({
         this._showStep(this._step);
         this._ready = true;
         this.connect('close-request', () => {
-            if (!this._saved && this._step >= 1)
+            if (!this._saved && !this._saving && this._step >= 1)
                 this._closing = true;
-            if (!this._saved)
+            if (!this._saved && !this._saving)
                 this._autosaveDraft(this._step);
             return false;
         });
@@ -867,7 +868,7 @@ export const JobEditor = GObject.registerClass({
     }
 
     _autosaveDraft(step) {
-        if (!this._ready || this._saved)
+        if (!this._ready || this._saved || this._saving)
             return;
         if (!this.isNew && !this.job.draft)
             return;
@@ -909,6 +910,8 @@ export const JobEditor = GObject.registerClass({
     }
 
     async _save(run) {
+        if (this._saving)
+            return;
         for (let step = 0; step < 4; step++) {
             if (!this._validateStep(step)) {
                 this._showStep(step);
@@ -935,6 +938,7 @@ export const JobEditor = GObject.registerClass({
             this._showError(errors.join('\n'));
             return;
         }
+        this._setSaving(true);
         try {
             const saved = await this.client.saveJob(job);
             this._saved = true;
@@ -946,7 +950,58 @@ export const JobEditor = GObject.registerClass({
             this.parentWindow.refresh();
             this.close();
         } catch (e) {
-            this._showError(e.message);
+            // A slow cloud destination may finish after the client gives up.
+            if (await this._saveFinishedInDaemon(run))
+                return;
+            this._showError(this._saveErrorMessage(e));
+        } finally {
+            this._setSaving(false);
         }
+    }
+
+    _setSaving(saving) {
+        this._saving = saving;
+        for (const button of [this.saveButton, this.runButton,
+            this.nextButton, this.backButton]) {
+            if (button)
+                button.sensitive = !saving;
+        }
+        if (this.runButton)
+            this.runButton.label = saving ? 'Saving…' : 'Save & Run';
+    }
+
+    _saveErrorMessage(error) {
+        if (/timeout|timed out|tempo limite|tempo esgotado/i.test(error.message || '')) {
+            return 'The operation took longer than expected. The job may still be ' +
+                'finishing; check the Jobs list in a moment before trying again.';
+        }
+        return error.message;
+    }
+
+    async _saveFinishedInDaemon(run) {
+        if (!this.isNew && !this.isDraft)
+            return false;
+        try {
+            await this.parentWindow.refresh();
+        } catch (_) {
+            return false;
+        }
+        const saved = (this.parentWindow.snapshot?.jobs || [])
+            .find(job => job.id === this.job.id);
+        if (!saved || saved.draft)
+            return false;
+        this._saved = true;
+        if (run) {
+            try {
+                await this.client.runJob(saved.id, false, false);
+            } catch (e) {
+                if (!/already running/i.test(e.message || ''))
+                    this.parentWindow.toast(`Job saved, but the run did not start: ${e.message}`);
+            }
+        }
+        this.parentWindow.toast(run ? 'Job saved and run started.' : 'Job saved.');
+        this.parentWindow.refresh();
+        this.close();
+        return true;
     }
 });

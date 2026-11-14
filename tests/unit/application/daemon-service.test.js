@@ -283,6 +283,29 @@ export default suite('application/daemon-service', [
         assert(ctx.transfer.paths.has('/dst/SaveMe/job_1/current'));
         assert(ctx.transfer.files.has('/dst/SaveMe/job_1/manifest.json'));
     }),
+    test('a retried draft finalize adopts its own container', () => {
+        const ctx = makeService();
+        const draft = JSON.parse(ctx.service.saveJob(JSON.stringify({
+            ...backupJob(),
+            draft: true,
+            draftStep: 4,
+            enabled: false,
+            sources: [backupJob().source],
+        })));
+        // A previous attempt created the container before the client timed out.
+        ctx.transfer.paths.add('/dst/SaveMe');
+        ctx.transfer.paths.add('/dst/SaveMe/job_1');
+        const saved = JSON.parse(ctx.service.saveJob(JSON.stringify({
+            ...draft,
+            draft: false,
+            draftStep: 0,
+            enabled: true,
+        })));
+        assertEqual(saved.draft, false);
+        assert(ctx.transfer.paths.has('/dst/SaveMe/job_1/current'));
+        assert(ctx.transfer.paths.has('/dst/SaveMe/job_1/versions'));
+        assert(ctx.transfer.files.has('/dst/SaveMe/job_1/manifest.json'));
+    }),
     test('a failed draft finalize keeps the job as a draft', () => {
         const ctx = makeService();
         const draft = JSON.parse(ctx.service.saveJob(JSON.stringify({

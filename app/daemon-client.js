@@ -115,8 +115,10 @@ export class DaemonClient {
     }
 
     async saveJob(job) {
+        // Creating the backup container on a cloud remote can take longer than
+        // a normal local D-Bus call.
         const reply = await this._call('SaveJob',
-            new GLib.Variant('(s)', [JSON.stringify(job)]));
+            new GLib.Variant('(s)', [JSON.stringify(job)]), 180_000);
         return JSON.parse(reply.deepUnpack()[0]);
     }
 
