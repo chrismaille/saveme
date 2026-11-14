@@ -495,11 +495,28 @@ do_install() {
         say "  extension: skipped (--no-extension)"
     fi
     say ""
+    if [ "$DRY_RUN" -eq 0 ] && ! sudo -v; then
+        say "sudo authentication failed; the package was not installed."
+        exit 1
+    fi
 
     stop_daemon
     stop_app
     mask_daemon
-    run_sudo apt-get install -y --reinstall "$DEB"
+    case "$DEB" in
+        /*) DEB_INSTALL="$DEB" ;;
+        *) DEB_INSTALL="$(pwd)/$DEB" ;;
+    esac
+    if ! run_sudo apt-get install -y --reinstall "$DEB_INSTALL"; then
+        say "apt-get could not install $DEB_INSTALL."
+        say "Try manually: sudo apt-get install -y --reinstall $DEB_INSTALL"
+        exit 1
+    fi
+    if ! package_installed; then
+        say "apt-get completed but the saveme package is not installed."
+        say "Check the apt output above and the package dependencies."
+        exit 1
+    fi
     unmask_daemon
     install_extension
     if [ "$START_DAEMON" -eq 1 ]; then
@@ -547,6 +564,10 @@ do_uninstall() {
     fi
 
     say "Uninstalling SaveMe..."
+    if [ "$DRY_RUN" -eq 0 ] && ! sudo -v; then
+        say "sudo authentication failed; nothing was removed."
+        exit 1
+    fi
     stop_daemon
     stop_app
     mask_daemon

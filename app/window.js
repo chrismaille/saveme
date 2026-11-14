@@ -32,6 +32,7 @@ export const SaveMeWindow = GObject.registerClass({
         });
         this.app = app;
         this.client = client;
+        this.set_icon_name('io.github.chrismaille.SaveMe');
         this.monitor = monitor;
         this.appLog = appLog;
         this.volumes = new VolumeResolver();
