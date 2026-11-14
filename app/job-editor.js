@@ -12,8 +12,8 @@ import {
     validateJob,
 } from '../src/jobs.js';
 
-const TYPE_LABELS = ['Sync', 'Backup'];
 const TRIGGER_LABELS = ['Real-time', 'Interval', 'Manual'];
+const STEP_TITLES = ['General', 'Sources', 'Destination', 'Schedule', 'Safety'];
 
 export const JobEditor = GObject.registerClass({
     GTypeName: 'SaveMeJobEditor',
@@ -23,8 +23,8 @@ export const JobEditor = GObject.registerClass({
             transient_for: parentWindow,
             modal: true,
             title: job ? 'Edit job' : 'New job',
-            default_width: 680,
-            default_height: 780,
+            default_width: 720,
+            default_height: 700,
         });
         this.parentWindow = parentWindow;
         this.client = parentWindow.client;
@@ -39,32 +39,67 @@ export const JobEditor = GObject.registerClass({
             .map(source => JSON.parse(JSON.stringify(source)));
         if (this.sources.length === 0)
             this.sources.push({kind: 'local', path: ''});
+        this._step = 0;
         this._build();
     }
 
     _build() {
         const toolbar = new Adw.ToolbarView();
         const header = new Adw.HeaderBar();
-        header.set_title_widget(new Adw.WindowTitle({title: this.title}));
-        const cancelButton = new Gtk.Button({label: 'Cancel'});
-        cancelButton.connect('clicked', () => this.close());
-        header.pack_start(cancelButton);
-        const saveButton = new Gtk.Button({
-            label: 'Save',
+        this.windowTitle = new Adw.WindowTitle({title: this.title});
+        header.set_title_widget(this.windowTitle);
+
+        const cancel = new Gtk.Button({label: 'Cancel'});
+        cancel.connect('clicked', () => this.close());
+        header.pack_start(cancel);
+        this.backButton = new Gtk.Button({
+            icon_name: 'go-previous-symbolic',
+            tooltip_text: 'Back',
+            css_classes: ['flat'],
+        });
+        this.backButton.connect('clicked', () => this._showStep(this._step - 1));
+        header.pack_start(this.backButton);
+
+        this.nextButton = new Gtk.Button({
+            label: 'Next',
             css_classes: ['suggested-action'],
         });
-        saveButton.connect('clicked', () => this._save(false));
-        header.pack_end(saveButton);
-        const dryButton = new Gtk.Button({label: 'Save & Dry Run'});
-        dryButton.connect('clicked', () => this._save(true));
-        header.pack_end(dryButton);
+        this.nextButton.connect('clicked', () => this._next());
+        header.pack_end(this.nextButton);
+        this.saveButton = new Gtk.Button({label: 'Save'});
+        this.saveButton.connect('clicked', () => this._save(false));
+        header.pack_end(this.saveButton);
+        this.runButton = new Gtk.Button({
+            label: 'Save & Run',
+            css_classes: ['suggested-action'],
+        });
+        this.runButton.connect('clicked', () => this._save(true));
+        header.pack_end(this.runButton);
         toolbar.add_top_bar(header);
 
-        const page = new Adw.PreferencesPage();
-        this.page = page;
-        const general = new Adw.PreferencesGroup({
+        this.stack = new Adw.ViewStack();
+        this.stack.add_titled(this._buildGeneralPage(), 'general', STEP_TITLES[0]);
+        this.stack.add_titled(this._buildSourcesPage(), 'sources', STEP_TITLES[1]);
+        this.stack.add_titled(this._buildDestinationPage(), 'destination', STEP_TITLES[2]);
+        this.stack.add_titled(this._buildSchedulePage(), 'schedule', STEP_TITLES[3]);
+        this.stack.add_titled(this._buildSafetyPage(), 'safety', STEP_TITLES[4]);
+        toolbar.set_content(this.stack);
+        this.set_content(toolbar);
+        this._updateVisibility();
+        this._showStep(0);
+    }
+
+    _page() {
+        return new Adw.PreferencesPage();
+    }
+
+    _buildGeneralPage() {
+        const page = this._page();
+        const group = new Adw.PreferencesGroup({
             title: 'General',
-            description: this.isNew ? '' : 'The job type cannot be changed after creation.',
+            description: this.isNew
+                ? 'Name the job and choose whether it mirrors or keeps versions.'
+                : 'The job type cannot be changed after creation.',
         });
         this.nameRow = new Adw.EntryRow({
             title: 'Name',
@@ -72,19 +107,19 @@ export const JobEditor = GObject.registerClass({
         });
         this.typeRow = new Adw.ComboRow({
             title: 'Type',
-            model: Gtk.StringList.new(TYPE_LABELS),
+            model: Gtk.StringList.new(['Sync', 'Backup']),
             selected: this.job.type === JOB_TYPES.BACKUP ? 1 : 0,
         });
         this.typeRow.sensitive = this.isNew;
         this.typeRow.connect('notify::selected', () => this._updateVisibility());
-        general.add(this.nameRow);
-        general.add(this.typeRow);
-        page.add(general);
+        group.add(this.nameRow);
+        group.add(this.typeRow);
+        page.add(group);
+        return page;
+    }
 
-        const locations = new Adw.PreferencesGroup({
-            title: 'Sources and destination',
-            description: 'The backup container SaveMe is created inside the destination; it must not already exist.',
-        });
+    _buildSourcesPage() {
+        const page = this._page();
         this.sourcesGroup = new Adw.PreferencesGroup({
             title: 'Sources',
             description: 'Backup can combine multiple local folders. Sync uses one source.',
@@ -92,32 +127,92 @@ export const JobEditor = GObject.registerClass({
         this.sourceRows = [];
         this.addSourceRow = new Adw.ActionRow({
             title: 'Add another source',
-            subtitle: 'Combine another local folder in this backup.',
+            subtitle: 'Combine another folder in this backup.',
         });
-        const addSource = new Gtk.Button({
+        const add = new Gtk.Button({
             label: 'Add',
             valign: Gtk.Align.CENTER,
             css_classes: ['flat'],
         });
-        addSource.connect('clicked', () => this._addSource());
-        this.addSourceRow.add_suffix(addSource);
+        add.connect('clicked', () => this._addSource());
+        this.addSourceRow.add_suffix(add);
+        this.addSourceAttached = false;
         this._renderSources();
         page.add(this.sourcesGroup);
 
-        this.destinationRow = new Adw.ActionRow({
-            title: 'Destination',
-            subtitle: descriptorDisplay(this.job.destination, this.volumes),
+        const filters = new Adw.PreferencesGroup({title: 'Filters'});
+        this.filtersRow = new Adw.EntryRow({
+            title: 'Exclude patterns (comma-separated)',
+            text: (this.job.filters.exclude || []).join(', '),
         });
-        this._addChooseButton(this.destinationRow, () => {
-            this._chooseDescriptor('Destination', this.job.destination, descriptor => {
-                this.job.destination = descriptor;
-                this.destinationRow.set_subtitle(descriptorDisplay(descriptor, this.volumes));
-            });
-        });
-        locations.add(this.destinationRow);
-        page.add(locations);
+        filters.add(this.filtersRow);
+        page.add(filters);
+        return page;
+    }
 
-        const schedule = new Adw.PreferencesGroup({title: 'Schedule'});
+    _buildDestinationPage() {
+        const page = this._page();
+        const group = new Adw.PreferencesGroup({
+            title: 'Destination',
+            description: 'Choose where SaveMe will create its backup folder. The SaveMe folder must not already exist.',
+        });
+        this.providerButtons = new Map();
+        const providers = [
+            ['local', 'Local folder', 'drive-harddisk-symbolic'],
+            ['onedrive', 'OneDrive', 'folder-remote-symbolic'],
+            ['drive', 'Google Drive', 'folder-remote-symbolic'],
+            ['dropbox', 'Dropbox', 'folder-remote-symbolic'],
+        ];
+        const flow = new Gtk.FlowBox({
+            selection_mode: Gtk.SelectionMode.NONE,
+            max_children_per_line: 4,
+            column_spacing: 8,
+            row_spacing: 8,
+            homogeneous: true,
+            margin_top: 8,
+            margin_bottom: 8,
+        });
+        for (const [kind, label, icon] of providers) {
+            const button = new Gtk.Button({
+                height_request: 72,
+                hexpand: true,
+                css_classes: ['pill'],
+                child: new Adw.ButtonContent({icon_name: icon, label}),
+            });
+            button.connect('clicked', () => {
+                if (kind === 'local')
+                    this._pickLocalFolder(descriptor => this._setDestination(descriptor));
+                else
+                    this._pickProvider(kind);
+            });
+            flow.append(button);
+            this.providerButtons.set(kind, button);
+        }
+        group.add(flow);
+        this.destinationRow = new Adw.ActionRow({
+            title: 'Selected destination',
+            subtitle: descriptorDisplay(this.job.destination, this.volumes) || 'Not selected',
+        });
+        const choose = new Gtk.Button({
+            label: 'Choose',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat'],
+        });
+        choose.connect('clicked', () => this._chooseDescriptor('Destination',
+            this.job.destination, descriptor => this._setDestination(descriptor)));
+        this.destinationRow.add_suffix(choose);
+        group.add(this.destinationRow);
+        page.add(group);
+        this._updateProviderSelection();
+        return page;
+    }
+
+    _buildSchedulePage() {
+        const page = this._page();
+        const group = new Adw.PreferencesGroup({
+            title: 'Schedule',
+            description: 'Choose when the job should run.',
+        });
         const triggerIndex = this.job.trigger.mode === TRIGGER_MODES.INTERVAL
             ? 1
             : this.job.trigger.mode === TRIGGER_MODES.MANUAL ? 2 : 0;
@@ -137,14 +232,11 @@ export const JobEditor = GObject.registerClass({
                 value: Number(this.job.trigger.intervalMinutes || 60),
             }),
         });
-        schedule.add(this.triggerRow);
-        schedule.add(this.intervalRow);
-        page.add(schedule);
+        group.add(this.triggerRow);
+        group.add(this.intervalRow);
+        page.add(group);
 
-        this.backupGroup = new Adw.PreferencesGroup({
-            title: 'Backup',
-            description: 'Backups are stored in <destination>/SaveMe/<job-id>/current. Previous and deleted files go to <destination>/SaveMe/<job-id>/versions/<date>.',
-        });
+        this.backupGroup = new Adw.PreferencesGroup({title: 'Backup'});
         this.retentionRow = new Adw.SpinRow({
             title: 'Keep versions for (days)',
             subtitle: '0 keeps versions forever',
@@ -158,8 +250,15 @@ export const JobEditor = GObject.registerClass({
         });
         this.backupGroup.add(this.retentionRow);
         page.add(this.backupGroup);
+        return page;
+    }
 
-        const options = new Adw.PreferencesGroup({title: 'Safety and performance'});
+    _buildSafetyPage() {
+        const page = this._page();
+        const safety = new Adw.PreferencesGroup({
+            title: 'Safety',
+            description: 'The defaults are suitable for most jobs.',
+        });
         this.maxDeleteRow = new Adw.SpinRow({
             title: 'Maximum deletion (%)',
             subtitle: 'Abort when a run would delete more than this percentage',
@@ -173,7 +272,6 @@ export const JobEditor = GObject.registerClass({
         });
         this.maxDeleteMinimumRow = new Adw.SpinRow({
             title: 'Minimum deletion allowance (files)',
-            subtitle: 'Ignore the percentage below this absolute count',
             adjustment: new Gtk.Adjustment({
                 lower: 0,
                 upper: 100000,
@@ -181,6 +279,26 @@ export const JobEditor = GObject.registerClass({
                 page_increment: 10,
                 value: Number(this.job.options.maxDeleteMinimum ?? 10),
             }),
+        });
+        this.bandwidthRow = new Adw.EntryRow({
+            title: 'Bandwidth limit (e.g. 10M)',
+            text: this.job.options.bandwidthLimit || '',
+        });
+        this.notifyRow = new Adw.SwitchRow({
+            title: 'Notify when the job finishes',
+            subtitle: 'Show a desktop notification after a completed backup.',
+            active: this.job.options.notifyOnComplete !== false,
+        });
+        safety.add(this.maxDeleteRow);
+        safety.add(this.maxDeleteMinimumRow);
+        safety.add(this.bandwidthRow);
+        safety.add(this.notifyRow);
+        page.add(safety);
+
+        const advanced = new Adw.PreferencesGroup({title: 'Advanced'});
+        this.advancedExpander = new Adw.ExpanderRow({
+            title: 'Performance and metadata',
+            subtitle: 'Transfers, checkers, metadata and symbolic links',
         });
         this.transfersRow = new Adw.SpinRow({
             title: 'Parallel transfers',
@@ -202,10 +320,6 @@ export const JobEditor = GObject.registerClass({
                 value: Number(this.job.options.checkers || 8),
             }),
         });
-        this.bandwidthRow = new Adw.EntryRow({
-            title: 'Bandwidth limit (e.g. 10M)',
-            text: this.job.options.bandwidthLimit || '',
-        });
         this.metadataRow = new Adw.SwitchRow({
             title: 'Preserve metadata',
             active: Boolean(this.job.options.preserveMetadata),
@@ -214,32 +328,61 @@ export const JobEditor = GObject.registerClass({
             title: 'Follow symbolic links',
             active: Boolean(this.job.options.followSymlinks),
         });
-        this.notifyRow = new Adw.SwitchRow({
-            title: 'Notify when the job finishes',
-            subtitle: 'Show a desktop notification after a completed run.',
-            active: this.job.options.notifyOnComplete !== false,
-        });
-        options.add(this.maxDeleteRow);
-        options.add(this.maxDeleteMinimumRow);
-        options.add(this.transfersRow);
-        options.add(this.checkersRow);
-        options.add(this.bandwidthRow);
-        options.add(this.metadataRow);
-        options.add(this.symlinkRow);
-        options.add(this.notifyRow);
-        page.add(options);
+        this.advancedExpander.add_row(this.transfersRow);
+        this.advancedExpander.add_row(this.checkersRow);
+        this.advancedExpander.add_row(this.metadataRow);
+        this.advancedExpander.add_row(this.symlinkRow);
+        advanced.add(this.advancedExpander);
+        page.add(advanced);
+        return page;
+    }
 
-        const filters = new Adw.PreferencesGroup({title: 'Filters'});
-        this.filtersRow = new Adw.EntryRow({
-            title: 'Exclude patterns (comma-separated)',
-            text: (this.job.filters.exclude || []).join(', '),
-        });
-        filters.add(this.filtersRow);
-        page.add(filters);
+    _showStep(index) {
+        this._step = Math.max(0, Math.min(STEP_TITLES.length - 1, index));
+        const names = ['general', 'sources', 'destination', 'schedule', 'safety'];
+        this.stack.set_visible_child_name(names[this._step]);
+        this.windowTitle.title = `${this.isNew ? 'New job' : 'Edit job'} · ` +
+            `${STEP_TITLES[this._step]} (${this._step + 1}/${STEP_TITLES.length})`;
+        this.backButton.visible = this._step > 0;
+        this.nextButton.visible = this._step < STEP_TITLES.length - 1;
+        this.saveButton.visible = this._step === STEP_TITLES.length - 1;
+        this.runButton.visible = this._step === STEP_TITLES.length - 1;
+    }
 
-        toolbar.set_content(page);
-        this.set_content(toolbar);
-        this._updateVisibility();
+    _next() {
+        if (this._validateStep(this._step))
+            this._showStep(this._step + 1);
+    }
+
+    _validateStep(index) {
+        if (index === 0 && !this.nameRow.text.trim()) {
+            this._showError('Give the job a name.');
+            return false;
+        }
+        if (index === 1 && !this.sources.some(source => source.path || source.volumeUuid)) {
+            this._showError('Choose at least one source folder.');
+            return false;
+        }
+        if (index === 2 && !this._destinationSelected()) {
+            this._showError('Choose a destination.');
+            return false;
+        }
+        if (index === 3 && this.triggerRow.selected === 1 && this.intervalRow.value < 1) {
+            this._showError('The interval must be at least one minute.');
+            return false;
+        }
+        return true;
+    }
+
+    _showError(message) {
+        const dialog = new Adw.AlertDialog({heading: 'Check this step', body: message});
+        dialog.add_response('ok', 'OK');
+        dialog.present(this);
+    }
+
+    _destinationSelected() {
+        const destination = this.job.destination;
+        return destination && (destination.path || destination.volumeUuid || destination.remote);
     }
 
     _addChooseButton(row, callback) {
@@ -253,18 +396,18 @@ export const JobEditor = GObject.registerClass({
     }
 
     _renderSources() {
-        let child = this.sourcesGroup.get_first_child();
-        while (child) {
-            const next = child.get_next_sibling();
-            this.sourcesGroup.remove(child);
-            child = next;
+        for (const row of this.sourceRows)
+            this.sourcesGroup.remove(row);
+        if (this.addSourceAttached) {
+            this.sourcesGroup.remove(this.addSourceRow);
+            this.addSourceAttached = false;
         }
         this.sourceRows = [];
         const backup = this.typeRow?.selected === 1;
         for (const [index, source] of this.sources.entries()) {
             const row = new Adw.ActionRow({
                 title: `Source ${index + 1}`,
-                subtitle: descriptorDisplay(source, this.volumes),
+                subtitle: descriptorDisplay(source, this.volumes) || 'Not selected',
             });
             this._addChooseButton(row, () => {
                 this._chooseDescriptor(`Source ${index + 1}`, this.sources[index],
@@ -291,10 +434,10 @@ export const JobEditor = GObject.registerClass({
             this.sourcesGroup.add(row);
             this.sourceRows.push(row);
         }
-        this.addSourceRow.visible = backup;
-        if (backup)
+        if (backup) {
             this.sourcesGroup.add(this.addSourceRow);
-        this.sourcesGroup.visible = true;
+            this.addSourceAttached = true;
+        }
     }
 
     _addSource() {
@@ -310,19 +453,69 @@ export const JobEditor = GObject.registerClass({
         const type = this.typeRow.selected === 1 ? JOB_TYPES.BACKUP : JOB_TYPES.SYNC;
         if (type !== JOB_TYPES.BACKUP && this.sources.length > 1)
             this.sources = [this.sources[0]];
-        this.backupGroup.visible = type === JOB_TYPES.BACKUP;
-        this.intervalRow.visible = this.triggerRow.selected === 1;
+        if (this.backupGroup)
+            this.backupGroup.visible = type === JOB_TYPES.BACKUP;
+        if (this.intervalRow)
+            this.intervalRow.visible = this.triggerRow.selected === 1;
         if (type === JOB_TYPES.BACKUP && this.isNew && this.triggerRow.selected === 0) {
             this.triggerRow.selected = 1;
             this.intervalRow.value = 60;
         }
-        this._renderSources();
+        if (this.sourcesGroup)
+            this._renderSources();
+    }
+
+    _setDestination(descriptor) {
+        this.job.destination = descriptor;
+        this.destinationRow.set_subtitle(
+            descriptorDisplay(descriptor, this.volumes) || 'Not selected');
+        this._updateProviderSelection();
+    }
+
+    _updateProviderSelection() {
+        const destination = this.job.destination;
+        for (const [kind, button] of this.providerButtons || []) {
+            button.remove_css_class('suggested-action');
+            const selected = kind === 'local'
+                ? destination?.kind === 'local'
+                : destination?.kind === 'remote' &&
+                    this._providerForRemote(destination.remote) === kind;
+            if (selected)
+                button.add_css_class('suggested-action');
+        }
+    }
+
+    _providerForRemote(name) {
+        const remote = (this.parentWindow.snapshot?.remotes || [])
+            .find(item => item.name === name);
+        return remote?.type || null;
+    }
+
+    _pickProvider(type) {
+        const remotes = (this.parentWindow.snapshot?.remotes || [])
+            .filter(remote => remote.type === type);
+        if (remotes.length === 0) {
+            this._showError(`No ${type === 'drive' ? 'Google Drive' : type} account configured. ` +
+                'Add it in Accounts first.');
+            return;
+        }
+        const current = this.job.destination?.kind === 'remote' &&
+            this._providerForRemote(this.job.destination.remote) === type
+            ? this.job.destination
+            : null;
+        new RemoteBrowserDialog(this.parentWindow, {
+            mode: 'pick',
+            remote: current?.remote || remotes[0].name,
+            path: current?.path || '',
+            transientFor: this,
+            onSelect: descriptor => this._setDestination(descriptor),
+        }).present();
     }
 
     _chooseDescriptor(title, current, callback) {
         const dialog = new Adw.AlertDialog({
             heading: title,
-            body: `Current: ${descriptorDisplay(current, this.volumes)}`,
+            body: `Current: ${descriptorDisplay(current, this.volumes) || 'Not selected'}`,
         });
         dialog.add_response('cancel', 'Cancel');
         dialog.add_response('local', 'Local folder');
@@ -402,34 +595,32 @@ export const JobEditor = GObject.registerClass({
         });
     }
 
-    async _save(dryRun) {
+    async _save(run) {
+        for (let step = 0; step < 4; step++) {
+            if (!this._validateStep(step)) {
+                this._showStep(step);
+                return;
+            }
+        }
         const job = this._collectJob();
         delete job.state;
         const remotes = (this.parentWindow.snapshot?.remotes || []).map(remote => remote.name);
         const errors = validateJob(job, {remotes});
         if (errors.length > 0) {
-            const dialog = new Adw.AlertDialog({
-                heading: 'Cannot save job',
-                body: errors.join('\n'),
-            });
-            dialog.add_response('ok', 'OK');
-            dialog.present(this);
+            this._showError(errors.join('\n'));
             return;
         }
         try {
             const saved = await this.client.saveJob(job);
-            this.parentWindow.toast(dryRun ? 'Job saved. Starting dry run.' : 'Job saved.');
-            if (dryRun)
-                await this.client.runJob(saved.id, true, false);
+            if (run)
+                await this.client.runJob(saved.id, false, false);
+            this.parentWindow.toast(run
+                ? 'Job saved and run started.'
+                : 'Job saved.');
             this.parentWindow.refresh();
             this.close();
         } catch (e) {
-            const dialog = new Adw.AlertDialog({
-                heading: 'Cannot save job',
-                body: e.message,
-            });
-            dialog.add_response('ok', 'OK');
-            dialog.present(this);
+            this._showError(e.message);
         }
     }
 });

@@ -512,7 +512,7 @@ do_install() {
         say "Try manually: sudo apt-get install -y --reinstall $DEB_INSTALL"
         exit 1
     fi
-    if ! package_installed; then
+    if [ "$DRY_RUN" -eq 0 ] && ! package_installed; then
         say "apt-get completed but the saveme package is not installed."
         say "Check the apt output above and the package dependencies."
         exit 1
