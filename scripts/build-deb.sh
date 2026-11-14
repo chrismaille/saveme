@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-VERSION="${VERSION:-1.0.0~dev5}"
+VERSION="${VERSION:-1.0.0~dev6}"
 ARCH="${ARCH:-$(dpkg --print-architecture)}"
 MAINTAINER="${MAINTAINER:-chrismaille <chrismaille@users.noreply.github.com>}"
 STAGE="$ROOT_DIR/build/deb/saveme_${VERSION}_${ARCH}"

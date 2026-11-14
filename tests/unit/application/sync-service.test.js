@@ -12,6 +12,34 @@ function syncContext() {
 }
 
 export default suite('application/sync-service', [
+    test('full sync progress never moves backwards and finishes at 100', async () => {
+        const ctx = syncContext();
+        ctx.transfer.handler = (args, options) => {
+            if (args[0] === 'sync' && !args.includes('--dry-run')) {
+                options.onStats({...emptyStats(), bytes: 8, totalBytes: 10});
+                options.onStats({...emptyStats(), bytes: 3, totalBytes: 10});
+            }
+            return {exitCode: 0, stats: emptyStats(), lastError: null, cancelled: false};
+        };
+        const percents = [];
+        const run = await ctx.sync.runFull(makeJob('sync'), {
+            onProgress: progress => percents.push(progress.percent),
+        });
+        assertEqual(run.result, 'success');
+        for (let index = 1; index < percents.length; index++)
+            assert(percents[index] >= percents[index - 1]);
+        assertEqual(percents.at(-1), 100);
+    }),
+    test('cancellation during source sizing is reported as cancelled', async () => {
+        const ctx = syncContext();
+        ctx.transfer.sizeAsync = async () => {
+            throw new Error('rclone size failed');
+        };
+        const run = await ctx.sync.runFull(makeJob('sync'), {
+            cancellable: {is_cancelled: () => true},
+        });
+        assertEqual(run.result, 'cancelled');
+    }),
     test('full sync runs a preflight and applies a guarded sync', async () => {
         const ctx = syncContext();
         const job = makeJob('sync', {options: {maxDeletePercent: 50, maxDeleteMinimum: 0}});

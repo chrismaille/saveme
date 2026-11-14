@@ -12,6 +12,47 @@ function backupContext({count = 2, retentionDays = 0} = {}) {
 }
 
 export default suite('application/backup-service', [
+    test('full backup reports one monotonic progress bar across sources', async () => {
+        const services = makeServices();
+        services.files.addDir('/photos');
+        services.files.addDir('/docs');
+        services.files.addDir('/dst');
+        services.transfer.sizes.set('/photos', {count: 2, bytes: 20});
+        services.transfer.sizes.set('/docs', {count: 3, bytes: 30});
+        services.transfer.handler = (args, options) => {
+            if (args[0] === 'sync') {
+                options.onStats({...emptyStats(), bytes: 6, totalBytes: 10});
+                options.onStats({...emptyStats(), bytes: 2, totalBytes: 10});
+            }
+            return {exitCode: 0, stats: emptyStats(), lastError: null, cancelled: false};
+        };
+        const job = makeJob('backup', {
+            sources: [
+                {kind: 'local', path: '/photos'},
+                {kind: 'local', path: '/docs'},
+            ],
+            trigger: {mode: 'interval', intervalMinutes: 60},
+        });
+        const percents = [];
+        const run = await services.backup.runFull(job, {
+            onProgress: progress => percents.push(progress.percent),
+        });
+        assertEqual(run.result, 'success');
+        for (let index = 1; index < percents.length; index++)
+            assert(percents[index] >= percents[index - 1]);
+        assert(percents.includes(95));
+        assertEqual(percents.at(-1), 100);
+    }),
+    test('cancellation during source sizing is reported as cancelled', async () => {
+        const {services, job} = backupContext();
+        services.transfer.sizeAsync = async () => {
+            throw new Error('rclone size failed');
+        };
+        const run = await services.backup.runFull(job, {
+            cancellable: {is_cancelled: () => true},
+        });
+        assertEqual(run.result, 'cancelled');
+    }),
     test('full backup writes current and a version directory', async () => {
         const {services, job} = backupContext();
         const run = await services.backup.runFull(job);

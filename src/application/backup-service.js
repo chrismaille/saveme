@@ -61,8 +61,26 @@ export class BackupService {
             ctx.versionsDir = versionBase;
             const labels = uniqueSourceFolderNames(job);
             const multi = prep.sources.length > 1;
+            const totalSources = Math.max(1, prep.sources.length);
+            let sourceIndex = 0;
+            let sourceFraction = 0;
+            // Report one overall bar: each source owns an equal slice and the
+            // fraction inside a slice never moves backwards while rclone is
+            // still counting the source.
+            ctx.progressMapper = progress => {
+                const current = Math.max(0,
+                    Math.min(1, Number(progress.percent || 0) / 100));
+                sourceFraction = Math.max(sourceFraction, current);
+                return {
+                    ...progress,
+                    phase: 'syncing',
+                    percent: ((sourceIndex + sourceFraction) / totalSources) * 95,
+                };
+            };
 
             for (const [index, source] of prep.sources.entries()) {
+                sourceIndex = index;
+                sourceFraction = 0;
                 const current = multi
                     ? joinRclonePath(baseCurrent, labels[index])
                     : baseCurrent;
@@ -84,10 +102,15 @@ export class BackupService {
                     return this.executor.endRun(ctx, 'error',
                         result.lastError || exitCodeMessage(result.exitCode));
             }
+            ctx.progressMapper = null;
+            this.executor.updateProgress(ctx, {percent: 95, phase: 'cleanup'});
             if (!dryRun)
                 await this.executor.cleanupVersions(ctx, job, prep.dest, cancellable);
+            this.executor.updateProgress(ctx, {percent: 100, phase: 'done'});
             return this.executor.endRun(ctx, 'success');
         } catch (e) {
+            if (cancellable?.is_cancelled())
+                return this.executor.endRun(ctx, 'cancelled', 'Cancelled');
             return this.executor.endRun(ctx, 'error', this.executor.friendlyError(e));
         }
     }

@@ -92,10 +92,18 @@ export class SyncService {
             if (dryRun)
                 args = withDryRun(args);
 
+            let syncFraction = 0;
+            ctx.progressMapper = progress => {
+                const current = Math.max(0,
+                    Math.min(1, Number(progress.percent || 0) / 100));
+                syncFraction = Math.max(syncFraction, current);
+                return {...progress, phase: 'syncing', percent: syncFraction * 95};
+            };
             const result = await this.executor.runRclone(ctx, args, {
                 phase: 'syncing',
                 cancellable,
             });
+            ctx.progressMapper = null;
             if (result.cancelled)
                 return this.executor.endRun(ctx, 'cancelled', 'Cancelled');
             if (!isSuccessExit(result.exitCode)) {
@@ -108,8 +116,11 @@ export class SyncService {
             }
             if (Number.isFinite(sourceCount) && !dryRun)
                 this.executor.rememberSourceCount(job, sourceCount);
+            this.executor.updateProgress(ctx, {percent: 100, phase: 'done'});
             return this.executor.endRun(ctx, 'success');
         } catch (e) {
+            if (cancellable?.is_cancelled())
+                return this.executor.endRun(ctx, 'cancelled', 'Cancelled');
             return this.executor.endRun(ctx, 'error', this.executor.friendlyError(e));
         }
     }

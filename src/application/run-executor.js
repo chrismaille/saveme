@@ -86,6 +86,8 @@ export class RunExecutor {
             lastError: null,
             exitCode: null,
             onProgress: null,
+            progressMapper: null,
+            progress: null,
         };
     }
 
@@ -223,12 +225,33 @@ export class RunExecutor {
     }
 
     onStats(ctx, phase, stats) {
-        const progress = progressFromStats(stats, {
+        let progress = progressFromStats(stats, {
             jobId: ctx.job.id,
             runId: ctx.runId,
             phase,
             currentPath: ctx.currentFile || null,
         });
+        if (ctx.progressMapper)
+            progress = ctx.progressMapper(progress) || progress;
+        ctx.progress = progress;
+        try {
+            this.state?.updateProgress(ctx.job.id, progress);
+        } catch (_) {
+            // State writes are best effort.
+        }
+        ctx.onProgress?.(progress);
+    }
+
+    updateProgress(ctx, patch) {
+        const progress = {
+            jobId: ctx.job.id,
+            runId: ctx.runId,
+            phase: 'running',
+            percent: 0,
+            ...(ctx.progress || {}),
+            ...patch,
+        };
+        ctx.progress = progress;
         try {
             this.state?.updateProgress(ctx.job.id, progress);
         } catch (_) {
