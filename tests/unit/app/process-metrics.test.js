@@ -5,7 +5,7 @@ import {
     parseProcStatus,
     readProcessMetrics,
 } from '../../../app/observability/process-metrics.js';
-import {assertEqual, cleanup, suite, tempDir, test} from '../../harness.js';
+import {assert, assertEqual, cleanup, suite, tempDir, test} from '../../harness.js';
 
 export default suite('app/observability/process-metrics', [
     test('parses RSS, peak and virtual memory from proc status', () => {
@@ -64,6 +64,9 @@ export default suite('app/observability/process-metrics', [
                 statusPath: `${root}/missing`,
                 statPath: stat,
             }), null);
+            const real = readProcessMetrics();
+            assert(real.rssBytes > 0);
+            assertEqual(parseProcStatus().rssBytes, 0);
         } finally {
             cleanup(root);
         }

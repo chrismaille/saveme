@@ -99,7 +99,13 @@ function makeContext(options) {
         configPath: rcloneConfigFile(),
         logger,
     });
-    const runner = createJobRunner({rclone, volumes, logger, state});
+    const runner = createJobRunner({
+        rclone,
+        volumes,
+        logger,
+        state,
+        getSettings: () => config.settings,
+    });
     return {logger, config, state, volumes, rclone, runner};
 }
 

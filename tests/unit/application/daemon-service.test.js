@@ -67,9 +67,15 @@ class FakeTransfer {
         this.captures = [];
         this.captureHandler = null;
         this.deleted = [];
+        this.sizes = new Map();
+        this.lastSize = null;
     }
     getVersion() { if (this.version instanceof Error) throw this.version; return this.version; }
     checkVersion() { return true; }
+    size(path, options = {}) {
+        this.lastSize = {path, ...options};
+        return this.sizes.get(path) ?? {count: 0, bytes: 0};
+    }
     runCapture(args) {
         this.captures.push(args);
         if (this.captureHandler) return this.captureHandler(args);
@@ -139,6 +145,7 @@ export default suite('application/daemon-service', [
         const snapshot = JSON.parse(ctx.service.snapshotJson());
         assertEqual(snapshot.version, '1.0.0-dev');
         assertEqual(snapshot.daemon.pid, 42);
+        assertEqual(snapshot.daemon.process, null);
         assertEqual(snapshot.jobs[0].state.status, 'idle');
         assertEqual(snapshot.remotes.length, 1);
         assertEqual(snapshot.volumes.length, 1);
@@ -230,6 +237,9 @@ export default suite('application/daemon-service', [
         assertEqual(ctx.service.listRemote('drive', '', false), '[]');
         ctx.transfer.captureHandler = () => ({exitCode: 0, stdout: '{bad', stderr: ''});
         assertThrows(() => ctx.service.listRemote('drive', '', false), /Invalid rclone lsjson/);
+        ctx.transfer.sizes.set('drive:', {count: 10000, bytes: 100});
+        assertThrows(() => ctx.service.listRemote('drive', '', false),
+            /open a subfolder/);
     }),
     test('listBackup handles current, version and invalid inputs', () => {
         const ctx = makeService();

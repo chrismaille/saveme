@@ -5,6 +5,7 @@ export const STATUS_LABELS = {
     'waiting-source': 'Source missing',
     'waiting-destination': 'Destination missing',
     'offline': 'Offline',
+    'no-space': 'Not enough disk space',
     'error': 'Error',
     'needs-auth': 'Needs authentication',
     'delete-guard': 'Deleting blocked',
@@ -107,7 +108,7 @@ export function statusIconName(status) {
         return 'emblem-synchronizing-symbolic';
     if (status === 'paused' || status === 'disabled')
         return 'media-playback-pause-symbolic';
-    if (['waiting-source', 'waiting-destination', 'offline'].includes(status))
+    if (['waiting-source', 'waiting-destination', 'offline', 'no-space'].includes(status))
         return 'dialog-warning-symbolic';
     return 'emblem-ok-symbolic';
 }

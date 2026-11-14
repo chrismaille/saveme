@@ -17,7 +17,8 @@
 
 .saveme-status-waiting-source,
 .saveme-status-waiting-destination,
-.saveme-status-offline {
+.saveme-status-offline,
+.saveme-status-no-space {
     color: #e5a50a;
 }
 

@@ -252,14 +252,28 @@ export class RcloneTransferEngine {
         }
     }
 
+    about(path) {
+        const result = this.runCapture(['about', path, '--json']);
+        if (result.exitCode !== 0)
+            throw new Error(result.stderr.trim() ||
+                `rclone about failed for ${path}`);
+        try {
+            return JSON.parse(result.stdout || '{}');
+        } catch (e) {
+            throw new Error(`Invalid rclone about output: ${e.message}`, {cause: e});
+        }
+    }
+
     listRemoteNames() {
         return Object.keys(this.configDump()).sort();
     }
 
-    size(path, {fastList = false} = {}) {
+    size(path, {fastList = false, maxDepth = null} = {}) {
         const args = ['size', path, '--json'];
         if (fastList)
             args.push('--fast-list');
+        if (maxDepth !== null)
+            args.push('--max-depth', String(maxDepth));
         const result = this.runCapture(args);
         if (result.exitCode !== 0)
             throw new Error(`rclone size failed for ${path}: ${result.stderr.trim()}`);

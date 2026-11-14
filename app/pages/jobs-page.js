@@ -1,7 +1,8 @@
 import Pango from 'gi://Pango';
 import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
-import {JOB_TYPES, descriptorDisplay} from '../../src/jobs.js';
+import Gio from 'gi://Gio';
+import {JOB_TYPES, descriptorDisplay, localPathFor} from '../../src/jobs.js';
 import {
     backupRootDisplay,
     formatBytes,
@@ -363,6 +364,7 @@ export class JobsPage {
             data: this._statRow('Data'),
             speed: this._statRow('Speed / ETA'),
             deletes: this._statRow('Deletes / errors'),
+            free: this._statRow('Destination free'),
             last: this._statRow('Last run'),
             message: this._statRow('Message'),
         };
@@ -466,6 +468,19 @@ export class JobsPage {
         return new Adw.ActionRow({title, subtitle});
     }
 
+    _destinationFree(job) {
+        if (job.destination?.kind !== 'local')
+            return 'cloud';
+        try {
+            const path = localPathFor(job.destination, this.window.volumes);
+            const info = Gio.File.new_for_path(path).query_filesystem_info(
+                'filesystem::free', null);
+            return formatBytes(Number(info.get_attribute_uint64('filesystem::free')));
+        } catch (_) {
+            return '-';
+        }
+    }
+
     _updateDetails(job) {
         if (!this.detail || this.detail.jobId !== job.id) {
             this._renderDetails();
@@ -510,6 +525,7 @@ export class JobsPage {
         this.detail.stats.deletes.set_subtitle(progress
             ? `${progress.deletes || 0} / ${progress.errors || 0}`
             : '-');
+        this.detail.stats.free.set_subtitle(this._destinationFree(job));
         this.detail.stats.last.set_subtitle(state.lastRunAt
             ? `${state.lastResult || '-'} · ${formatWhen(state.lastRunAt)}`
             : 'never');

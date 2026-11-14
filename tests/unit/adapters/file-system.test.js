@@ -67,6 +67,7 @@ export default suite('adapters/gio/file-system', [
         const root = tempDir('saveme-fs-write');
         try {
             const fs = new GioFileSystem();
+            assert(fs.freeSpace(root) > 0);
             const file = path(root, 'nested', 'file.txt');
             fs.writeText(file, 'content', 0o600);
             const [ok, bytes] = GLib.file_get_contents(file);

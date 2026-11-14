@@ -84,8 +84,19 @@ export default suite('domain/log-policy', [
             nowMs: NOW,
             retentionDays: 0,
             maxTotalBytes: 0,
+            protectModifiedWithinMs: 0,
         });
         assertEqual(plan.paths.length, 0);
+        const noProtection = planLogCleanup([
+            {path: '/old.log', size: 100, mtimeMs: NOW - 10 * DAY},
+            {path: '/new.log', size: 100, mtimeMs: NOW - DAY},
+        ], {
+            nowMs: NOW,
+            retentionDays: 30,
+            maxTotalBytes: 150,
+            protectModifiedWithinMs: Number.NaN,
+        });
+        assertEqual(noProtection.paths.length, 1);
         const summary = summarizeLogEntries(entries);
         assertEqual(summary.totalBytes, 600);
         assertEqual(summary.files, 3);

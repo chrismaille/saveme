@@ -15,9 +15,11 @@ import {escapeFilterPath, filterRules} from '../domain/rclone-command.js';
 import {
     DeleteGuardError,
     DestinationUnavailableError,
+    DiskSpaceError,
     EmptySourceError,
     SourceUnavailableError,
 } from '../domain/errors.js';
+import {DEFAULT_DISK_GUARD, planDiskCheck} from '../domain/disk-space.js';
 
 export class RunExecutor {
     constructor({
@@ -29,6 +31,7 @@ export class RunExecutor {
         clock,
         paths,
         rawLogFactory,
+        getSettings = () => ({}),
         idFactory = prefix => `${prefix}${Date.now().toString(36)}`,
     }) {
         this.transfer = transfer;
@@ -39,6 +42,7 @@ export class RunExecutor {
         this.clock = clock;
         this.paths = paths;
         this.rawLogFactory = rawLogFactory;
+        this.getSettings = getSettings;
         this.idFactory = idFactory;
     }
 
@@ -245,19 +249,86 @@ export class RunExecutor {
         return path;
     }
 
-    async sourceCount(job, prep, {exact, cancellable = null}) {
+    async sourceCount(job, prep, options) {
+        return (await this.sourceStats(job, prep, options)).count;
+    }
+
+    async sourceStats(job, prep, {exact, cancellable = null} = {}) {
         if (exact) {
             const size = await this.transfer.sizeAsync(prep.source, {
                 fastList: !prep.sourceIsLocal,
                 cancellable,
             });
-            return size.count;
+            return {
+                count: size.count === undefined ? 0 : Number(size.count),
+                bytes: size.bytes === undefined ? 0 : Number(size.bytes),
+            };
         }
         if (!prep.sourceIsLocal)
+            return {count: null, bytes: null};
+        return {
+            count: this.files.topLevelEntryCount(prep.source, {
+                ignore: ['.saveme', '.saveme-versions'],
+            }),
+            bytes: null,
+        };
+    }
+
+    checkDiskSpace(job, prep, sourceBytes) {
+        if (sourceBytes === null || sourceBytes === undefined)
             return null;
-        return this.files.topLevelEntryCount(prep.source, {
-            ignore: ['.saveme', '.saveme-versions'],
+        const source = Number(sourceBytes);
+        if (!Number.isFinite(source))
+            return null;
+        let free;
+        if (prep.destIsLocal) {
+            if (typeof this.files.freeSpace !== 'function')
+                return null;
+            free = this.files.freeSpace(prep.dest);
+        } else {
+            if (typeof this.transfer.about !== 'function')
+                return null;
+            try {
+                const remote = String(prep.dest || '');
+                const colon = remote.indexOf(':');
+                const root = colon > 0 ? `${remote.slice(0, colon)}:` : remote;
+                const about = this.transfer.about(root);
+                free = about?.free;
+            } catch (e) {
+                this.logger?.warn(`Cannot read remote free space: ${e.message}`);
+                return null;
+            }
+        }
+        if (free === null || free === undefined)
+            return null;
+        const freeBytes = Number(free);
+        if (!Number.isFinite(freeBytes))
+            return null;
+        const settings = this.getSettings() || {};
+        const plan = planDiskCheck({
+            sourceBytes: source,
+            freeBytes,
+            safetyPercent: settings.diskSafetyPercent ??
+                DEFAULT_DISK_GUARD.safetyPercent,
+            minimumFreeBytes: Number(settings.minFreeSpaceMb ??
+                DEFAULT_DISK_GUARD.minimumFreeBytes / (1024 * 1024)) * 1024 * 1024,
+            factor: job.type === 'backup' ? 1.25 : 1,
         });
+        if (!plan.checked)
+            return null;
+        if (!plan.ok) {
+            throw new DiskSpaceError({
+                freeBytes: plan.freeBytes,
+                requiredBytes: plan.requiredBytes,
+                destination: prep.dest,
+            });
+        }
+        this.logger?.info('Disk space check', {
+            sourceBytes: plan.sourceBytes,
+            freeBytes: plan.freeBytes,
+            requiredBytes: plan.requiredBytes,
+        });
+        return plan;
     }
 
     checkEmptySource(job, sourceCount, force) {
@@ -272,6 +343,7 @@ export class RunExecutor {
         if (error instanceof SourceUnavailableError ||
             error instanceof DestinationUnavailableError ||
             error instanceof EmptySourceError ||
+            error instanceof DiskSpaceError ||
             error instanceof DeleteGuardError)
             return error.message;
         return error?.message || String(error);

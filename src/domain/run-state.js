@@ -7,6 +7,7 @@ export const JOB_STATUS = {
     WAITING_SOURCE: 'waiting-source',
     WAITING_DESTINATION: 'waiting-destination',
     OFFLINE: 'offline',
+    NO_SPACE: 'no-space',
     ERROR: 'error',
     NEEDS_AUTH: 'needs-auth',
     DELETE_GUARD: 'delete-guard',
@@ -24,6 +25,9 @@ export function statusFromError(message) {
         return JOB_STATUS.NEEDS_AUTH;
     if (/Delete guard/i.test(message))
         return JOB_STATUS.DELETE_GUARD;
+    if (/not enough (free )?disk space|no space left|filesystem.*full|disk.*full|quota exceeded/i
+        .test(message))
+        return JOB_STATUS.NO_SPACE;
     return JOB_STATUS.ERROR;
 }
 

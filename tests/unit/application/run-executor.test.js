@@ -162,6 +162,46 @@ export default suite('application/run-executor', [
             source: 'drive:src', sourceIsLocal: false,
         }, {exact: false}), null);
     }),
+    test('sourceStats returns bytes and count for exact sizing', async () => {
+        const {executor, transfer} = context();
+        transfer.sizes.set('drive:src', {count: 7, bytes: 70});
+        const stats = await executor.sourceStats({}, {
+            source: 'drive:src', sourceIsLocal: false,
+        }, {exact: true});
+        assertEqual(stats.count, 7);
+        assertEqual(stats.bytes, 70);
+        transfer.sizeAsync = async () => ({});
+        const empty = await executor.sourceStats({}, {
+            source: 'drive:src', sourceIsLocal: false,
+        }, {exact: true});
+        assertEqual(empty.count, 0);
+        assertEqual(empty.bytes, 0);
+    }),
+    test('checkDiskSpace blocks local destinations without room', async () => {
+        const {executor, files} = context();
+        executor.getSettings = () => ({minFreeSpaceMb: 0, diskSafetyPercent: 10});
+        files.freeSpaceBytes = 100;
+        const job = {type: 'sync'};
+        const prep = {dest: '/dst', destIsLocal: true};
+        const plan = executor.checkDiskSpace(job, prep, 50);
+        assertEqual(plan.checked, true);
+        assertEqual(plan.ok, true);
+        files.freeSpaceBytes = 20;
+        await assertThrows(() => executor.checkDiskSpace(job, prep, 50),
+            /Not enough free disk space/);
+        assertEqual(executor.checkDiskSpace(job, {
+            dest: '/dst', destIsLocal: false,
+        }, 50), null);
+        assertEqual(executor.checkDiskSpace(job, prep, null), null);
+        executor.transfer.about = () => ({free: 20});
+        await assertThrows(() => executor.checkDiskSpace(job, {
+            dest: 'drive:', destIsLocal: false,
+        }, 50), /Not enough free disk space/);
+        executor.transfer.about = () => ({free: 1000});
+        assertEqual(executor.checkDiskSpace(job, {
+            dest: 'drive:SaveMe/job', destIsLocal: false,
+        }, 50).ok, true);
+    }),
     test('checkEmptySource covers force, unknown counts and previous counts', async () => {
         const {executor, state} = context();
         executor.checkEmptySource({id: 'job_test'}, 0, true);

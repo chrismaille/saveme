@@ -66,6 +66,10 @@ export class FakeFileSystem {
         this.removed.push(path);
         this.nodes.delete(path);
     }
+
+    freeSpace(_path) {
+        return this.freeSpaceBytes ?? null;
+    }
 }
 
 export class FakeTransfer {
@@ -306,6 +310,7 @@ export function makeExecutor({
     clock = new FakeClock(),
     paths = new FakePaths(),
     rawLogFactory = new FakeRawLogFactory(),
+    getSettings = () => ({}),
 } = {}) {
     const runRepository = new FakeRunRepository();
     let counter = 0;
@@ -318,6 +323,7 @@ export function makeExecutor({
         clock,
         paths,
         rawLogFactory,
+        getSettings,
         idFactory: prefix => `${prefix}${++counter}`,
     });
     return {executor, transfer, files, logger, state, clock, paths, rawLogFactory, runRepository};

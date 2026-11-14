@@ -21,6 +21,7 @@ import {
 } from './util.js';
 import {cloneJob, defaultJob, descriptorKey, jobRemoteNames, normalizeJob, validateJob} from './jobs.js';
 import {DEFAULT_LOG_POLICY} from './domain/log-policy.js';
+import {DEFAULT_DISK_GUARD} from './domain/disk-space.js';
 
 export const CONFIG_VERSION = 1;
 
@@ -36,6 +37,8 @@ export function defaultConfig() {
             language: 'system',
             logRetentionDays: DEFAULT_LOG_POLICY.retentionDays,
             maxLogTotalBytes: DEFAULT_LOG_POLICY.maxTotalBytes,
+            diskSafetyPercent: DEFAULT_DISK_GUARD.safetyPercent,
+            minFreeSpaceMb: DEFAULT_DISK_GUARD.minimumFreeBytes / (1024 * 1024),
         },
         remotes: [],
         jobs: [],

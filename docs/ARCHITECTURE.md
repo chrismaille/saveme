@@ -196,7 +196,7 @@ Status do job:
 
 ```
 idle | running | paused | waiting-source | waiting-destination |
-offline | error | needs-auth | disabled
+offline | no-space | error | needs-auth | disabled
 ```
 
 ## 7. D-Bus
@@ -378,6 +378,16 @@ Para remotes, o caminho equivalente é
   `disabled`.
 - `LogService` puro aplica a política de retenção/tamanho e roda no startup,
   a cada 6 h e ao salvar a política.
+- Antes de sync/backup para destino local, o executor consulta o tamanho da
+  origem e `filesystem::free` do destino. A margem padrão é 10% + 512 MiB;
+  backup usa fator 1,25. Sem espaço, o job falha como `no-space` antes de
+  escrever.
+- Para destino remoto, a mesma checagem usa `rclone about <remote> --json`
+  quando o provedor informa cota livre.
+- O browser remoto recusa pastas com mais de 2.000 entradas diretas e pede para
+  abrir uma subpasta, evitando `lsjson`/`lsf` gigantes na memória.
+- O daemon amostra o próprio RSS/pico/CPU a cada 5 s, loga a cada 60 s e avisa
+  acima de 256 MiB; o snapshot expõe as métricas para o app.
 - Ao iniciar, jobs `realtime`/`interval` atrasados rodam imediatamente.
 - `logind` (`PrepareForSleep`) dispara reconciliação no resume.
 - `Gio.NetworkMonitor` pausa jobs de nuvem quando offline e retoma ao voltar.

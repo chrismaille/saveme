@@ -19,6 +19,7 @@ import retryPolicySuite from './unit/domain/retry-policy.test.js';
 import jobStateMachineSuite from './unit/domain/job-state-machine.test.js';
 import errorsSuite from './unit/domain/errors.test.js';
 import logPolicySuite from './unit/domain/log-policy.test.js';
+import diskSpaceSuite from './unit/domain/disk-space.test.js';
 import syncServiceSuite from './unit/application/sync-service.test.js';
 import backupServiceSuite from './unit/application/backup-service.test.js';
 import restoreServiceSuite from './unit/application/restore-service.test.js';
@@ -70,6 +71,7 @@ const suites = [
     jobStateMachineSuite,
     errorsSuite,
     logPolicySuite,
+    diskSpaceSuite,
     syncServiceSuite,
     backupServiceSuite,
     restoreServiceSuite,

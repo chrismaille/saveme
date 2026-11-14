@@ -18,6 +18,7 @@ export const PORT_METHODS = Object.freeze({
         'ensureDir',
         'writeText',
         'removeIfExists',
+        'freeSpace',
     ],
     clock: ['nowMs', 'nowIso', 'newDate', 'setTimeout', 'clearTimeout'],
     logger: ['debug', 'info', 'warn', 'error', 'child', 'close'],

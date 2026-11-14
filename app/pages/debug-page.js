@@ -43,9 +43,13 @@ export class DebugPage {
         this.widget.add(systemGroup);
 
         const performanceGroup = new Adw.PreferencesGroup({title: 'Performance'});
-        this.memoryRow = new Adw.ActionRow({title: 'Memory', subtitle: 'Waiting for sample'});
-        this.cpuRow = new Adw.ActionRow({title: 'CPU', subtitle: 'Waiting for sample'});
-        this.perfStatusRow = new Adw.ActionRow({title: 'Budget', subtitle: 'Waiting for sample'});
+        this.memoryRow = new Adw.ActionRow({title: 'App memory', subtitle: 'Waiting for sample'});
+        this.cpuRow = new Adw.ActionRow({title: 'App CPU', subtitle: 'Waiting for sample'});
+        this.daemonMemoryRow = new Adw.ActionRow({
+            title: 'Daemon memory',
+            subtitle: 'Waiting for daemon sample',
+        });
+        this.perfStatusRow = new Adw.ActionRow({title: 'App budget', subtitle: 'Waiting for sample'});
         this.appLogRow = new Adw.ActionRow({
             title: 'Application log',
             subtitle: 'Memory/CPU samples and app errors.',
@@ -59,6 +63,7 @@ export class DebugPage {
         this.appLogRow.add_suffix(appLogButton);
         performanceGroup.add(this.memoryRow);
         performanceGroup.add(this.cpuRow);
+        performanceGroup.add(this.daemonMemoryRow);
         performanceGroup.add(this.perfStatusRow);
         performanceGroup.add(this.appLogRow);
         this.widget.add(performanceGroup);
@@ -129,6 +134,10 @@ export class DebugPage {
             `Running · PID ${daemon.pid ?? '?'} · started ${formatWhen(daemon.startedAt)}`);
         this.rcloneRow.set_subtitle(
             `${daemon.rclone?.version || 'unknown'} · ${daemon.rclone?.path || '-'}`);
+        const process = daemon.process;
+        this.daemonMemoryRow.set_subtitle(process
+            ? `${formatBytes(process.rssBytes)} · peak ${formatBytes(process.peakRssBytes)}`
+            : 'Waiting for daemon sample');
         this.volumesRow.set_subtitle(
             `${(snapshot.volumes || []).length} mounted volume(s)`);
     }

@@ -62,11 +62,11 @@ adapters e no daemon, e cobertura comportamental E2E nas superfícies visuais.
 
 Estado atual (unit + integration + E2E de daemon):
 
-- domínio puro: **98,7% linha / 95,5% branch / 100% funções**;
-- aplicação: **99,1% linha / 86,7% branch / 100% funções**;
-- adapters Gio/persistência/system: **97,4% linha / 89,2% branch / 100% funções**;
+- domínio puro: **98,8% linha / 95,4% branch / 100% funções**;
+- aplicação: **98,4% linha / 85,0% branch / 100% funções**;
+- adapters Gio/persistência/system: **97,1% linha / 85,8% branch / 100% funções**;
 - adapter D-Bus (`DaemonApi`): **100% linha / 100% branch / 100% funções**;
-- `src/` global: **87,5% linha / 72,6% branch**.
+- `src/` global: **87,7% linha / 72,6% branch**.
 
 Os gates de domínio, aplicação, adapters e D-Bus rodam no `make coverage`.
 O adapter rclone é um wrapper de subprocesso e é validado por integração/E2E,
@@ -88,7 +88,9 @@ O E2E já cobre:
 - app GTK headless recebendo snapshot real, renderizando todas as views e
   passando pelo soak de memória;
 - extensão ACTIVE em GNOME Shell headless com sync real;
-- retenção, limpeza e sanitização de logs via D-Bus.
+- retenção, limpeza e sanitização de logs via D-Bus;
+- sync remoto grande bloqueado por espaço local insuficiente;
+- browser remoto recusando pasta com muitas entradas.
 
 Próximos cenários:
 
@@ -124,6 +126,9 @@ Cobre:
 - rotação e sanitização de logs (Logger, raw log e app log);
 - métricas de `/proc`, CPU por intervalo e monitor de memória do app;
 - Scheduler, RetryPolicy e JobStateMachine puros;
+- pré-checagem de espaço em disco (margem, mínimo e fator de backup);
+- pré-checagem de cota remota via `rclone about` quando disponível;
+- monitoramento de RSS/pico/CPU do daemon e exposição no snapshot;
 - adapters Gio: filesystem, raw log, relógio, paths e run repository;
 - adapter D-Bus: conversão de booleanos e delegação;
 - gateways do app (`DaemonGateway`, `SystemLauncher`) e da extensão
@@ -200,6 +205,9 @@ Use uma instalação limpa do Ubuntu 26.04.
 
 - [ ] Sync local → Drive/OneDrive/Dropbox
 - [ ] Sync nuvem → local (polling de 5 min)
+- [ ] Sync da raiz do Drive para disco local com espaço insuficiente: job para
+      como `no-space`, não escreve e mostra livre/exigido no Logs
+- [ ] Browser remoto de pasta com >2.000 entradas pede para abrir subpasta
 - [ ] Sync nuvem → nuvem
 - [ ] Backup local → nuvem com versões
 - [ ] Ficar offline; job tenta com backoff e recupera depois

@@ -13,6 +13,7 @@ import {
 import {DaemonApi} from './adapters/dbus/api.js';
 import {SystemClock} from './adapters/system/clock.js';
 import {LogStore} from './adapters/system/log-store.js';
+import {cpuPercent, readProcessMetrics} from './adapters/system/process-metrics.js';
 import {DaemonService} from './application/daemon-service.js';
 import {LogService} from './application/log-service.js';
 import {createJobRunner, createRestoreService} from './composition/runner.js';
@@ -63,6 +64,11 @@ export const SaveMeDaemonApplication = GObject.registerClass({
         this._logStore = null;
         this._logService = null;
         this._logPruneTimer = null;
+        this._processTimer = null;
+        this._processMetrics = null;
+        this._lastProcessMetrics = null;
+        this._processSamples = 0;
+        this._processWarned = false;
         this._auth = null;
         this._dbus = null;
         this._api = null;
@@ -88,6 +94,12 @@ export const SaveMeDaemonApplication = GObject.registerClass({
             config: configDir(),
             state: stateDir(),
         });
+        this._sampleProcess('startup');
+        this._processTimer = GLib.timeout_add_seconds(
+            GLib.PRIORITY_DEFAULT, 5, () => {
+                this._sampleProcess('periodic');
+                return GLib.SOURCE_CONTINUE;
+            });
 
         this._config = new ConfigStore({logger: this._logger});
         this._config.load();
@@ -124,6 +136,7 @@ export const SaveMeDaemonApplication = GObject.registerClass({
             volumes: this._volumes,
             logger: this._logger,
             state: this._state,
+            getSettings: () => this._config.settings,
         });
         this._restore = createRestoreService({rclone: this._rclone});
         this._manager = new JobManager({
@@ -152,6 +165,7 @@ export const SaveMeDaemonApplication = GObject.registerClass({
             volumes: this._volumes,
             logger: this._logger,
             logs: this._logService,
+            processMetrics: () => this._processMetrics,
             startedAt: this._startedAt,
             idFactory: prefix => uniqueId(prefix),
             getPid,
@@ -216,6 +230,10 @@ export const SaveMeDaemonApplication = GObject.registerClass({
             GLib.source_remove(this._logPruneTimer);
             this._logPruneTimer = null;
         }
+        if (this._processTimer) {
+            GLib.source_remove(this._processTimer);
+            this._processTimer = null;
+        }
         this._manager?.stopAll();
         this._auth?.stop();
         if (this._volumeConnected) {
@@ -247,6 +265,48 @@ export const SaveMeDaemonApplication = GObject.registerClass({
         this._logger?.close();
         this.release();
         super.vfunc_shutdown();
+    }
+
+    _sampleProcess(reason = 'periodic') {
+        const current = readProcessMetrics();
+        if (!current)
+            return null;
+        const cpu = cpuPercent(this._lastProcessMetrics, current);
+        this._lastProcessMetrics = current;
+        this._processSamples++;
+        const metrics = {
+            rssBytes: Number(current.rssBytes) || 0,
+            peakRssBytes: Number(current.peakRssBytes) || 0,
+            cpuPercent: cpu,
+            sampledAt: new Date(current.sampledAtMs).toISOString(),
+            samples: this._processSamples,
+        };
+        this._processMetrics = metrics;
+        const rssMiB = metrics.rssBytes / (1024 * 1024);
+        if (reason === 'startup' || this._processSamples % 12 === 0 || rssMiB > 256) {
+            this._logger?.info('Daemon performance sample', {
+                reason,
+                rssMiB: Number(rssMiB.toFixed(1)),
+                peakMiB: Number((metrics.peakRssBytes / (1024 * 1024)).toFixed(1)),
+                cpuPercent: Number(cpu.toFixed(1)),
+                samples: metrics.samples,
+            });
+        }
+        if (rssMiB > 256) {
+            if (!this._processWarned) {
+                this._logger?.warn('Daemon performance warning', {
+                    rssMiB: Number(rssMiB.toFixed(1)),
+                    peakMiB: Number((metrics.peakRssBytes / (1024 * 1024)).toFixed(1)),
+                });
+                this._processWarned = true;
+            }
+        } else if (rssMiB < 240 && this._processWarned) {
+            this._logger?.info('Daemon memory back under budget', {
+                rssMiB: Number(rssMiB.toFixed(1)),
+            });
+            this._processWarned = false;
+        }
+        return metrics;
     }
 
     _exportDbus() {

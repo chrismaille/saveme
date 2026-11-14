@@ -54,19 +54,24 @@ export class SettingsPage {
             title: 'Performance',
             description: 'Sampled from this app process and written to the application log.',
         });
-        this.memoryRow = new Adw.ActionRow({title: 'Memory', subtitle: 'Waiting for sample'});
-        this.cpuRow = new Adw.ActionRow({title: 'CPU', subtitle: 'Waiting for sample'});
-        this.perfStatusRow = new Adw.ActionRow({title: 'Budget', subtitle: 'Waiting for sample'});
-        this.perfSamplesRow = new Adw.ActionRow({title: 'Samples', subtitle: '-'});
+        this.memoryRow = new Adw.ActionRow({title: 'App memory', subtitle: 'Waiting for sample'});
+        this.cpuRow = new Adw.ActionRow({title: 'App CPU', subtitle: 'Waiting for sample'});
+        this.daemonMemoryRow = new Adw.ActionRow({
+            title: 'Daemon memory',
+            subtitle: 'Waiting for daemon sample',
+        });
+        this.perfStatusRow = new Adw.ActionRow({title: 'App budget', subtitle: 'Waiting for sample'});
+        this.perfSamplesRow = new Adw.ActionRow({title: 'App samples', subtitle: '-'});
         performanceGroup.add(this.memoryRow);
         performanceGroup.add(this.cpuRow);
+        performanceGroup.add(this.daemonMemoryRow);
         performanceGroup.add(this.perfStatusRow);
         performanceGroup.add(this.perfSamplesRow);
         this.widget.add(performanceGroup);
 
         const policyGroup = new Adw.PreferencesGroup({
-            title: 'Log policy',
-            description: 'Logs are sanitized before display and cleaned automatically.',
+            title: 'Storage policy',
+            description: 'Logs are sanitized and cleaned automatically; local syncs respect free space.',
         });
         this.retentionRow = new Adw.SpinRow({
             title: 'Keep logs for',
@@ -96,9 +101,37 @@ export class SettingsPage {
                     this.policyDirty = true;
             });
         }
+        this.diskSafetyRow = new Adw.SpinRow({
+            title: 'Disk safety margin',
+            subtitle: '%',
+            digits: 0,
+            adjustment: new Gtk.Adjustment({
+                lower: 0,
+                upper: 50,
+                step_increment: 1,
+                page_increment: 5,
+            }),
+        });
+        this.minFreeRow = new Adw.SpinRow({
+            title: 'Minimum free space',
+            subtitle: 'MiB',
+            digits: 0,
+            adjustment: new Gtk.Adjustment({
+                lower: 0,
+                upper: 10240,
+                step_increment: 128,
+                page_increment: 512,
+            }),
+        });
+        for (const row of [this.diskSafetyRow, this.minFreeRow]) {
+            row.connect('notify::value', () => {
+                if (!this.blockPolicyUpdate)
+                    this.policyDirty = true;
+            });
+        }
         this.savePolicyRow = new Adw.ActionRow({
-            title: 'Apply log policy',
-            subtitle: 'Save retention and size limits to the daemon.',
+            title: 'Apply storage policy',
+            subtitle: 'Save retention, log size and disk safety limits to the daemon.',
         });
         const savePolicyButton = new Gtk.Button({
             label: 'Save',
@@ -109,6 +142,8 @@ export class SettingsPage {
         this.savePolicyRow.add_suffix(savePolicyButton);
         policyGroup.add(this.retentionRow);
         policyGroup.add(this.maxSizeRow);
+        policyGroup.add(this.diskSafetyRow);
+        policyGroup.add(this.minFreeRow);
         policyGroup.add(this.savePolicyRow);
         this.widget.add(policyGroup);
 
@@ -124,6 +159,10 @@ export class SettingsPage {
             `Running · PID ${daemon.pid ?? '?'} · started ${formatWhen(daemon.startedAt)}`);
         this.rcloneRow.set_subtitle(
             `${daemon.rclone?.version || 'unknown'} · ${daemon.rclone?.path || '-'}`);
+        const process = daemon.process;
+        this.daemonMemoryRow.set_subtitle(process
+            ? `${formatBytes(process.rssBytes)} · peak ${formatBytes(process.peakRssBytes)}`
+            : 'Waiting for daemon sample');
         this.blockPauseUpdate = true;
         this.pauseAllRow.active = Boolean(snapshot.pausedAll);
         this.blockPauseUpdate = false;
@@ -135,6 +174,10 @@ export class SettingsPage {
             this.maxSizeRow.value = Math.max(1,
                 Math.round(Number(settings.maxLogTotalBytes ?? 50 * 1024 * 1024) /
                     (1024 * 1024)));
+            this.diskSafetyRow.value = Math.max(0,
+                Math.round(Number(settings.diskSafetyPercent ?? 10)));
+            this.minFreeRow.value = Math.max(0,
+                Math.round(Number(settings.minFreeSpaceMb ?? 512)));
             this.blockPolicyUpdate = false;
         }
     }
@@ -162,9 +205,11 @@ export class SettingsPage {
             await this.window.client.updateSettings({
                 logRetentionDays: Math.round(this.retentionRow.value),
                 maxLogTotalBytes: Math.round(this.maxSizeRow.value) * 1024 * 1024,
+                diskSafetyPercent: Math.round(this.diskSafetyRow.value),
+                minFreeSpaceMb: Math.round(this.minFreeRow.value),
             });
             this.policyDirty = false;
-            this.window.toast('Log policy saved.');
+            this.window.toast('Storage policy saved.');
         } catch (e) {
             this.window.toast(e.message);
         }

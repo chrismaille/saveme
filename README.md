@@ -44,8 +44,11 @@ app talks directly to the daemon and does not import or require the extension.
 - credentials are sanitized before writing, displaying or copying diagnostics;
 - the Logs page shows disk usage and lets you prune, clear, sanitize and change
   the retention policy;
-- the app samples its own RSS, peak RSS and CPU; warnings and samples go to
-  `~/.local/state/saveme/logs/app.log` and are visible in Settings/Debug;
+- sync/backup checks local free space and remote quota before writing; jobs
+  stop as `no-space` instead of filling the destination;
+- the app samples its own RSS, peak RSS and CPU; the daemon logs its own RSS/peak
+  and exposes them in the snapshot; warnings go to the app/daemon log and are
+  visible in Settings/Debug;
 - `make e2e-app` includes a memory soak that fails if RSS grows beyond the
   configured budget;
 - normal uninstall removes logs, caches and temporary files; `--purge` also

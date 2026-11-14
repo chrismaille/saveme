@@ -39,3 +39,25 @@ export class VolumeUnavailableError extends Error {
         this.descriptor = descriptor;
     }
 }
+
+export class DiskSpaceError extends Error {
+    constructor({freeBytes, requiredBytes, destination}) {
+        super(`Not enough free disk space at ${destination}: ` +
+            `${formatBytes(freeBytes)} free, ${formatBytes(requiredBytes)} required.`);
+        this.name = 'DiskSpaceError';
+        this.freeBytes = freeBytes;
+        this.requiredBytes = requiredBytes;
+        this.destination = destination;
+    }
+}
+
+function formatBytes(value) {
+    let n = Number(value) || 0;
+    const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+    let unit = 0;
+    while (n >= 1024 && unit < units.length - 1) {
+        n /= 1024;
+        unit++;
+    }
+    return `${n.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
+}

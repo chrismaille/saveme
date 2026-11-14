@@ -40,13 +40,16 @@ export class SyncService {
         ctx.onProgress = onProgress;
         try {
             const prep = resolveJobTargets(job, {files: this.files, volumes: this.volumes});
-            const sourceCount = await this.executor.sourceCount(job, prep, {
+            const source = await this.executor.sourceStats(job, prep, {
                 exact: true,
                 cancellable,
             });
+            const sourceCount = source.count;
             if (Number.isFinite(sourceCount))
                 ctx.sourceFileCount = sourceCount;
             this.executor.checkEmptySource(job, sourceCount, force);
+            if (!dryRun)
+                this.executor.checkDiskSpace(job, prep, source.bytes);
 
             const filterFile = this.executor.filterFile(job);
             let args = syncArgs(prep.source, prep.dest, filterFile, job);

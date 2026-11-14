@@ -16,6 +16,7 @@ const NOW = Date.parse('2026-01-02T12:00:00Z');
 export default suite('extension/presentation', [
     test('status labels and icons cover known and unknown values', () => {
         assertEqual(STATUS_LABELS['waiting-source'], 'Source missing');
+        assertEqual(STATUS_LABELS['no-space'], 'Not enough disk space');
         assertEqual(statusLabel('running'), 'Running');
         assertEqual(statusLabel(''), 'Idle');
         assertEqual(statusLabel('custom'), 'custom');
@@ -23,6 +24,7 @@ export default suite('extension/presentation', [
         assertEqual(statusIconName('disabled'), 'media-playback-pause-symbolic');
         assertEqual(statusIconName('delete-guard'), 'dialog-error-symbolic');
         assertEqual(statusIconName('offline'), 'dialog-warning-symbolic');
+        assertEqual(statusIconName('no-space'), 'dialog-warning-symbolic');
         assertEqual(statusIconName('nope'), 'emblem-ok-symbolic');
     }),
     test('byte, relative time and ETA formatting', () => {

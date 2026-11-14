@@ -55,6 +55,7 @@ export default suite('app/presentation/format', [
     test('labels and icons map every job status', () => {
         assertEqual(statusLabel('running'), 'Running');
         assertEqual(statusLabel('waiting-source'), 'Source missing');
+        assertEqual(statusLabel('no-space'), 'Not enough disk space');
         assertEqual(statusLabel('unknown'), 'unknown');
         assertEqual(statusLabel(''), 'Idle');
         assertEqual(STATUS_LABELS.disabled, 'Disabled');
@@ -67,6 +68,7 @@ export default suite('app/presentation/format', [
         assertEqual(statusIconName('disabled'), 'media-playback-pause-symbolic');
         assertEqual(statusIconName('waiting-destination'), 'dialog-warning-symbolic');
         assertEqual(statusIconName('offline'), 'dialog-warning-symbolic');
+        assertEqual(statusIconName('no-space'), 'dialog-warning-symbolic');
         assertEqual(statusIconName('idle'), 'emblem-ok-symbolic');
         assertEqual(statusIconName('unknown'), 'emblem-ok-symbolic');
         assertEqual(typeLabel('backup'), 'Backup');

@@ -69,4 +69,14 @@ export class GioFileSystem {
         if (file.query_exists(null))
             file.delete(null);
     }
+
+    freeSpace(path) {
+        try {
+            const info = Gio.File.new_for_path(path).query_filesystem_info(
+                'filesystem::free', null);
+            return Number(info.get_attribute_uint64('filesystem::free'));
+        } catch (_) {
+            return null;
+        }
+    }
 }

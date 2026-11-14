@@ -38,13 +38,17 @@ export class BackupService {
         ctx.onProgress = onProgress;
         try {
             const prep = resolveJobTargets(job, {files: this.files, volumes: this.volumes});
-            const sourceCount = await this.executor.sourceCount(job, prep, {
-                exact: false,
+            const exact = prep.destIsLocal;
+            const source = await this.executor.sourceStats(job, prep, {
+                exact,
                 cancellable,
             });
+            const sourceCount = source.count;
             if (Number.isFinite(sourceCount))
                 ctx.sourceFileCount = sourceCount;
             this.executor.checkEmptySource(job, sourceCount, force);
+            if (!dryRun)
+                this.executor.checkDiskSpace(job, prep, source.bytes);
 
             const filterFile = this.executor.filterFile(job);
             const current = backupCurrentFor(job, prep.dest);

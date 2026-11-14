@@ -147,6 +147,12 @@ Regras:
 - Configuração e logs com permissão `0600`; daemon roda como usuário.
 - Logs têm rotação por tamanho, retenção por idade/tamanho e sanitização de
   credenciais antes de escrever, exibir ou copiar diagnósticos.
+- Sync/backup para destino local verificam espaço livre com margem antes de
+  iniciar; o job para como `no-space` se não houver espaço.
+- Para destino remoto, a checagem usa a cota reportada por `rclone about`
+  quando disponível.
+- O browser remoto limita pastas com muitas entradas para não carregar listas
+  gigantes na memória.
 - Nenhum argumento de shell é montado por concatenação; subprocessos usam argv.
 
 ## 7. Backup e restauração
@@ -249,7 +255,9 @@ A CLI usa a mesma API D-Bus do daemon.
 - Rotação por tamanho, retenção padrão de 30 dias/50 MiB, limpeza automática a
   cada 6 h e sanitização de segredos.
 - O app mede o próprio RSS/pico/CPU, registra amostras e avisa quando o
-  orçamento é excedido.
+  orçamento é excedido; o daemon faz o mesmo no log e no snapshot.
+- Sync para destino local com pouco espaço livre aborta como `no-space` antes
+  de escrever.
 - Notificações apenas em transições relevantes: erro, origem/destino ausente,
   reautenticação necessária e resumo opcional de conclusão.
 
@@ -311,7 +319,10 @@ instalação limpa do Ubuntu 26.04:
 15. `make test` e o CI passam; documentação de instalação, uso e restore está
     publicada; pt-BR e en funcionam.
 16. O app mantém o uso de memória sob o orçamento no soak E2E e registra
-    amostras de RSS/CPU no próprio log.
+    amostras de RSS/CPU no próprio log; o daemon também registra RSS/CPU.
+17. Sync da raiz do Google Drive para destino local com espaço insuficiente
+    para como `no-space` sem escrever arquivos; o browser recusa listagens
+    acima do limite e orienta abrir uma subpasta.
 
 ## 14. Riscos conhecidos
 

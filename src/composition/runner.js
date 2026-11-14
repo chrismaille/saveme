@@ -21,6 +21,7 @@ export function createJobRunner({
     clock = new SystemClock(),
     paths = new SystemPaths(),
     rawLogFactory = new GioRawLogFactory(),
+    getSettings = () => ({}),
     idFactory = prefix => uniqueId(prefix),
 } = {}) {
     const runRepository = new StateRunRepository({state});
@@ -45,6 +46,7 @@ export function createJobRunner({
         clock,
         paths,
         rawLogFactory,
+        getSettings,
         idFactory,
     });
     const sync = new SyncService({executor, files, volumes});

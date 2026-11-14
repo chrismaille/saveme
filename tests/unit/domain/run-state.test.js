@@ -33,6 +33,9 @@ export default suite('domain/run-state', [
         assertEqual(statusFromError('HTTP 403'), JOB_STATUS.NEEDS_AUTH);
         assertEqual(statusFromError('reauth needed'), JOB_STATUS.NEEDS_AUTH);
         assertEqual(statusFromError('Delete guard: 5 > 2'), JOB_STATUS.DELETE_GUARD);
+        assertEqual(statusFromError('Not enough free disk space at /dest: 1 GiB free'),
+            JOB_STATUS.NO_SPACE);
+        assertEqual(statusFromError('No space left on device'), JOB_STATUS.NO_SPACE);
         assertEqual(statusFromError('boom'), JOB_STATUS.ERROR);
     }),
     test('nextBackoffDelay clamps indexes and supports custom tables', () => {

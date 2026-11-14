@@ -8,6 +8,8 @@ import {JOB_TYPES, jobRemoteNames, localPathFor, remotePathFor} from '../domain/
 import {exitCodeMessage, isSuccessExit} from '../domain/rclone-log.js';
 import {parseVersionTimestamp} from '../domain/time.js';
 
+export const MAX_BROWSER_ENTRIES = 2000;
+
 function entriesFromList(result, {dirsOnly = false} = {}) {
     if (result.exitCode === 3)
         return [];
@@ -49,6 +51,7 @@ export class DaemonService {
         volumes,
         logger,
         logs = null,
+        processMetrics = null,
         startedAt,
         idFactory,
         getPid,
@@ -67,6 +70,7 @@ export class DaemonService {
         this.volumes = volumes;
         this.logger = logger;
         this.logs = logs;
+        this.processMetrics = processMetrics;
         this.startedAt = startedAt;
         this.idFactory = idFactory;
         this.getPid = getPid;
@@ -85,6 +89,24 @@ export class DaemonService {
         return job.destination.kind === 'local'
             ? localPathFor(job.destination, this.volumes)
             : remotePathFor(job.destination);
+    }
+
+    _ensureListable(target) {
+        try {
+            const size = this.transfer.size(target, {
+                fastList: true,
+                maxDepth: 1,
+            });
+            const count = Number(size.count || 0);
+            if (count > MAX_BROWSER_ENTRIES) {
+                throw new Error(
+                    `Folder has ${count} entries; open a subfolder to browse it safely.`);
+            }
+        } catch (e) {
+            if (/open a subfolder/i.test(e.message))
+                throw e;
+            this.logger?.warn(`Cannot size remote folder before listing: ${e.message}`);
+        }
     }
 
     snapshotJson() {
@@ -111,6 +133,7 @@ export class DaemonService {
                 pid: this.getPid(),
                 startedAt: this.startedAt,
                 rclone: rcloneInfo,
+                process: this.processMetrics?.() || null,
             },
             settings: this.config.settings,
             pausedAll: this.state.pausedAll,
@@ -198,7 +221,7 @@ export class DaemonService {
         if (job.type !== JOB_TYPES.BACKUP)
             return JSON.stringify([]);
         const root = versionsRootFor(job, this._resolveJobDestination(job));
-        const result = this.transfer.runCapture(['lsf', root, '--dirs-only']);
+        const result = this.transfer.runCapture(['lsf', root, '--dirs-only', '--max-depth', '1']);
         if (result.exitCode === 3)
             return JSON.stringify([]);
         if (!isSuccessExit(result.exitCode))
@@ -219,8 +242,11 @@ export class DaemonService {
             throw new Error(`Remote not found: ${remote}`);
         const cleanPath = String(path || '').replace(/^\/+|\/+$/g, '');
         const target = cleanPath ? `${remote}:${cleanPath}` : `${remote}:`;
+        this._ensureListable(target);
         const result = this.transfer.runCapture(
-            dirsOnly ? ['lsf', target, '--dirs-only'] : ['lsjson', target]);
+            dirsOnly
+                ? ['lsf', target, '--dirs-only', '--max-depth', '1']
+                : ['lsjson', target, '--max-depth', '1']);
         return JSON.stringify(entriesFromList(result, {dirsOnly}));
     }
 
@@ -241,8 +267,11 @@ export class DaemonService {
         }
         const cleanPath = String(path || '').replace(/^\/+|\/+$/g, '');
         const target = cleanPath ? joinRclonePath(root, cleanPath) : root;
+        this._ensureListable(target);
         const result = this.transfer.runCapture(
-            dirsOnly ? ['lsf', target, '--dirs-only'] : ['lsjson', target]);
+            dirsOnly
+                ? ['lsf', target, '--dirs-only', '--max-depth', '1']
+                : ['lsjson', target, '--max-depth', '1']);
         return JSON.stringify(entriesFromList(result, {dirsOnly}));
     }
 
@@ -345,6 +374,7 @@ export class DaemonService {
             remotes: this.config.listRemoteNames(),
             pausedAll: this.state.pausedAll,
             logs: this.logs?.info() || null,
+            process: this.processMetrics?.() || null,
         });
     }
 }

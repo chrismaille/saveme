@@ -186,6 +186,14 @@ if ! printf '%s' "$SETTINGS" | grep -q '"logRetentionDays":7'; then
     echo "UpdateSettings did not persist the log policy" >&2
     exit 1
 fi
+if ! printf '%s' "$SETTINGS" | grep -q '"process"'; then
+    echo "Daemon snapshot does not expose process metrics" >&2
+    exit 1
+fi
+if ! printf '%s' "$SETTINGS" | grep -q '"diskSafetyPercent"'; then
+    echo "Daemon snapshot does not expose disk safety settings" >&2
+    exit 1
+fi
 
 if grep -qiE 'Gjs-CRITICAL|JS ERROR|Gtk-CRITICAL|Adw-CRITICAL' "$BASE/app.log"; then
     echo "The app reported GTK/GJS errors" >&2
