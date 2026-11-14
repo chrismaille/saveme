@@ -62,6 +62,8 @@ export function descriptorFromString(text, {remotes = [], volumes = null} = {}) 
 }
 
 export function validateJob(job, {remotes = [], volumes = null, checkPaths = false} = {}) {
+    if (job?.draft)
+        return [];
     const errors = validateJobFields(job, {remotes});
     if (!job || typeof job !== 'object')
         return errors;

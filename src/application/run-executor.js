@@ -376,6 +376,8 @@ export class RunExecutor {
     }
 
     async cleanupVersions(ctx, job, dest, cancellable) {
+        if (job.backup?.keepForever)
+            return;
         const days = Number(job.backup?.retentionDays || 0);
         if (days <= 0)
             return;

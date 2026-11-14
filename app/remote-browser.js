@@ -3,6 +3,7 @@ import Pango from 'gi://Pango';
 import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
 import {AccountDialog} from './account-dialog.js';
+import {AccountsDialog} from './accounts-dialog.js';
 
 function formatBytes(value) {
     let n = Number(value) || 0;
@@ -121,9 +122,16 @@ export const RemoteBrowserDialog = GObject.registerClass({
         this.pathEntry.connect('activate', () => this._go(this.pathEntry.text));
         const goButton = new Gtk.Button({label: 'Go'});
         goButton.connect('clicked', () => this._go(this.pathEntry.text));
+        this.manageButton = new Gtk.Button({
+            label: 'Manage accounts',
+            tooltip_text: 'Add, reconnect or delete cloud accounts',
+            visible: !this.backupMode,
+        });
+        this.manageButton.connect('clicked', () => this._manageAccounts());
         this.controls.append(this.remoteDropDown);
         this.controls.append(this.pathEntry);
         this.controls.append(goButton);
+        this.controls.append(this.manageButton);
         content.append(this.controls);
 
         this.emptyBox = new Gtk.Box({
@@ -143,8 +151,15 @@ export const RemoteBrowserDialog = GObject.registerClass({
             css_classes: ['suggested-action'],
         });
         addAccount.connect('clicked', () => this._addAccount());
+        const manage = new Gtk.Button({
+            label: 'Manage accounts',
+            halign: Gtk.Align.START,
+            css_classes: ['flat'],
+        });
+        manage.connect('clicked', () => this._manageAccounts());
         this.emptyBox.append(emptyLabel);
         this.emptyBox.append(addAccount);
+        this.emptyBox.append(manage);
         content.append(this.emptyBox);
 
         this.breadcrumb = new Gtk.Label({
@@ -255,8 +270,12 @@ export const RemoteBrowserDialog = GObject.registerClass({
             this._setStatus('');
             this._render(entries);
         } catch (e) {
-            if (token === this.loadToken)
-                this._setStatus(e.message);
+            if (token === this.loadToken) {
+                const hint = this.backupMode
+                    ? ''
+                    : '\nUse “Manage accounts” to reconnect or delete a broken account.';
+                this._setStatus(`${e.message}${hint}`);
+            }
         }
     }
 
@@ -391,11 +410,24 @@ export const RemoteBrowserDialog = GObject.registerClass({
 
     _addAccount() {
         new AccountDialog(this.mainWindow, null, {
+            provider: this.remoteType,
             transientFor: this,
             onDone: () => {
                 this.remotes = this.mainWindow.snapshot?.remotes || [];
                 this.updateRemotes();
             },
+        }).present();
+    }
+
+    _manageAccounts() {
+        new AccountsDialog(this.mainWindow, {
+            provider: this.remoteType,
+            transientFor: this,
+            onDeleted: name => {
+                if (this.remote === name)
+                    this.remote = null;
+            },
+            onDone: () => this.updateRemotes(),
         }).present();
     }
 });

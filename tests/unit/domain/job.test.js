@@ -107,7 +107,7 @@ export default suite('domain/job', [
         });
         assertEqual(validateJobFields(backup).length, 0);
         const realtime = {...backup, trigger: {mode: TRIGGER_MODES.REALTIME}};
-        assert(validateJobFields(realtime).some(error => /interval or manual/.test(error)));
+        assert(validateJobFields(realtime).some(error => /real-time/.test(error)));
     }),
     test('jobRemoteNames includes every remote source', () => {
         const job = baseJob({
@@ -138,7 +138,7 @@ export default suite('domain/job', [
         });
         assertEqual(jobRemoteNames(job).length, 0);
     }),
-    test('validation rejects duplicates and realtime multi-source backup', () => {
+    test('validation rejects duplicates and every realtime backup', () => {
         const duplicate = baseJob({
             type: JOB_TYPES.BACKUP,
             trigger: {mode: TRIGGER_MODES.INTERVAL, intervalMinutes: 60},
@@ -157,7 +157,7 @@ export default suite('domain/job', [
             ],
             destination: {kind: 'remote', remote: 'drive', path: 'a/b'},
         });
-        assert(validateJobFields(realtime).some(error => /interval or manual/.test(error)));
+        assert(validateJobFields(realtime).some(error => /real-time/.test(error)));
         assert(validateJobFields(realtime).some(error => /mesmo caminho/.test(error)));
     }),
     test('recovered jobs tolerate remotes not yet configured', () => {
@@ -202,7 +202,7 @@ export default suite('domain/job', [
             trigger: {mode: TRIGGER_MODES.INTERVAL, intervalMinutes: 5},
             filters: {exclude: ['x']},
             options: {transfers: 2, checkers: 3},
-            backup: {retentionDays: 7},
+            backup: {retentionDays: 7, keepForever: true},
             enabled: true,
         }));
         assertEqual(job.type, JOB_TYPES.BACKUP);
@@ -211,7 +211,61 @@ export default suite('domain/job', [
         assertEqual(job.options.transfers, 2);
         assertEqual(job.options.checkers, 3);
         assertEqual(job.backup.retentionDays, 7);
+        assertEqual(job.backup.keepForever, true);
         assertEqual(job.enabled, true);
+    }),
+    test('legacy interval minutes populate the unit selector', () => {
+        const daily = normalizeJobFields(baseJob({
+            trigger: {mode: TRIGGER_MODES.INTERVAL, intervalMinutes: 1440},
+        }));
+        assertEqual(daily.trigger.intervalValue, 1);
+        assertEqual(daily.trigger.intervalUnit, 'days');
+        const hours = normalizeJobFields(baseJob({
+            trigger: {mode: TRIGGER_MODES.INTERVAL, intervalMinutes: 180},
+        }));
+        assertEqual(hours.trigger.intervalValue, 3);
+        assertEqual(hours.trigger.intervalUnit, 'hours');
+        const minutes = normalizeJobFields(baseJob({
+            trigger: {mode: TRIGGER_MODES.INTERVAL, intervalMinutes: 90},
+        }));
+        assertEqual(minutes.trigger.intervalValue, 90);
+        assertEqual(minutes.trigger.intervalUnit, 'minutes');
+        assertEqual(minutes.trigger.time, '18:00');
+        const forever = normalizeJobFields(baseJob({
+            backup: {retentionDays: 0},
+        }));
+        assertEqual(forever.backup.keepForever, true);
+        assertEqual(forever.backup.retentionDays, 0);
+    }),
+    test('legacy realtime backups migrate to an hourly interval', () => {
+        const job = normalizeJobFields(baseJob({
+            type: JOB_TYPES.BACKUP,
+            trigger: {mode: TRIGGER_MODES.REALTIME},
+        }));
+        assertEqual(job.trigger.mode, TRIGGER_MODES.INTERVAL);
+        assertEqual(job.trigger.intervalMinutes, 60);
+        assertEqual(job.trigger.intervalValue, 1);
+        assertEqual(job.trigger.intervalUnit, 'hours');
+        assertEqual(validateJobFields(job).length, 0);
+    }),
+    test('draft jobs skip validation and accept incomplete fields', () => {
+        const draft = normalizeJobFields(baseJob({
+            name: '',
+            draft: true,
+            draftStep: 3,
+            destination: {kind: 'local', path: ''},
+        }));
+        assertEqual(validateJobFields(draft).length, 0);
+        assertEqual(draft.draftStep, 3);
+        assertEqual(draft.trigger.idleOnly, false);
+        assertEqual(draft.backup.keepForever, false);
+        const invalidTime = normalizeJobFields(baseJob({
+            trigger: {mode: TRIGGER_MODES.WEEKLY, time: '25:90'},
+        }));
+        assertEqual(invalidTime.trigger.time, '18:00');
+        assert(validateJobFields(baseJob({
+            trigger: {mode: TRIGGER_MODES.WEEKLY, time: '09:70'},
+        })).some(error => /horário/.test(error)));
     }),
     test('descriptor predicates handle missing descriptors', () => {
         assertEqual(isLocalDescriptor({kind: 'local'}), true);

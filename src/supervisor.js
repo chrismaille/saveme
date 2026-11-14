@@ -1,8 +1,9 @@
 import Gio from 'gi://Gio';
 import {ChangeQueue} from './queue.js';
 import {RecursiveWatcher, WatcherLimitError} from './adapters/gio/watcher.js';
-import {localPathFor, remotePathFor, TRIGGER_MODES} from './jobs.js';
+import {jobSources, localPathFor, remotePathFor, TRIGGER_MODES} from './jobs.js';
 import {humanBytes, uniqueId} from './util.js';
+import {isRunOverdue, nextRunDelay} from './domain/schedule.js';
 import {
     isCancelledRun,
     isSuccessfulRun,
@@ -43,6 +44,7 @@ export class JobSupervisor {
         pool,
         getSettings,
         clock,
+        isIdle = () => true,
         onChange = null,
         onRunFinished = null,
         onNotify = null,
@@ -54,6 +56,7 @@ export class JobSupervisor {
         this.pool = pool;
         this.getSettings = getSettings;
         this.clock = clock;
+        this.isIdle = isIdle;
         this.scheduler = new Scheduler({clock, logger: this.logger});
         this.retryPolicy = new RetryPolicy();
         this.onChange = onChange;
@@ -66,6 +69,8 @@ export class JobSupervisor {
         this._stopped = false;
         this._paused = Boolean(state.getJobState(job.id).paused);
         this._lastNotifyKey = null;
+        this._pendingDueRun = false;
+        this._pendingDueReason = null;
     }
 
     get id() {
@@ -107,6 +112,10 @@ export class JobSupervisor {
             this._setStatus('disabled', '');
             return;
         }
+        if (this.job.draft) {
+            this._setStatus('disabled', 'Draft');
+            return;
+        }
         if (this._paused || this.state.pausedAll) {
             this._setStatus('paused', '');
             return;
@@ -130,6 +139,30 @@ export class JobSupervisor {
             return;
         }
 
+        // A scheduled run was due but the computer was busy. Retry it now
+        // instead of skipping to the next weekly/monthly occurrence.
+        if (this._pendingDueRun) {
+            const reason = this._pendingDueReason || 'schedule';
+            this._pendingDueRun = false;
+            this._pendingDueReason = null;
+            await this._runFull({reason});
+            return;
+        }
+
+        if (this.job.trigger.mode === TRIGGER_MODES.STARTUP) {
+            await this._runFull({reason: 'startup'});
+            return;
+        }
+
+        if ([TRIGGER_MODES.WEEKLY, TRIGGER_MODES.MONTHLY, TRIGGER_MODES.DUSK]
+            .includes(this.job.trigger.mode)) {
+            const last = Date.parse(this.state.getJobState(this.job.id).lastRunAt || '');
+            if (isRunOverdue(this.job.trigger, last, this.clock.nowMs())) {
+                await this._runFull({reason: 'schedule'});
+                return;
+            }
+        }
+
         if (this.job.trigger.mode === TRIGGER_MODES.INTERVAL) {
             const intervalMs = Math.max(1, Number(this.job.trigger.intervalMinutes || 60)) * 60_000;
             const last = Date.parse(this.state.getJobState(this.job.id).lastRunAt || '');
@@ -138,13 +171,21 @@ export class JobSupervisor {
                 await this._runFull({reason: 'interval'});
             else {
                 this._setIdleStatus();
-                this._scheduleInterval(intervalMs - elapsed);
+                this._scheduleNext(intervalMs - elapsed);
             }
             return;
         }
 
-        // Realtime: reconcile once, then watch (or poll for remote sources).
-        await this._runFull({reason: 'startup'});
+        if (this.job.trigger.mode === TRIGGER_MODES.REALTIME) {
+            // Realtime: reconcile once, then watch (or poll for remote sources).
+            await this._runFull({reason: 'startup'});
+            return;
+        }
+
+        const delay = nextRunDelay(this.job.trigger, this.clock.nowMs());
+        this._setIdleStatus();
+        if (delay !== null)
+            this._scheduleNext(delay);
     }
 
     _resolveLocal(descriptor) {
@@ -152,15 +193,32 @@ export class JobSupervisor {
     }
 
     _checkAvailability() {
-        let source;
-        let dest;
-        try {
-            source = this.job.source.kind === 'local'
-                ? this._resolveLocal(this.job.source)
-                : remotePathFor(this.job.source);
-        } catch (e) {
-            return {sourceAvailable: false, destAvailable: true, message: e.message};
+        const sources = jobSources(this.job);
+        for (const [index, source] of sources.entries()) {
+            const label = sources.length > 1 ? `Source ${index + 1}` : 'Source';
+            let resolved;
+            try {
+                resolved = source.kind === 'local'
+                    ? this._resolveLocal(source)
+                    : remotePathFor(source);
+            } catch (e) {
+                return {sourceAvailable: false, destAvailable: true, message: e.message};
+            }
+            if (source.kind === 'local') {
+                const file = Gio.File.new_for_path(resolved);
+                if (!file.query_exists(null)) {
+                    return {sourceAvailable: false, destAvailable: true,
+                        message: `${label} does not exist: ${resolved}`};
+                }
+                const type = file.query_file_type(
+                    Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, null);
+                if (type !== Gio.FileType.DIRECTORY) {
+                    return {sourceAvailable: false, destAvailable: true,
+                        message: `${label} is not a directory: ${resolved}`};
+                }
+            }
         }
+        let dest;
         try {
             dest = this.job.destination.kind === 'local'
                 ? this._resolveLocal(this.job.destination)
@@ -168,17 +226,7 @@ export class JobSupervisor {
         } catch (e) {
             return {sourceAvailable: true, destAvailable: false, message: e.message};
         }
-        if (this.job.source.kind === 'local') {
-            const file = Gio.File.new_for_path(source);
-            if (!file.query_exists(null))
-                return {sourceAvailable: false, destAvailable: true,
-                    message: `Source does not exist: ${source}`};
-            const type = file.query_file_type(Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, null);
-            if (type !== Gio.FileType.DIRECTORY)
-                return {sourceAvailable: false, destAvailable: true,
-                    message: `Source is not a directory: ${source}`};
-        }
-        return {sourceAvailable: true, destAvailable: true, source, dest};
+        return {sourceAvailable: true, destAvailable: true, source: sources[0], dest};
     }
 
     _setStatus(status, message = '') {
@@ -209,6 +257,7 @@ export class JobSupervisor {
             'error': 'SaveMe: job failed',
             'waiting-source': 'SaveMe: source unavailable',
             'waiting-destination': 'SaveMe: destination unavailable',
+            'waiting-idle': 'SaveMe: waiting for the computer to be idle',
             'needs-auth': 'SaveMe: authentication required',
             'delete-guard': 'SaveMe: deletion blocked',
             'paused': 'SaveMe: job paused',
@@ -254,6 +303,11 @@ export class JobSupervisor {
                 this._scheduleReconcile();
             } else if (this.job.trigger.mode === TRIGGER_MODES.INTERVAL) {
                 this._scheduleInterval();
+            } else if (![TRIGGER_MODES.MANUAL, TRIGGER_MODES.STARTUP]
+                .includes(this.job.trigger.mode)) {
+                const delay = nextRunDelay(this.job.trigger, this.clock.nowMs());
+                if (delay !== null)
+                    this._scheduleNext(delay);
             }
             this._setIdleStatus();
             if (run.kind === 'backup' && this.job.options?.notifyOnComplete !== false) {
@@ -276,9 +330,19 @@ export class JobSupervisor {
         this.logger.warn(`Run failed (${status}, incremental=${incremental}): ${message}`);
     }
 
-    async _runFull({reason = 'manual', dryRun = false, force = false, runId = null} = {}) {
+    async _runFull({reason = 'manual', dryRun = false, force = false, runId = null,
+        ignoreIdle = false} = {}) {
         if (this._running)
             return null;
+        if (!ignoreIdle && this.job.trigger?.idleOnly && !this.isIdle()) {
+            this._pendingDueRun = true;
+            this._pendingDueReason = reason;
+            this._setStatus('waiting-idle', 'Waiting for the computer to be idle');
+            this._scheduleIdleRetry();
+            return null;
+        }
+        this._pendingDueRun = false;
+        this._pendingDueReason = null;
         const id = runId || uniqueId('run_');
         const cancellable = new Gio.Cancellable();
         this._running = {cancellable, runId: id};
@@ -431,6 +495,25 @@ export class JobSupervisor {
         });
     }
 
+    _scheduleNext(delayMs) {
+        this._clearIntervalTimer();
+        this.scheduler.start('interval', Math.max(0, delayMs), () => {
+            if (!this._stopped && !this._paused && !this.state.pausedAll) {
+                this._runFull({reason: 'schedule'}).catch(e =>
+                    this.logger.warn(`Scheduled run failed: ${e.message}`));
+            }
+        });
+    }
+
+    _scheduleIdleRetry() {
+        if (this.scheduler.has('idle'))
+            return;
+        this.scheduler.start('idle', 5 * 60_000, () => {
+            if (!this._stopped && !this._paused && !this.state.pausedAll)
+                this._start().catch(e => this.logger.warn(`Idle retry failed: ${e.message}`));
+        });
+    }
+
     _scheduleRetry() {
         this._clearRetryTimer();
         const delay = this.retryPolicy.nextDelay();
@@ -504,7 +587,7 @@ export class JobSupervisor {
     async runNow({dryRun = false, force = false, runId = null} = {}) {
         if (this._running)
             throw new Error('Job is already running.');
-        return this._runFull({reason: 'manual', dryRun, force, runId});
+        return this._runFull({reason: 'manual', dryRun, force, runId, ignoreIdle: true});
     }
 
     cancel() {
@@ -517,7 +600,7 @@ export class JobSupervisor {
     retryIfWaiting() {
         const status = this.state.getJobState(this.job.id).status;
         if (status === 'waiting-source' || status === 'waiting-destination' ||
-            status === 'offline')
+            status === 'waiting-idle' || status === 'offline')
             this.start();
     }
 
@@ -557,6 +640,7 @@ export class JobManager {
         runner,
         logger,
         clock,
+        isIdle = () => true,
         onChange = null,
         onRunFinished = null,
         onNotify = null,
@@ -566,6 +650,7 @@ export class JobManager {
         this.runner = runner;
         this.logger = logger;
         this.clock = clock;
+        this.isIdle = isIdle;
         this.onChange = onChange;
         this.onRunFinished = onRunFinished;
         this.onNotify = onNotify;
@@ -603,6 +688,7 @@ export class JobManager {
             pool: this.pool,
             getSettings: () => this.getSettings(),
             clock: this.clock,
+            isIdle: this.isIdle,
             onChange: this.onChange,
             onRunFinished: this.onRunFinished,
             onNotify: this.onNotify,

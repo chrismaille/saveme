@@ -63,7 +63,12 @@ export const AccountDialog = GObject.registerClass({
             selected: providerIndex,
         });
         this.providerRow.sensitive = !this.existing;
-        this.providerRow.connect('notify::selected', () => this._updateVisibility());
+        this.providerRow.connect('notify::selected', () => {
+            const previous = this.nameRow.text;
+            if (Object.values(DEFAULT_NAMES).includes(previous))
+                this.nameRow.text = DEFAULT_NAMES[this._provider()];
+            this._updateVisibility();
+        });
         this.nameRow = new Adw.EntryRow({
             title: 'Remote name',
             text: this.existing?.name || DEFAULT_NAMES[PROVIDERS[providerIndex]],
@@ -78,6 +83,24 @@ export const AccountDialog = GObject.registerClass({
         group.add(this.nameRow);
         group.add(this.oneDriveTypeRow);
         page.add(group);
+
+        if (this.existing) {
+            const danger = new Adw.PreferencesGroup({title: 'Remove account'});
+            const removeRow = new Adw.ActionRow({
+                title: 'Delete this account',
+                subtitle: 'Use this when the account cannot be reconnected. ' +
+                    'Jobs using it must be edited first.',
+            });
+            const remove = new Gtk.Button({
+                label: 'Delete',
+                valign: Gtk.Align.CENTER,
+                css_classes: ['destructive-action'],
+            });
+            remove.connect('clicked', () => this._confirmDelete());
+            removeRow.add_suffix(remove);
+            danger.add(removeRow);
+            page.add(danger);
+        }
 
         const statusGroup = new Adw.PreferencesGroup({title: 'Authentication'});
         this.statusRow = new Adw.ActionRow({
@@ -253,6 +276,34 @@ export const AccountDialog = GObject.registerClass({
     _showError(message) {
         this.errorLabel.set_text(message || '');
         this.errorLabel.visible = Boolean(message);
+    }
+
+    _confirmDelete() {
+        const dialog = new Adw.AlertDialog({
+            heading: 'Delete account?',
+            body: `Delete ${this.existing.name}? This cannot be undone.`,
+        });
+        dialog.add_response('cancel', 'Cancel');
+        dialog.add_response('delete', 'Delete');
+        dialog.set_response_appearance('delete', Adw.ResponseAppearance.DESTRUCTIVE);
+        dialog.connect('response', (_dialog, response) => {
+            if (response === 'delete')
+                this._deleteAccount();
+        });
+        dialog.present(this);
+    }
+
+    async _deleteAccount() {
+        this._cleanup();
+        try {
+            await this.client.deleteRemote(this.existing.name);
+            await this.window.refresh();
+            this.window.toast('Account deleted.');
+            this.onDone?.();
+            this.close();
+        } catch (e) {
+            this._showError(e.message);
+        }
     }
 
     _cleanup() {

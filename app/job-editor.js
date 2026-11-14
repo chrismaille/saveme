@@ -3,6 +3,7 @@ import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
 import {VolumeResolver} from '../src/volumes.js';
 import {AccountDialog} from './account-dialog.js';
+import {AccountsDialog} from './accounts-dialog.js';
 import {RemoteBrowserDialog} from './remote-browser.js';
 import {
     JOB_TYPES,
@@ -12,8 +13,17 @@ import {
     normalizeJob,
     validateJob,
 } from '../src/jobs.js';
+import {INTERVAL_UNITS, WEEKDAYS, isValidTime} from '../src/domain/schedule.js';
 
-const TRIGGER_LABELS = ['Real-time', 'Interval', 'Manual'];
+const TRIGGER_OPTIONS = [
+    {mode: TRIGGER_MODES.REALTIME, label: 'Real-time'},
+    {mode: TRIGGER_MODES.INTERVAL, label: 'Interval'},
+    {mode: TRIGGER_MODES.WEEKLY, label: 'Weekly'},
+    {mode: TRIGGER_MODES.MONTHLY, label: 'Monthly'},
+    {mode: TRIGGER_MODES.STARTUP, label: 'At computer startup'},
+    {mode: TRIGGER_MODES.DUSK, label: 'At dusk'},
+    {mode: TRIGGER_MODES.MANUAL, label: 'Manual'},
+];
 const STEP_TITLES = ['General', 'Sources', 'Destination', 'Schedule', 'Safety'];
 
 export const JobEditor = GObject.registerClass({
@@ -23,14 +33,20 @@ export const JobEditor = GObject.registerClass({
         super({
             transient_for: parentWindow,
             modal: true,
-            title: job ? 'Edit job' : 'New job',
+            title: job?.draft ? 'Continue job' : job ? 'Edit job' : 'New job',
             default_width: 720,
             default_height: 700,
         });
         this.parentWindow = parentWindow;
         this.client = parentWindow.client;
         this.volumes = parentWindow.volumes || new VolumeResolver();
-        this.isNew = !job;
+        this.isNew = !job || job.draft;
+        this.isDraft = Boolean(job?.draft);
+        this._draftPromise = null;
+        this._draftQueuedStep = 0;
+        this._ready = false;
+        this._saved = false;
+        this._closing = false;
         this.job = normalizeJob(job
             ? JSON.parse(JSON.stringify(job))
             : defaultJob());
@@ -40,7 +56,7 @@ export const JobEditor = GObject.registerClass({
             .map(source => JSON.parse(JSON.stringify(source)));
         if (this.sources.length === 0)
             this.sources.push({kind: 'local', path: ''});
-        this._step = 0;
+        this._step = this.job.draft ? this.job.draftStep : 0;
         this._build();
     }
 
@@ -51,6 +67,7 @@ export const JobEditor = GObject.registerClass({
         header.set_title_widget(this.windowTitle);
 
         const cancel = new Gtk.Button({label: 'Cancel'});
+        this.cancelButton = cancel;
         cancel.connect('clicked', () => this.close());
         header.pack_start(cancel);
         this.backButton = new Gtk.Button({
@@ -87,7 +104,15 @@ export const JobEditor = GObject.registerClass({
         toolbar.set_content(this.stack);
         this.set_content(toolbar);
         this._updateVisibility();
-        this._showStep(0);
+        this._showStep(this._step);
+        this._ready = true;
+        this.connect('close-request', () => {
+            if (!this._saved && this._step >= 1)
+                this._closing = true;
+            if (!this._saved)
+                this._autosaveDraft(this._step);
+            return false;
+        });
     }
 
     _page() {
@@ -203,8 +228,21 @@ export const JobEditor = GObject.registerClass({
             this.job.destination, descriptor => this._setDestination(descriptor)));
         this.destinationRow.add_suffix(choose);
         group.add(this.destinationRow);
+        this.accountsRow = new Adw.ActionRow({
+            title: 'Cloud accounts',
+            subtitle: 'Add, reconnect or delete accounts without leaving this wizard.',
+        });
+        const manage = new Gtk.Button({
+            label: 'Manage',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat'],
+        });
+        manage.connect('clicked', () => this._manageAccounts());
+        this.accountsRow.add_suffix(manage);
+        group.add(this.accountsRow);
         page.add(group);
         this._updateProviderSelection();
+        this._updateAccountsHint();
         return page;
     }
 
@@ -214,44 +252,145 @@ export const JobEditor = GObject.registerClass({
             title: 'Schedule',
             description: 'Choose when the job should run.',
         });
-        const triggerIndex = this.job.trigger.mode === TRIGGER_MODES.INTERVAL
-            ? 1
-            : this.job.trigger.mode === TRIGGER_MODES.MANUAL ? 2 : 0;
+        this.triggerModes = TRIGGER_OPTIONS;
         this.triggerRow = new Adw.ComboRow({
             title: 'Mode',
-            model: Gtk.StringList.new(TRIGGER_LABELS),
-            selected: triggerIndex,
+            model: Gtk.StringList.new(TRIGGER_OPTIONS.map(item => item.label)),
+            selected: 0,
         });
-        this.triggerRow.connect('notify::selected', () => this._updateVisibility());
+        this.triggerRow.connect('notify::selected', () => {
+            if (this._updatingTrigger)
+                return;
+            this.triggerMode = this.triggerModes[this.triggerRow.selected]?.mode ||
+                TRIGGER_MODES.MANUAL;
+            this._updateTriggerRows();
+        });
+        group.add(this.triggerRow);
+
         this.intervalRow = new Adw.SpinRow({
-            title: 'Interval (minutes)',
+            title: 'Every',
             adjustment: new Gtk.Adjustment({
                 lower: 1,
                 upper: 10080,
                 step_increment: 1,
                 page_increment: 30,
-                value: Number(this.job.trigger.intervalMinutes || 60),
+                value: Number(this.job.trigger.intervalValue || 1),
             }),
         });
-        group.add(this.triggerRow);
+        this.intervalUnitRow = new Adw.ComboRow({
+            title: 'Interval unit',
+            model: Gtk.StringList.new(['minutes', 'hours', 'days']),
+            selected: Math.max(0, INTERVAL_UNITS.indexOf(
+                this.job.trigger.intervalUnit || 'hours')),
+        });
+        this.dayOfWeekRow = new Adw.ComboRow({
+            title: 'Day of week',
+            model: Gtk.StringList.new(WEEKDAYS),
+            selected: Number(this.job.trigger.dayOfWeek ?? 1),
+        });
+        this.dayOfMonthRow = new Adw.SpinRow({
+            title: 'Day of month',
+            adjustment: new Gtk.Adjustment({
+                lower: 1,
+                upper: 31,
+                step_increment: 1,
+                page_increment: 1,
+                value: Number(this.job.trigger.dayOfMonth || 1),
+            }),
+        });
+        this.timeRow = new Adw.EntryRow({
+            title: 'Time (HH:MM)',
+            text: this.job.trigger.time || '18:00',
+        });
+        this.idleRow = new Adw.SwitchRow({
+            title: 'Only run when the computer is idle',
+            subtitle: 'Wait for mouse, keyboard and screen activity to stop.',
+            active: Boolean(this.job.trigger.idleOnly),
+        });
         group.add(this.intervalRow);
+        group.add(this.intervalUnitRow);
+        group.add(this.dayOfWeekRow);
+        group.add(this.dayOfMonthRow);
+        group.add(this.timeRow);
+        group.add(this.idleRow);
         page.add(group);
 
         this.backupGroup = new Adw.PreferencesGroup({title: 'Backup'});
+        this.keepForeverRow = new Adw.SwitchRow({
+            title: 'Keep versions forever',
+            subtitle: 'Ignore the retention period and never remove old versions.',
+            active: Boolean(this.job.backup.keepForever),
+        });
         this.retentionRow = new Adw.SpinRow({
             title: 'Keep versions for (days)',
-            subtitle: '0 keeps versions forever',
+            subtitle: 'Disabled when versions are kept forever',
             adjustment: new Gtk.Adjustment({
-                lower: 0,
+                lower: 1,
                 upper: 3650,
                 step_increment: 1,
                 page_increment: 30,
-                value: Number(this.job.backup.retentionDays || 0),
+                value: Math.max(1, Number(this.job.backup.retentionDays || 30)),
             }),
         });
+        this.keepForeverRow.connect('notify::active', () => {
+            this.retentionRow.sensitive = !this.keepForeverRow.active;
+        });
+        this.backupGroup.add(this.keepForeverRow);
         this.backupGroup.add(this.retentionRow);
         page.add(this.backupGroup);
+        this._setTriggerMode(this.triggerModeForJob());
         return page;
+    }
+
+    triggerModeForJob() {
+        if (this.typeRow.selected === 1 && this.job.trigger.mode === TRIGGER_MODES.REALTIME)
+            return TRIGGER_MODES.INTERVAL;
+        return this.job.trigger.mode || TRIGGER_MODES.REALTIME;
+    }
+
+    _setTriggerMode(mode) {
+        this._syncTriggerOptions(mode);
+        this._updateTriggerRows();
+    }
+
+    _syncTriggerOptions(preferred = null) {
+        const backup = this.typeRow.selected === 1;
+        const modes = backup
+            ? TRIGGER_OPTIONS.filter(item => item.mode !== TRIGGER_MODES.REALTIME)
+            : TRIGGER_OPTIONS;
+        const current = preferred || this.triggerMode ||
+            (backup ? TRIGGER_MODES.INTERVAL : this.job.trigger.mode);
+        const selected = modes.findIndex(item => item.mode === current);
+        this.triggerModes = modes;
+        this._updatingTrigger = true;
+        this.triggerRow.model = Gtk.StringList.new(modes.map(item => item.label));
+        this.triggerRow.selected = Math.max(0, selected);
+        this._updatingTrigger = false;
+        this.triggerMode = modes[Math.max(0, selected)]?.mode || TRIGGER_MODES.MANUAL;
+    }
+
+    _updateTriggerRows() {
+        if (!this.intervalUnitRow)
+            return;
+        this.intervalRow.visible = this.triggerMode === TRIGGER_MODES.INTERVAL;
+        this.intervalUnitRow.visible = this.triggerMode === TRIGGER_MODES.INTERVAL;
+        this.dayOfWeekRow.visible = this.triggerMode === TRIGGER_MODES.WEEKLY;
+        this.dayOfMonthRow.visible = this.triggerMode === TRIGGER_MODES.MONTHLY;
+        this.timeRow.visible = [TRIGGER_MODES.WEEKLY, TRIGGER_MODES.MONTHLY,
+            TRIGGER_MODES.DUSK].includes(this.triggerMode);
+        this.idleRow.visible = ![TRIGGER_MODES.REALTIME,
+            TRIGGER_MODES.MANUAL].includes(this.triggerMode);
+        if (this.backupGroup)
+            this.backupGroup.visible = this.typeRow.selected === 1;
+        if (this.retentionRow)
+            this.retentionRow.sensitive = !this.keepForeverRow?.active;
+    }
+
+    _intervalMinutes() {
+        const selected = Math.max(0, this.intervalUnitRow?.selected ?? 0);
+        const unit = INTERVAL_UNITS[selected] || 'minutes';
+        const factor = {minutes: 1, hours: 60, days: 1440}[unit] || 1;
+        return Math.max(1, Math.round(Number(this.intervalRow?.value || 1) * factor));
     }
 
     _buildSafetyPage() {
@@ -342,12 +481,17 @@ export const JobEditor = GObject.registerClass({
         this._step = Math.max(0, Math.min(STEP_TITLES.length - 1, index));
         const names = ['general', 'sources', 'destination', 'schedule', 'safety'];
         this.stack.set_visible_child_name(names[this._step]);
-        this.windowTitle.title = `${this.isNew ? 'New job' : 'Edit job'} · ` +
+        const title = this.isDraft ? 'Continue job' : this.isNew ? 'New job' : 'Edit job';
+        this.windowTitle.title = `${title} · ` +
             `${STEP_TITLES[this._step]} (${this._step + 1}/${STEP_TITLES.length})`;
         this.backButton.visible = this._step > 0;
         this.nextButton.visible = this._step < STEP_TITLES.length - 1;
         this.saveButton.visible = this._step === STEP_TITLES.length - 1;
         this.runButton.visible = this._step === STEP_TITLES.length - 1;
+        this.cancelButton.label = this._step >= 1 && (this.isNew || this.isDraft)
+            ? 'Close' : 'Cancel';
+        if (this._ready)
+            this._autosaveDraft(this._step);
     }
 
     _next() {
@@ -368,9 +512,20 @@ export const JobEditor = GObject.registerClass({
             this._showError('Choose a destination.');
             return false;
         }
-        if (index === 3 && this.triggerRow.selected === 1 && this.intervalRow.value < 1) {
-            this._showError('The interval must be at least one minute.');
-            return false;
+        if (index === 3) {
+            if (this.triggerMode === TRIGGER_MODES.INTERVAL && this._intervalMinutes() < 1) {
+                this._showError('The interval must be at least one minute.');
+                return false;
+            }
+            if (this.triggerMode === TRIGGER_MODES.WEEKLY && this.dayOfWeekRow.selected < 0) {
+                this._showError('Choose a day of the week.');
+                return false;
+            }
+            if ([TRIGGER_MODES.WEEKLY, TRIGGER_MODES.MONTHLY, TRIGGER_MODES.DUSK]
+                .includes(this.triggerMode) && !isValidTime(this.timeRow.text)) {
+                this._showError('Use a time in the HH:MM format (for example 18:00).');
+                return false;
+            }
         }
         return true;
     }
@@ -454,16 +609,12 @@ export const JobEditor = GObject.registerClass({
         const type = this.typeRow.selected === 1 ? JOB_TYPES.BACKUP : JOB_TYPES.SYNC;
         if (type !== JOB_TYPES.BACKUP && this.sources.length > 1)
             this.sources = [this.sources[0]];
-        if (this.backupGroup)
-            this.backupGroup.visible = type === JOB_TYPES.BACKUP;
-        if (this.intervalRow)
-            this.intervalRow.visible = this.triggerRow.selected === 1;
-        if (type === JOB_TYPES.BACKUP && this.isNew && this.triggerRow.selected === 0) {
-            this.triggerRow.selected = 1;
-            this.intervalRow.value = 60;
-        }
         if (this.sourcesGroup)
             this._renderSources();
+        if (!this.triggerRow)
+            return;
+        this._syncTriggerOptions(this.triggerMode || this.job.trigger.mode);
+        this._updateTriggerRows();
     }
 
     _setDestination(descriptor) {
@@ -499,7 +650,10 @@ export const JobEditor = GObject.registerClass({
             new AccountDialog(this.parentWindow, null, {
                 provider: type,
                 transientFor: this,
-                onDone: () => this._pickProvider(type),
+                onDone: () => {
+                    this._updateAccountsHint();
+                    this._pickProvider(type);
+                },
             }).present();
             return;
         }
@@ -515,6 +669,61 @@ export const JobEditor = GObject.registerClass({
             transientFor: this,
             onSelect: descriptor => this._setDestination(descriptor),
         }).present();
+    }
+
+    _manageAccounts() {
+        new AccountsDialog(this.parentWindow, {
+            transientFor: this,
+            onUse: remote => this._browseRemote(remote),
+            onDeleted: name => this._forgetRemote(name),
+            onDone: () => {
+                this._updateProviderSelection();
+                this._updateAccountsHint();
+            },
+        }).present();
+    }
+
+    _browseRemote(remote) {
+        const current = this.job.destination?.kind === 'remote' &&
+            this.job.destination.remote === remote.name
+            ? this.job.destination
+            : null;
+        new RemoteBrowserDialog(this.parentWindow, {
+            mode: 'pick',
+            remoteType: remote.type,
+            remote: remote.name,
+            path: current?.path || '',
+            transientFor: this,
+            onSelect: descriptor => this._setDestination(descriptor),
+        }).present();
+    }
+
+    _forgetRemote(name) {
+        if (this.job.destination?.kind === 'remote' &&
+            this.job.destination.remote === name)
+            this._setDestination({kind: 'local', path: ''});
+        let changed = false;
+        this.sources = this.sources.map(source => {
+            if (source?.kind === 'remote' && source.remote === name) {
+                changed = true;
+                return {kind: 'local', path: ''};
+            }
+            return source;
+        });
+        if (changed)
+            this._renderSources();
+        this._updateProviderSelection();
+        this._updateAccountsHint();
+    }
+
+    _updateAccountsHint() {
+        if (!this.accountsRow)
+            return;
+        const remotes = this.parentWindow.snapshot?.remotes || [];
+        this.accountsRow.set_subtitle(remotes.length === 0
+            ? 'No accounts configured. Add one to use a cloud destination.'
+            : `${remotes.length} account${remotes.length === 1 ? '' : 's'} configured. ` +
+                'Add, reconnect or delete accounts here.');
     }
 
     _chooseSourceDescriptor(index, current, callback) {
@@ -546,7 +755,10 @@ export const JobEditor = GObject.registerClass({
             new AccountDialog(this.parentWindow, null, {
                 provider: type,
                 transientFor: this,
-                onDone: () => this._pickSourceProvider(type, callback, currentDescriptor),
+                onDone: () => {
+                    this._updateAccountsHint();
+                    this._pickSourceProvider(type, callback, currentDescriptor);
+                },
             }).present();
             return;
         }
@@ -609,9 +821,6 @@ export const JobEditor = GObject.registerClass({
 
     _collectJob() {
         const type = this.typeRow.selected === 1 ? JOB_TYPES.BACKUP : JOB_TYPES.SYNC;
-        const triggerMode = this.triggerRow.selected === 1
-            ? TRIGGER_MODES.INTERVAL
-            : this.triggerRow.selected === 2 ? TRIGGER_MODES.MANUAL : TRIGGER_MODES.REALTIME;
         return normalizeJob({
             ...this.job,
             name: this.nameRow.text.trim(),
@@ -620,8 +829,14 @@ export const JobEditor = GObject.registerClass({
             sources: this.sources,
             destination: this.job.destination,
             trigger: {
-                mode: triggerMode,
-                intervalMinutes: Number(this.intervalRow.value),
+                mode: this.triggerMode,
+                intervalMinutes: this._intervalMinutes(),
+                intervalValue: Number(this.intervalRow.value),
+                intervalUnit: INTERVAL_UNITS[this.intervalUnitRow.selected] || 'hours',
+                dayOfWeek: this.dayOfWeekRow.selected,
+                dayOfMonth: Number(this.dayOfMonthRow.value),
+                time: this.timeRow.text.trim() || '18:00',
+                idleOnly: this.idleRow.active,
             },
             filters: {
                 exclude: String(this.filtersRow.text || '')
@@ -641,10 +856,56 @@ export const JobEditor = GObject.registerClass({
                 notifyOnComplete: this.notifyRow.active,
             },
             backup: {
-                retentionDays: Number(this.retentionRow.value),
+                retentionDays: this.keepForeverRow.active
+                    ? 0 : Number(this.retentionRow.value),
+                keepForever: this.keepForeverRow.active,
             },
+            draft: Boolean(this.job.draft),
+            draftStep: Number(this.job.draftStep || 0),
             enabled: this.job.enabled !== false,
         });
+    }
+
+    _autosaveDraft(step) {
+        if (!this._ready || this._saved)
+            return;
+        if (!this.isNew && !this.job.draft)
+            return;
+        if (step < 1)
+            return;
+        this._draftQueuedStep = Math.max(this._draftQueuedStep || 0, step);
+        if (this._draftPromise)
+            return;
+        const saveQueued = () => {
+            const draftStep = this._draftQueuedStep;
+            this._draftQueuedStep = 0;
+            if (!draftStep) {
+                this._draftPromise = null;
+                return;
+            }
+            const job = this._collectJob();
+            job.draft = true;
+            job.draftStep = draftStep;
+            job.enabled = false;
+            this._draftPromise = this.client.saveJob(job)
+                .then(saved => {
+                    this.job = normalizeJob(saved);
+                    this.job.draft = true;
+                    this.isNew = true;
+                    this.isDraft = true;
+                    this.parentWindow.refresh();
+                    if (this._closing) {
+                        this._closing = false;
+                        this.parentWindow.toast('Draft saved. Continue later from Jobs.');
+                    }
+                })
+                .catch(e => this.parentWindow.toast(`Cannot save draft: ${e.message}`))
+                .finally(() => {
+                    this._draftPromise = null;
+                    saveQueued();
+                });
+        };
+        saveQueued();
     }
 
     async _save(run) {
@@ -654,7 +915,19 @@ export const JobEditor = GObject.registerClass({
                 return;
             }
         }
+        // Do not let a delayed draft autosave overwrite the final job.
+        this._draftQueuedStep = 0;
+        if (this._draftPromise) {
+            try {
+                await this._draftPromise;
+            } catch (_) {
+                // The final save below reports any remaining problem.
+            }
+        }
         const job = this._collectJob();
+        job.draft = false;
+        job.draftStep = 0;
+        job.enabled = true;
         delete job.state;
         const remotes = (this.parentWindow.snapshot?.remotes || []).map(remote => remote.name);
         const errors = validateJob(job, {remotes});
@@ -664,6 +937,7 @@ export const JobEditor = GObject.registerClass({
         }
         try {
             const saved = await this.client.saveJob(job);
+            this._saved = true;
             if (run)
                 await this.client.runJob(saved.id, false, false);
             this.parentWindow.toast(run

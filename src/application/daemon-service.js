@@ -220,6 +220,8 @@ export class DaemonService {
         const payload = JSON.parse(payloadJson);
         delete payload.state;
         const existing = payload.id ? this.config.getJob(payload.id) : null;
+        // Capture before updateJob mutates the stored object.
+        const wasDraft = Boolean(existing?.draft);
         let saved;
         if (payload.id && existing)
             saved = this.config.updateJob(payload.id, payload);
@@ -227,14 +229,29 @@ export class DaemonService {
             saved = this.config.addJob(payload);
         if (saved.type === JOB_TYPES.BACKUP) {
             try {
-                if (!existing)
+                if (saved.draft) {
+                    // Drafts may be incomplete and must not create the backup
+                    // container or a manifest yet.
+                } else if (!existing || wasDraft) {
                     this._createBackupContainer(saved);
-                else
+                } else {
                     this._writeManifest(saved);
+                }
             } catch (e) {
                 if (!existing) {
                     try {
                         this.config.removeJob(saved.id);
+                    } catch (_) {
+                        // Best effort.
+                    }
+                } else if (wasDraft) {
+                    try {
+                        const draft = this.config.updateJob(saved.id, {
+                            ...saved,
+                            draft: true,
+                            enabled: false,
+                        });
+                        this.manager.updateJob(saved.id, draft);
                     } catch (_) {
                         // Best effort.
                     }
@@ -291,11 +308,21 @@ export class DaemonService {
             throw new Error(`Backup folder already exists: ${container}`);
         }
         const root = backupRootFor(job, destination);
-        this.transfer.mkdir(container);
-        this.transfer.mkdir(root);
-        this.transfer.mkdir(`${root}/current`);
-        this.transfer.mkdir(`${root}/versions`);
-        this._writeManifest(job, {strict: true});
+        try {
+            this.transfer.mkdir(container);
+            this.transfer.mkdir(root);
+            this.transfer.mkdir(`${root}/current`);
+            this.transfer.mkdir(`${root}/versions`);
+            this._writeManifest(job, {strict: true});
+        } catch (e) {
+            // Do not leave a partial SaveMe folder that would block a retry.
+            try {
+                this.transfer.runCapture(['purge', container]);
+            } catch (cleanupError) {
+                this.logger?.warn(`Cannot clean up ${container}: ${cleanupError.message}`);
+            }
+            throw e;
+        }
     }
 
     _writeManifest(job, {strict = false} = {}) {
@@ -420,7 +447,7 @@ export class DaemonService {
 
     deleteRemote(name) {
         const users = this.config.listJobs()
-            .filter(job => jobRemoteNames(job).includes(name));
+            .filter(job => !job.draft && jobRemoteNames(job).includes(name));
         if (users.length > 0) {
             throw new Error(`Remote ${name} is used by jobs: ` +
                 users.map(job => job.name).join(', '));

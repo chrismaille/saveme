@@ -6,6 +6,7 @@ export const JOB_STATUS = {
     PAUSED: 'paused',
     WAITING_SOURCE: 'waiting-source',
     WAITING_DESTINATION: 'waiting-destination',
+    WAITING_IDLE: 'waiting-idle',
     OFFLINE: 'offline',
     NO_SPACE: 'no-space',
     ERROR: 'error',

@@ -1,6 +1,7 @@
 # SaveMe
 
-**Source → Destination.** One-way real-time sync and versioned backup for GNOME.
+**Source → Destination.** One-way real-time sync and scheduled versioned backup
+for GNOME.
 
 SaveMe is a GTK4/Adwaita settings app backed by a small user daemon. It keeps a
 destination folder or cloud remote in sync with a source folder, with two
@@ -10,9 +11,21 @@ deliberately different modes:
   renames and deletions propagate. No versions.
 - **Backup** — copies changes to the destination and keeps previous versions of
   overwritten files. Deletions in the source do not delete the destination.
-  A backup job can combine multiple local source folders.
+  A backup job can combine multiple local source folders. Backups cannot use
+  real-time mode.
 - **Recovery** — import backup jobs from an existing `SaveMe` folder and
   restore to a different local folder.
+
+The new-job assistant has five steps (name/type, sources, destination,
+schedule, safety). From the second step onward it saves a draft automatically;
+drafts appear in the job list and reopen where they stopped. Cloud accounts can
+be added, reconnected or deleted from the destination step without cancelling
+the assistant.
+
+Schedules support intervals in minutes/hours/days, weekly and monthly runs, a
+configurable time (also used for dusk), startup and manual mode. Scheduled runs
+can wait until the computer is idle. Backup versions can be kept for a number of
+days or forever, independently.
 
 The heavy lifting (cloud APIs, OAuth, retries, checksums, rate limits) is done
 by [rclone](https://rclone.org/). SaveMe owns the UX, scheduling, real-time

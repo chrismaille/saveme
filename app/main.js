@@ -9,6 +9,7 @@ import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
 import {DaemonGateway} from './gateway/daemon-gateway.js';
 import {JobEditor} from './job-editor.js';
+import {AccountsDialog} from './accounts-dialog.js';
 import {defaultJob} from '../src/jobs.js';
 import {AppLog} from './observability/app-log.js';
 import {AppMonitor} from './observability/app-monitor.js';
@@ -155,6 +156,21 @@ const SaveMeApplication = GObject.registerClass({
                 trigger: {mode: 'interval', intervalMinutes: 60},
             }));
             backupEditor.close();
+            const draftEditor = new JobEditor(this._window, defaultJob({
+                name: 'Smoke draft',
+                type: 'backup',
+                draft: true,
+                draftStep: 3,
+                enabled: false,
+                source: {kind: 'local', path: '/tmp/saveme-smoke'},
+                destination: {kind: 'local', path: '/tmp/saveme-smoke-dest'},
+            }));
+            if (draftEditor._step !== 3)
+                throw new Error('draft did not resume at its saved step');
+            draftEditor._saved = true;
+            draftEditor.close();
+            const accounts = new AccountsDialog(this._window, {provider: 'onedrive'});
+            accounts.close();
             for (const view of ['jobs', 'accounts', 'logs', 'settings', 'debug'])
                 this._window.showView(view);
         } catch (e) {

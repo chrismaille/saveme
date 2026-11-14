@@ -125,6 +125,8 @@ export class ConfigStore {
             const jobErrors = validateJob(job, {remotes: [...remoteNames]});
             for (const error of jobErrors)
                 errors.push(`${job.name || job.id}: ${error}`);
+            if (job.draft)
+                continue;
             const key = descriptorKey(job.destination);
             const other = destinations.get(key);
             if (other && !(other.type === 'backup' && job.type === 'backup')) {
@@ -201,6 +203,8 @@ export class ConfigStore {
     }
 
     _checkDestinationUnique(job, excludeId = null) {
+        if (job.draft)
+            return;
         const key = descriptorKey(job.destination);
         const other = this.data.jobs.find(item =>
             item.id !== excludeId && descriptorKey(item.destination) === key);
@@ -267,7 +271,8 @@ export class ConfigStore {
     }
 
     removeRemote(name) {
-        const users = this.data.jobs.filter(job => jobRemoteNames(job).includes(name));
+        const users = this.data.jobs
+            .filter(job => !job.draft && jobRemoteNames(job).includes(name));
         if (users.length > 0)
             throw new Error(`Remote ${name} is used by jobs: ${users.map(job => job.name).join(', ')}`);
         const index = this.data.remotes.findIndex(item => item.name === name);

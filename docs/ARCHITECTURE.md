@@ -412,7 +412,11 @@ Para remotes, o caminho equivalente é
   `/proc/meminfo`; o app mostra em Settings/Debug e nos detalhes do job.
 - Notificações de conclusão de backup são por job
   (`options.notifyOnComplete`, padrão ligado).
-- Ao iniciar, jobs `realtime`/`interval` atrasados rodam imediatamente.
+- Ao iniciar, jobs `realtime`/`interval` atrasados rodam imediatamente;
+  `weekly`, `monthly` e `dusk` são reagendados pelo próximo horário local.
+- `startup` roda uma vez ao iniciar o daemon. `idleOnly` adia qualquer execução
+  agendada até o computador ficar inativo, sem pular a ocorrência semanal ou
+  mensal que já venceu.
 - `logind` (`PrepareForSleep`) dispara reconciliação no resume.
 - `Gio.NetworkMonitor` pausa jobs de nuvem quando offline e retoma ao voltar.
 - Limite de jobs simultâneos (padrão 1) para não saturar disco/rede.

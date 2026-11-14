@@ -251,6 +251,10 @@ export default suite('application/run-executor', [
         await executor.cleanupVersions(ctx, {...job, backup: {retentionDays: 0}}, '/dst');
         assertEqual(transfer.runs.length, 0);
 
+        await executor.cleanupVersions(ctx,
+            {...job, backup: {retentionDays: 1, keepForever: true}}, '/dst');
+        assertEqual(transfer.runs.length, 0);
+
         transfer.handler = (args, options) => {
             if (args[0] === 'lsf') {
                 options.onLine('20200101T000000-000-old', null);

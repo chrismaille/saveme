@@ -254,6 +254,52 @@ export default suite('application/daemon-service', [
             ...backupJob(), sources: [backupJob().source],
         })), /remote offline/);
         assertEqual(ctx.config.getJob('job_1'), null);
+        assert(ctx.transfer.captures.some(args =>
+            args[0] === 'purge' && args[1] === '/dst/SaveMe'));
+    }),
+    test('draft backups skip the container until finalized', () => {
+        const ctx = makeService();
+        const draft = JSON.parse(ctx.service.saveJob(JSON.stringify({
+            ...backupJob(),
+            name: 'Draft',
+            draft: true,
+            draftStep: 2,
+            enabled: false,
+            sources: [backupJob().source],
+        })));
+        assertEqual(draft.draft, true);
+        assertEqual(ctx.transfer.paths.has('/dst/SaveMe'), false);
+        assertEqual(ctx.transfer.files.has('/dst/SaveMe/job_1/manifest.json'), false);
+
+        const saved = JSON.parse(ctx.service.saveJob(JSON.stringify({
+            ...draft,
+            name: 'Backup',
+            draft: false,
+            draftStep: 0,
+            enabled: true,
+        })));
+        assertEqual(saved.draft, false);
+        assert(ctx.transfer.paths.has('/dst/SaveMe'));
+        assert(ctx.transfer.paths.has('/dst/SaveMe/job_1/current'));
+        assert(ctx.transfer.files.has('/dst/SaveMe/job_1/manifest.json'));
+    }),
+    test('a failed draft finalize keeps the job as a draft', () => {
+        const ctx = makeService();
+        const draft = JSON.parse(ctx.service.saveJob(JSON.stringify({
+            ...backupJob(),
+            draft: true,
+            draftStep: 4,
+            enabled: false,
+            sources: [backupJob().source],
+        })));
+        ctx.transfer.paths.add('/dst/SaveMe');
+        assertThrows(() => ctx.service.saveJob(JSON.stringify({
+            ...draft,
+            draft: false,
+            enabled: true,
+        })), /already exists/);
+        assertEqual(ctx.config.getJob('job_1').draft, true);
+        assertEqual(ctx.config.getJob('job_1').enabled, false);
     }),
     test('import and inspect backup jobs', () => {
         const ctx = makeService();
@@ -358,13 +404,56 @@ export default suite('application/daemon-service', [
             kind: 'remote', remote: 'drive', path: '',
         }}];
         assertThrows(() => ctx.service.deleteRemote('drive'), /used by jobs/);
-        ctx.config.jobs = [];
+        ctx.config.jobs = [{...backupJob(), name: 'Draft uses drive', draft: true,
+            destination: {kind: 'remote', remote: 'drive', path: ''},
+        }];
         ctx.service.deleteRemote('drive');
         assertEqual(ctx.transfer.deleted[0], 'drive');
         assertEqual(ctx.config.remotes.length, 0);
         ctx.config.remotes = [{name: 'other'}];
         ctx.transfer.configDelete = () => ({exitCode: 7, stderr: 'delete failed'});
         assertThrows(() => ctx.service.deleteRemote('other'), /delete failed/);
+    }),
+    test('maps rclone output and tolerates optional services', async () => {
+        const ctx = makeService();
+        ctx.transfer.captureHandler = () => ({
+            exitCode: 7, stdout: 'plain failure', stderr: '',
+        });
+        assertThrows(() => ctx.service.listRemote('drive', '', false), /plain failure/);
+
+        ctx.transfer.captureHandler = () => ({
+            exitCode: 7, stdout: '{"level":"info","msg":"allowed"}', stderr: '',
+        });
+        assertThrows(() => ctx.service.listRemote('drive', '', false), /allowed/);
+
+        ctx.transfer.captureHandler = () => ({
+            exitCode: 7, stdout: '',
+            stderr: '{"level":"critical","msg":"drive_id missing"}',
+        });
+        assertThrows(() => ctx.service.listRemote('drive', '', false), /misconfigured/);
+        assertThrows(() => ctx.service.listRemote('', '', false), /Remote not found/);
+
+        const added = JSON.parse(ctx.service.saveJob(JSON.stringify({
+            id: 'missing', name: 'Added', type: 'sync',
+        })));
+        assertEqual(added.id, 'missing');
+        const generated = JSON.parse(ctx.service.saveJob(JSON.stringify({
+            name: 'Generated', type: 'sync',
+        })));
+        assertEqual(generated.name, 'Generated');
+
+        ctx.config.jobs = [backupJob()];
+        ctx.transfer.writeText = () => {
+            throw new Error('offline');
+        };
+        ctx.service.saveJob(JSON.stringify({...backupJob(), name: 'Changed'}));
+
+        const settings = makeService({logs: null});
+        assertEqual(JSON.parse(settings.service.doctorJson()).logs, null);
+        await assertThrows(() => settings.service.updateSettingsJson('null'),
+            /Invalid settings/);
+        await assertThrows(() => settings.service.updateSettingsJson('3'),
+            /Invalid settings/);
     }),
     test('doctorJson reports rclone success and failure', () => {
         const ctx = makeService();

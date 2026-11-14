@@ -13,6 +13,7 @@ import {
 import {DaemonApi} from './adapters/dbus/api.js';
 import {SystemClock} from './adapters/system/clock.js';
 import {LogStore} from './adapters/system/log-store.js';
+import {IdleMonitor} from './adapters/system/idle-monitor.js';
 import {cpuPercent, readProcessMetrics} from './adapters/system/process-metrics.js';
 import {readSystemMetrics} from './adapters/system/system-metrics.js';
 import {DaemonService} from './application/daemon-service.js';
@@ -65,6 +66,7 @@ export const SaveMeDaemonApplication = GObject.registerClass({
         this._logStore = null;
         this._logService = null;
         this._logPruneTimer = null;
+        this._idleMonitor = null;
         this._processTimer = null;
         this._processMetrics = null;
         this._lastProcessMetrics = null;
@@ -142,12 +144,14 @@ export const SaveMeDaemonApplication = GObject.registerClass({
             getSettings: () => this._config.settings,
         });
         this._restore = createRestoreService({rclone: this._rclone});
+        this._idleMonitor = new IdleMonitor();
         this._manager = new JobManager({
             config: this._config,
             state: this._state,
             runner: this._runner,
             logger: this._logger,
             clock: new SystemClock(),
+            isIdle: () => this._idleMonitor.isIdle(),
             onChange: () => this._markDirty(),
             onRunFinished: run => this._onRunFinished(run),
             onNotify: notification => this._onNotify(notification),

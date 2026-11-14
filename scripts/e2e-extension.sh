@@ -55,9 +55,20 @@ gjs -m "$ROOT_DIR/bin/saveme.js" job add \
 gjs -m "$ROOT_DIR/bin/saveme-daemon.js" >"$BASE/daemon.log" 2>&1 &
 DAEMON_PID=$!
 
-# Wait for the test daemon to own the bus name and export GetSnapshot before
-# starting the Shell. Otherwise the extension can trigger D-Bus activation of
-# the installed daemon instead of this test process.
+# Wait for the test daemon to acquire the bus name and export GetSnapshot
+# before starting the Shell. Otherwise the extension can trigger D-Bus
+# activation of the installed daemon instead of this test process.
+i=0
+while ! grep -q 'D-Bus interface exported' "$BASE/daemon.log" 2>/dev/null; do
+    i=$((i + 1))
+    if [ "$i" -ge 100 ] || ! kill -0 "$DAEMON_PID" 2>/dev/null; then
+        echo "Test daemon did not export its D-Bus interface" >&2
+        tail -n 40 "$BASE/daemon.log" >&2
+        exit 1
+    fi
+    sleep 0.1
+done
+
 i=0
 while ! gdbus call --session \
     --dest io.github.chrismaille.SaveMe.Daemon \

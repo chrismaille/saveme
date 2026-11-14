@@ -3,6 +3,7 @@ import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
 import Gio from 'gi://Gio';
 import {JOB_TYPES, descriptorDisplay, jobSources, localPathFor} from '../../src/jobs.js';
+import {triggerLabel} from '../../src/domain/schedule.js';
 import {RecoverDialog} from '../recover-dialog.js';
 import {
     backupRootDisplay,
@@ -216,6 +217,8 @@ export class JobsPage {
     }
 
     _sidebarPaths(job, short = true) {
+        if (job.draft)
+            return 'Draft — open to continue';
         const sources = jobSources(job);
         const source = sources.length === 1
             ? descriptorDisplay(sources[0], this.window.volumes)
@@ -228,6 +231,8 @@ export class JobsPage {
     }
 
     _sidebarSubtitle(job) {
+        if (job.draft)
+            return 'Draft · continue setup';
         const state = job.state || {};
         const progress = state.progress;
         if (state.status === 'running' && progress) {
@@ -315,10 +320,14 @@ export class JobsPage {
         const statusGroup = new Adw.PreferencesGroup({title: 'Status'});
         const statusRow = new Adw.ActionRow({
             title: job.name || job.id,
-            subtitle: `${typeLabel(job.type)} · ${statusLabel(state.status)}`,
+            subtitle: job.draft ? 'Draft · continue setup'
+                : `${typeLabel(job.type)} · ${statusLabel(state.status)}`,
         });
         const dot = makeStatusIcon(state.status || 'idle');
         statusRow.add_prefix(dot);
+        const statusText = job.draft ? 'Draft · continue setup'
+            : `${typeLabel(job.type)} · ${statusLabel(state.status)}`;
+        statusRow.set_subtitle(statusText);
         const openButton = iconLabelButton('Open destination', 'folder-open-symbolic', {
             cssClasses: ['flat'],
         });
@@ -421,11 +430,18 @@ export class JobsPage {
                     .then(() => this.window.toast('Run started.'))
                     .catch(e => this.window.toast(e.message));
             });
-        addAction('Dry run', 'system-run-symbolic', [], () => {
+        if (job.draft) {
+            addAction('Continue setup', 'document-edit-symbolic', ['suggested-action'],
+                () => this.window.editJob(job));
+            runButton.visible = false;
+        }
+        const dryRunButton = addAction('Dry run', 'system-run-symbolic', [], () => {
             this.window.client.runJob(job.id, true)
                 .then(() => this.window.toast('Dry run started. Check Logs.'))
                 .catch(e => this.window.toast(e.message));
         });
+        if (job.draft)
+            dryRunButton.visible = false;
         const pauseButton = addAction(state.paused ? 'Resume' : 'Pause',
             state.paused ? 'media-playback-start-symbolic' : 'media-playback-pause-symbolic',
             [], () => {
@@ -437,9 +453,14 @@ export class JobsPage {
                 this.window.client.cancelJob(job.id)
                     .catch(e => this.window.toast(e.message));
             });
-        addAction('Edit', 'document-edit-symbolic', [], () => this.window.editJob(job));
+        if (job.draft) {
+            pauseButton.visible = false;
+            stopButton.visible = false;
+        }
+        if (!job.draft)
+            addAction('Edit', 'document-edit-symbolic', [], () => this.window.editJob(job));
         addAction('Logs', 'text-x-generic-symbolic', [], () => this.window.openLogs(job.id));
-        if (job.type === JOB_TYPES.BACKUP) {
+        if (job.type === JOB_TYPES.BACKUP && !job.draft) {
             addAction('Versions / restore', 'document-revert-symbolic', [],
                 () => this.window.openVersions(job));
         }
@@ -456,17 +477,14 @@ export class JobsPage {
         page.add(actions);
 
         const configuration = new Adw.PreferencesGroup({title: 'Configuration'});
-        configuration.add(this._statRow('Schedule',
-            job.trigger.mode === 'interval'
-                ? `every ${job.trigger.intervalMinutes} minutes`
-                : job.trigger.mode));
+        configuration.add(this._statRow('Schedule', triggerLabel(job.trigger)));
         configuration.add(this._statRow('Delete guard',
             `${job.options.maxDeletePercent}% (minimum ${job.options.maxDeleteMinimum})`));
         if (job.type === JOB_TYPES.BACKUP) {
             configuration.add(this._statRow('Retention',
-                job.backup.retentionDays > 0
-                    ? `${job.backup.retentionDays} days`
-                    : 'keep versions forever'));
+                job.backup.keepForever || job.backup.retentionDays === 0
+                    ? 'keep versions forever'
+                    : `${job.backup.retentionDays} days`));
         }
         if (job.filters.exclude?.length) {
             configuration.add(this._statRow('Excludes',
@@ -516,8 +534,9 @@ export class JobsPage {
         }
         const state = job.state || {};
         const progress = state.progress;
-        this.detail.statusRow.set_subtitle(
-            `${typeLabel(job.type)} · ${statusLabel(state.status)}`);
+        this.detail.statusRow.set_subtitle(job.draft
+            ? 'Draft · continue setup'
+            : `${typeLabel(job.type)} · ${statusLabel(state.status)}`);
         setStatusIcon(this.detail.dot, state.status || 'idle');
 
         if (progress) {

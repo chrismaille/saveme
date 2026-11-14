@@ -21,6 +21,7 @@ import errorsSuite from './unit/domain/errors.test.js';
 import logPolicySuite from './unit/domain/log-policy.test.js';
 import diskSpaceSuite from './unit/domain/disk-space.test.js';
 import backupManifestSuite from './unit/domain/backup-manifest.test.js';
+import scheduleSuite from './unit/domain/schedule.test.js';
 import syncServiceSuite from './unit/application/sync-service.test.js';
 import backupServiceSuite from './unit/application/backup-service.test.js';
 import restoreServiceSuite from './unit/application/restore-service.test.js';
@@ -30,11 +31,13 @@ import schedulerSuite from './unit/application/scheduler.test.js';
 import daemonServiceSuite from './unit/application/daemon-service.test.js';
 import logServiceSuite from './unit/application/log-service.test.js';
 import supervisorNotificationsSuite from './unit/application/supervisor-notifications.test.js';
+import supervisorScheduleSuite from './unit/application/supervisor-schedule.test.js';
 import jobTargetSuite from './unit/application/job-target.test.js';
 import changePlannerSuite from './unit/application/change-planner.test.js';
 import fileSystemAdapterSuite from './unit/adapters/file-system.test.js';
 import systemAdapterSuite from './unit/adapters/system.test.js';
 import systemMetricsSuite from './unit/adapters/system-metrics.test.js';
+import idleMonitorSuite from './unit/adapters/idle-monitor.test.js';
 import dbusApiSuite from './unit/adapters/dbus-api.test.js';
 import appFormatSuite from './unit/app/format.test.js';
 import appGatewaySuite from './unit/app/daemon-gateway.test.js';
@@ -76,6 +79,7 @@ const suites = [
     logPolicySuite,
     diskSpaceSuite,
     backupManifestSuite,
+    scheduleSuite,
     syncServiceSuite,
     backupServiceSuite,
     restoreServiceSuite,
@@ -85,11 +89,13 @@ const suites = [
     daemonServiceSuite,
     logServiceSuite,
     supervisorNotificationsSuite,
+    supervisorScheduleSuite,
     jobTargetSuite,
     changePlannerSuite,
     fileSystemAdapterSuite,
     systemAdapterSuite,
     systemMetricsSuite,
+    idleMonitorSuite,
     dbusApiSuite,
     appFormatSuite,
     appGatewaySuite,

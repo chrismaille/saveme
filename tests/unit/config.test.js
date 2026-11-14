@@ -75,4 +75,31 @@ export default suite('config', [
             cleanup(dir);
         }
     }),
+    test('drafts share destinations and do not block remote deletion', async () => {
+        const dir = tempDir('saveme-config-drafts');
+        try {
+            const store = makeStore(dir);
+            store.load();
+            store.addRemote({name: 'drive', type: 'drive', label: 'Google Drive'});
+            const first = makeJob('Draft one', '', '');
+            first.draft = true;
+            first.draftStep = 1;
+            first.enabled = false;
+            const second = makeJob('Draft two', '', '');
+            second.draft = true;
+            second.draftStep = 2;
+            second.destination = {kind: 'remote', remote: 'drive', path: ''};
+            second.enabled = false;
+            store.addJob(first);
+            store.addJob(second);
+            assertEqual(store.listJobs().length, 2);
+            store.removeRemote('drive');
+            assertEqual(store.listRemoteNames().length, 0);
+            const reloaded = makeStore(dir);
+            reloaded.load();
+            assertEqual(reloaded.listJobs().length, 2);
+        } finally {
+            cleanup(dir);
+        }
+    }),
 ]);

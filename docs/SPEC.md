@@ -85,7 +85,14 @@ usa polling a cada 5 minutos (configurável) e reconciliação completa periódi
     "path": "SaveMe/Documentos"
   },
   "trigger": {
-    "mode": "realtime"
+    "mode": "interval",
+    "intervalMinutes": 1440,
+    "intervalValue": 1,
+    "intervalUnit": "days",
+    "dayOfWeek": 1,
+    "dayOfMonth": 1,
+    "time": "18:00",
+    "idleOnly": false
   },
   "filters": {
     "exclude": []
@@ -101,15 +108,33 @@ usa polling a cada 5 minutos (configurável) e reconciliação completa periódi
     "notifyOnComplete": true
   },
   "backup": {
-    "retentionDays": 30
-  }
+    "retentionDays": 30,
+    "keepForever": false
+  },
+  "draft": false,
+  "draftStep": 0
 }
 ```
 
 Regras:
 
 - `type` é `sync` ou `backup`.
-- `trigger.mode` é `realtime`, `interval` ou `manual`.
+- `trigger.mode` é `realtime`, `interval`, `weekly`, `monthly`, `startup`,
+  `dusk` ou `manual`.
+- Backups não aceitam `realtime`; o assistente usa `interval` (1 hora) por
+  padrão.
+- `intervalMinutes` é o valor canônico para compatibilidade; a interface edita
+  `intervalValue` + `intervalUnit` (`minutes`, `hours` ou `days`).
+- `weekly` usa `dayOfWeek` (0 = domingo) e `time`; `monthly` usa `dayOfMonth`
+  (1–31, ajustado ao último dia do mês) e `time`; `dusk` usa `time`
+  configurável (padrão 18:00); `startup` roda ao iniciar o daemon.
+- `idleOnly` adia execuções agendadas até o `IdleHint` do logind indicar
+  inatividade. Sem logind, o job não é bloqueado.
+- `backup.keepForever` ignora `retentionDays` e nunca remove versões.
+- `draft` + `draftStep` guardam um job incompleto: ele aparece na lista, fica
+  desabilitado, não valida campos e não cria `SaveMe/<job-id>` até ser salvo.
+- Dois rascunhos podem compartilhar o mesmo destino vazio; a unicidade é
+  validada quando o rascunho é finalizado.
 - `source` e `destination` nunca podem ser iguais, nem um dentro do outro.
 - Dois jobs não podem escrever no mesmo destino ao mesmo tempo.
 - Filtros de exclusão usam a sintaxe de filtros do rclone.
