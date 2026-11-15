@@ -10,6 +10,12 @@ export function backupCurrentFor(job, dest) {
     return `${backupRootFor(job, dest)}/current`;
 }
 
+export function syncRootFor(job, dest) {
+    if (job.destinationLayout === 'direct')
+        return dest;
+    return backupCurrentFor(job, dest);
+}
+
 export function versionsRootFor(job, dest) {
     return `${backupRootFor(job, dest)}/versions`;
 }

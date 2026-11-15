@@ -218,8 +218,8 @@ if grep -qiE 'Gjs-CRITICAL|JS ERROR|Gtk-CRITICAL|Adw-CRITICAL' "$BASE/app.log"; 
     exit 1
 fi
 
-if ! grep -q 'hello' "$BASE/dst/a.txt" 2>/dev/null; then
-    echo "Daemon did not sync the app smoke file" >&2
+if ! grep -Rqs 'hello' "$BASE/dst/SaveMe" 2>/dev/null; then
+    echo "Daemon did not sync the app smoke file into SaveMe" >&2
     tail -n 60 "$BASE/daemon.log" >&2
     exit 1
 fi

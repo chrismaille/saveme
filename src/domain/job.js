@@ -28,6 +28,7 @@ export function jobDefaults(input = {}, {
         source: {kind: 'local', path: ''},
         sources: [],
         destination: {kind: 'local', path: ''},
+        destinationLayout: 'saveMe',
         trigger: {
             mode: TRIGGER_MODES.REALTIME,
             intervalMinutes: 60,
@@ -61,6 +62,9 @@ export function jobDefaults(input = {}, {
 export function normalizeJobFields(job) {
     job.id = job.id || '';
     job.type = Object.values(JOB_TYPES).includes(job.type) ? job.type : JOB_TYPES.SYNC;
+    job.destinationLayout = job.type === JOB_TYPES.BACKUP
+        ? 'saveMe'
+        : job.destinationLayout === 'direct' ? 'direct' : 'saveMe';
     const sources = Array.isArray(job.sources) ? job.sources.filter(Boolean) : [];
     if (sources.length === 0 && job.source)
         sources.push(job.source);

@@ -4,7 +4,7 @@ import {
     localPathFor,
     remotePathFor,
 } from '../domain/job.js';
-import {sourceFolderName} from '../domain/backup-layout.js';
+import {sourceFolderName, syncRootFor} from '../domain/backup-layout.js';
 import {SourceUnavailableError} from '../domain/errors.js';
 
 export function resolveJobTargets(job, {files, volumes}) {
@@ -28,11 +28,12 @@ export function resolveJobTargets(job, {files, volumes}) {
             label: sourceFolderName(descriptor, index),
         };
     });
-    const dest = isLocalDescriptor(job.destination)
+    const destBase = isLocalDescriptor(job.destination)
         ? localPathFor(job.destination, volumes)
         : remotePathFor(job.destination);
-    if (sources.length === 0 || !dest)
+    if (sources.length === 0 || !destBase)
         throw new Error('Source and destination are required.');
+    const dest = job.type === 'sync' ? syncRootFor(job, destBase) : destBase;
 
     const destIsLocal = isLocalDescriptor(job.destination);
     if (destIsLocal && files.exists(dest) && !files.isDirectory(dest))
@@ -42,6 +43,7 @@ export function resolveJobTargets(job, {files, volumes}) {
         source: sources[0].path,
         sourceIsLocal: sources[0].isLocal,
         dest,
+        destBase,
         destIsLocal,
         sources,
     };

@@ -100,7 +100,16 @@ export class ConfigStore {
         const config = mergeDeep(defaultConfig(), raw || {});
         config.version = CONFIG_VERSION;
         config.remotes = Array.isArray(config.remotes) ? config.remotes : [];
-        config.jobs = Array.isArray(config.jobs) ? config.jobs.map(normalizeJob) : [];
+        config.jobs = Array.isArray(config.jobs) ? config.jobs.map(job => {
+            const input = {...job};
+            // Sync jobs created before the shared SaveMe base layout mirrored
+            // directly into the chosen folder. Keep them working as-is.
+            if (!input.destinationLayout) {
+                input.destinationLayout = input.type === 'sync' && !input.draft
+                    ? 'direct' : 'saveMe';
+            }
+            return normalizeJob(input);
+        }) : [];
         return config;
     }
 
@@ -116,6 +125,7 @@ export class ConfigStore {
         }
         const jobIds = new Set();
         const destinations = new Map();
+        const directDestinations = new Map();
         for (const job of this.data.jobs) {
             if (!job.id)
                 errors.push('Job sem id.');
@@ -128,12 +138,18 @@ export class ConfigStore {
             if (job.draft)
                 continue;
             const key = descriptorKey(job.destination);
-            const other = destinations.get(key);
-            if (other && !(other.type === 'backup' && job.type === 'backup')) {
-                errors.push(`${job.name || job.id}: destination already used by ` +
-                    `${other.name || other.id}`);
-            } else if (!other) {
-                destinations.set(key, job);
+            const jobs = destinations.get(key) || [];
+            jobs.push(job);
+            destinations.set(key, jobs);
+            if (job.destinationLayout === 'direct')
+                directDestinations.set(key, job);
+        }
+        for (const [key, direct] of directDestinations) {
+            const other = (destinations.get(key) || [])
+                .find(job => job.id !== direct.id);
+            if (other) {
+                errors.push(`${direct.name || direct.id}: destination is used directly ` +
+                    `and cannot be shared with ${other.name || other.id}`);
             }
         }
         if (errors.length > 0)
@@ -206,14 +222,21 @@ export class ConfigStore {
         if (job.draft)
             return;
         const key = descriptorKey(job.destination);
-        const other = this.data.jobs.find(item =>
+        const others = this.data.jobs.filter(item =>
             item.id !== excludeId && descriptorKey(item.destination) === key);
-        if (other && !(other.type === 'backup' && job.type === 'backup')) {
-            const otherType = other.type === 'backup' ? 'backup' : 'sync';
-            throw new Error(`Destination already used by ${otherType} job: ` +
-                `${other.name || other.id}. Backup jobs can share a base folder; ` +
-                'Sync jobs require an exclusive destination.');
-        }
+        if (others.length === 0)
+            return;
+        const layout = job.destinationLayout === 'direct' ? 'direct' : 'saveMe';
+        if (layout === 'saveMe' &&
+            others.every(other => other.destinationLayout !== 'direct'))
+            return;
+        const other = others[0];
+        throw new Error(`Destination already used by ` +
+            `${other.type === 'backup' ? 'backup' : 'sync'} job: ` +
+            `${other.name || other.id}. ` +
+            (layout === 'direct'
+                ? 'Direct sync destinations cannot be shared.'
+                : 'This base contains a direct sync job; choose another destination.'));
     }
 
     removeJob(id) {

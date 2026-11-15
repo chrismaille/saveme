@@ -21,6 +21,24 @@ export default suite('application/job-target', [
         assertEqual(result.sourceIsLocal, true);
         assertEqual(result.destIsLocal, true);
     }),
+    test('sync jobs resolve to their own SaveMe folder unless direct', () => {
+        const files = new FakeFileSystem();
+        files.addDir('/src');
+        files.addDir('/dst');
+        const saveMe = resolveJobTargets(localJob({
+            id: 'job_1',
+            type: 'sync',
+            destinationLayout: 'saveMe',
+        }), {files, volumes: null});
+        assertEqual(saveMe.dest, '/dst/SaveMe/job_1/current');
+        assertEqual(saveMe.destBase, '/dst');
+        const direct = resolveJobTargets(localJob({
+            id: 'job_1',
+            type: 'sync',
+            destinationLayout: 'direct',
+        }), {files, volumes: null});
+        assertEqual(direct.dest, '/dst');
+    }),
     test('rejects missing, non-directory and incomplete local targets', async () => {
         const missingSource = new FakeFileSystem();
         missingSource.addDir('/dst');

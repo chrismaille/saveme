@@ -206,26 +206,28 @@ async function syncScenario() {
         options: {maxDeleteMinimum: 10},
     });
     await client.saveJob(job);
+    const current = () => path('sync-dst', 'SaveMe', job.id, 'current');
+    const inCurrent = (...parts) => GLib.build_filenamev([current(), ...parts]);
 
-    await waitFor(() => fileEquals(path('sync-dst', 'a.txt'), 'one'));
+    await waitFor(() => fileEquals(inCurrent('a.txt'), 'one'));
     ok('sync: initial copy through daemon');
     await sleep(500);
 
     write(path('sync-src', 'a.txt'), 'two');
-    await waitFor(() => fileEquals(path('sync-dst', 'a.txt'), 'two'));
+    await waitFor(() => fileEquals(inCurrent('a.txt'), 'two'));
     ok('sync: real-time update');
 
     write(path('sync-src', 'sub', 'b.txt'), 'world');
-    await waitFor(() => fileEquals(path('sync-dst', 'sub', 'b.txt'), 'world'));
+    await waitFor(() => fileEquals(inCurrent('sub', 'b.txt'), 'world'));
     ok('sync: new directory and file');
 
     GLib.rename(path('sync-src', 'a.txt'), path('sync-src', 'c.txt'));
-    await waitFor(() => fileEquals(path('sync-dst', 'c.txt'), 'two') &&
-        !GLib.file_test(path('sync-dst', 'a.txt'), GLib.FileTest.EXISTS));
+    await waitFor(() => fileEquals(inCurrent('c.txt'), 'two') &&
+        !GLib.file_test(inCurrent('a.txt'), GLib.FileTest.EXISTS));
     ok('sync: rename propagated');
 
     deleteFile(path('sync-src', 'c.txt'));
-    await waitFor(() => !GLib.file_test(path('sync-dst', 'c.txt'),
+    await waitFor(() => !GLib.file_test(inCurrent('c.txt'),
         GLib.FileTest.EXISTS));
     ok('sync: delete propagated');
 
@@ -234,7 +236,9 @@ async function syncScenario() {
         destination: {kind: 'local', path: newDestination},
     };
     await client.saveJob(updated);
-    await waitFor(() => fileEquals(path('sync-dst-new', 'sub', 'b.txt'), 'world'));
+    const nextCurrent = path('sync-dst-new', 'SaveMe', job.id, 'current');
+    await waitFor(() => fileEquals(
+        GLib.build_filenamev([nextCurrent, 'sub', 'b.txt']), 'world'));
     ok('sync: destination change starts a new mirror');
 }
 
@@ -334,7 +338,9 @@ async function pauseResumeScenario() {
         options: {maxDeleteMinimum: 10},
     });
     await client.saveJob(job);
-    await waitFor(() => fileEquals(path('lifecycle-dst', 'a.txt'), 'one'));
+    const current = path('lifecycle-dst', 'SaveMe', job.id, 'current');
+    const inCurrent = (...parts) => GLib.build_filenamev([current, ...parts]);
+    await waitFor(() => fileEquals(inCurrent('a.txt'), 'one'));
     ok('lifecycle: initial sync');
 
     await client.pauseJob(job.id, true);
@@ -346,12 +352,12 @@ async function pauseResumeScenario() {
 
     write(path('lifecycle-src', 'b.txt'), 'two');
     await sleep(1500);
-    if (GLib.file_test(path('lifecycle-dst', 'b.txt'), GLib.FileTest.EXISTS))
+    if (GLib.file_test(inCurrent('b.txt'), GLib.FileTest.EXISTS))
         throw new Error('paused job copied a file');
     ok('lifecycle: pause blocks realtime changes');
 
     await client.pauseJob(job.id, false);
-    await waitFor(() => fileEquals(path('lifecycle-dst', 'b.txt'), 'two'));
+    await waitFor(() => fileEquals(inCurrent('b.txt'), 'two'));
     ok('lifecycle: resume flushes changes');
 
     let signals = 0;

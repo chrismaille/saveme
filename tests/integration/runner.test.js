@@ -46,6 +46,7 @@ function makeJob(ctx, type = JOB_TYPES.SYNC, options = {}) {
         type,
         source: {kind: 'local', path: ctx.source},
         destination: {kind: 'local', path: ctx.dest},
+        destinationLayout: type === JOB_TYPES.SYNC ? 'direct' : 'saveMe',
         trigger: {mode: 'manual'},
         options: {
             maxDeletePercent: 10,

@@ -243,12 +243,15 @@ export const SaveMeWindow = GObject.registerClass({
     }
 
     openBackupRoot(job) {
-        if (!job || job.type !== JOB_TYPES.BACKUP)
+        if (!job || job.destinationLayout === 'direct')
             return this.openDestination(job);
+        const suffix = job.type === JOB_TYPES.BACKUP
+            ? `SaveMe/${job.id}`
+            : `SaveMe/${job.id}/current`;
         if (job.destination.kind === 'remote') {
             const path = job.destination.path
-                ? `${job.destination.path.replace(/\/+$/, '')}/SaveMe/${job.id}`
-                : `SaveMe/${job.id}`;
+                ? `${job.destination.path.replace(/\/+$/, '')}/${suffix}`
+                : suffix;
             new RemoteBrowserDialog(this, {
                 mode: 'browse',
                 remote: job.destination.remote,
@@ -263,9 +266,9 @@ export const SaveMeWindow = GObject.registerClass({
             this.toast(e.message);
             return;
         }
-        const path = `${String(base || '').replace(/\/+$/, '')}/SaveMe/${job.id}`;
+        const path = `${String(base || '').replace(/\/+$/, '')}/${suffix}`;
         if (!GLib.file_test(path, GLib.FileTest.EXISTS)) {
-            this.toast(`Backup folder not created yet: ${path}`);
+            this.toast(`Job folder not created yet: ${path}`);
             return;
         }
         try {

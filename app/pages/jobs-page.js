@@ -467,7 +467,7 @@ export class JobsPage {
             paths.add(sourceRow);
         }
         const destinationRow = new Adw.ActionRow({
-            title: 'Destination',
+            title: 'Destination base',
             subtitle: this._destinationLabel(job),
         });
         const destinationOpen = iconLabelButton('Open', 'folder-open-symbolic', {
@@ -487,6 +487,17 @@ export class JobsPage {
             backupOpen.connect('clicked', () => this.window.openBackupRoot(job));
             backupRow.add_suffix(backupOpen);
             paths.add(backupRow);
+        } else if (job.destinationLayout !== 'direct') {
+            const syncRow = new Adw.ActionRow({
+                title: 'Sync folder',
+                subtitle: `${backupRootDisplay(job)}/current`,
+            });
+            const syncOpen = iconLabelButton('Open', 'folder-open-symbolic', {
+                cssClasses: ['flat'],
+            });
+            syncOpen.connect('clicked', () => this.window.openBackupRoot(job));
+            syncRow.add_suffix(syncOpen);
+            paths.add(syncRow);
         }
         page.add(paths);
 
@@ -593,8 +604,7 @@ export class JobsPage {
                 : 'Cloud';
         }
         const path = descriptorDisplay(destination, this.window.volumes) || '-';
-        return `${service} · ${path}` +
-            (job.type === JOB_TYPES.BACKUP ? ' (base)' : '');
+        return `${service} · ${path} (base)`;
     }
 
     _play(job) {

@@ -58,9 +58,18 @@ export default suite('application/sync-service', [
         assert(ctx.transfer.runs[1].args.includes('--max-delete'));
         assertEqual(ctx.transfer.runs[1].args[0], 'sync');
         assertEqual(ctx.transfer.runs[1].args[1], '/src');
-        assertEqual(ctx.transfer.runs[1].args[2], '/dst');
+        assertEqual(ctx.transfer.runs[1].args[2], '/dst/SaveMe/job_test/current');
         assertEqual(ctx.runRepository.runs.length, 1);
         assert(ctx.files.writes.some(write => write.path === '/tmp/filters/job_test.txt'));
+    }),
+    test('direct-layout sync keeps mirroring into the chosen folder', async () => {
+        const ctx = syncContext();
+        const run = await ctx.sync.runFull(makeJob('sync', {
+            destinationLayout: 'direct',
+            options: {maxDeletePercent: 50, maxDeleteMinimum: 0},
+        }));
+        assertEqual(run.result, 'success');
+        assertEqual(ctx.transfer.runs.at(-1).args[2], '/dst');
     }),
     test('full sync skips preflight for dry-run and force', async () => {
         const dry = syncContext();
@@ -245,7 +254,7 @@ export default suite('application/sync-service', [
         assertEqual(run.result, 'success');
         assertEqual(ctx.transfer.runs.length, 1);
         assertEqual(ctx.transfer.runs[0].args[1], '/src/sub');
-        assertEqual(ctx.transfer.runs[0].args[2], '/dst/sub');
+        assertEqual(ctx.transfer.runs[0].args[2], '/dst/SaveMe/job_test/current/sub');
     }),
     test('incremental sync reports step cancellation and errors', async () => {
         const cancelled = syncContext();

@@ -44,15 +44,25 @@ export default suite('config', [
             cleanup(dir);
         }
     }),
-    test('rejects two jobs with the same destination', async () => {
+    test('allows SaveMe jobs to share a base and rejects direct duplicates', async () => {
         const dir = tempDir('saveme-config-dest');
         try {
             const store = makeStore(dir);
             store.load();
             store.addJob(makeJob('One', '/tmp/src1', '/tmp/dst'));
-            await assertThrows(
-                () => store.addJob(makeJob('Two', '/tmp/src2', '/tmp/dst')),
-                /Destination already used/);
+            store.addJob(makeJob('Two', '/tmp/src2', '/tmp/dst'));
+            assertEqual(store.listJobs().length, 2);
+            const reloaded = makeStore(dir);
+            reloaded.load();
+            assertEqual(reloaded.listJobs().length, 2);
+
+            const direct = makeJob('Direct', '/tmp/src3', '/tmp/dst-direct');
+            direct.destinationLayout = 'direct';
+            store.addJob(direct);
+            const otherDirect = makeJob('Direct two', '/tmp/src4', '/tmp/dst-direct');
+            otherDirect.destinationLayout = 'direct';
+            await assertThrows(() => store.addJob(otherDirect),
+                /cannot be shared/);
         } finally {
             cleanup(dir);
         }
@@ -71,6 +81,32 @@ export default suite('config', [
             job.destination = {kind: 'remote', remote: 'drive', path: 'SaveMe'};
             store.addJob(job);
             await assertThrows(() => store.removeRemote('drive'), /used by jobs/);
+        } finally {
+            cleanup(dir);
+        }
+    }),
+    test('legacy sync jobs stay direct while drafts use the SaveMe base', () => {
+        const dir = tempDir('saveme-config-layout');
+        try {
+            const path = GLib.build_filenamev([dir, 'config.json']);
+            const finalized = makeJob('Legacy', '/tmp/src1', '/tmp/dst1');
+            delete finalized.destinationLayout;
+            const draft = makeJob('Draft', '', '');
+            draft.id = 'job_draft';
+            draft.draft = true;
+            draft.draftStep = 2;
+            draft.enabled = false;
+            delete draft.destinationLayout;
+            GLib.file_set_contents(path, JSON.stringify({
+                version: 1,
+                settings: {},
+                remotes: [],
+                jobs: [finalized, draft],
+            }));
+            const store = makeStore(dir);
+            store.load();
+            assertEqual(store.getJob(finalized.id).destinationLayout, 'direct');
+            assertEqual(store.getJob('job_draft').destinationLayout, 'saveMe');
         } finally {
             cleanup(dir);
         }

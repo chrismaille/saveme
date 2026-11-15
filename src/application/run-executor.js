@@ -304,15 +304,16 @@ export class RunExecutor {
         if (!Number.isFinite(source))
             return null;
         let free;
+        const diskDest = prep.destBase || prep.dest;
         if (prep.destIsLocal) {
             if (typeof this.files.freeSpace !== 'function')
                 return null;
-            free = this.files.freeSpace(prep.dest);
+            free = this.files.freeSpace(diskDest);
         } else {
             if (typeof this.transfer.about !== 'function')
                 return null;
             try {
-                const remote = String(prep.dest || '');
+                const remote = String(diskDest || '');
                 const colon = remote.indexOf(':');
                 const root = colon > 0 ? `${remote.slice(0, colon)}:` : remote;
                 const about = this.transfer.about(root);

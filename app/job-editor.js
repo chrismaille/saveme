@@ -181,11 +181,6 @@ export const JobEditor = GObject.registerClass({
 
     _buildDestinationPage() {
         const page = this._page();
-        this.destinationBanner = new Adw.Banner({revealed: false});
-        this.destinationBanner.connect('button-clicked', () => this._switchToBackup());
-        this.bannerGroup = new Adw.PreferencesGroup();
-        this.bannerGroup.add(this.destinationBanner);
-        page.add(this.bannerGroup);
         this.existingGroup = new Adw.PreferencesGroup({
             title: 'Destinations in use',
             description: 'Reuse a base folder from another job, or create a new destination.',
@@ -276,32 +271,42 @@ export const JobEditor = GObject.registerClass({
             if (!descriptor || !(descriptor.path || descriptor.remote || descriptor.volumeUuid))
                 continue;
             const key = descriptorKey(descriptor);
-            if (!entries.has(key))
-                entries.set(key, {descriptor, jobs: [], types: new Set(), current: false});
+            if (!entries.has(key)) {
+                entries.set(key, {
+                    descriptor,
+                    jobs: [],
+                    types: new Set(),
+                    layouts: new Set(),
+                    current: false,
+                });
+            }
             entries.get(key).jobs.push(job.name || job.id);
             entries.get(key).types.add(job.type);
+            entries.get(key).layouts.add(job.destinationLayout || 'saveMe');
         }
         const current = this.job.destination;
         if (current && (current.path || current.remote || current.volumeUuid)) {
             const key = descriptorKey(current);
-            if (!entries.has(key))
-                entries.set(key, {descriptor: current, jobs: [], types: new Set(), current: true});
-            else
+            if (!entries.has(key)) {
+                entries.set(key, {
+                    descriptor: current,
+                    jobs: [],
+                    types: new Set(),
+                    layouts: new Set(),
+                    current: true,
+                });
+            } else {
                 entries.get(key).current = true;
+            }
         }
         return [...entries.values()];
     }
 
-    _currentJobType() {
-        return this.typeRow?.selected === 1 ? 'backup' : 'sync';
-    }
-
     _destinationCompatible(entry) {
-        if (!entry.jobs || entry.jobs.length === 0)
-            return true;
-        if (this._currentJobType() !== 'backup')
-            return false;
-        return [...entry.types].every(type => type === 'backup');
+        const layout = this.job.destinationLayout === 'direct' ? 'direct' : 'saveMe';
+        if (layout === 'direct')
+            return entry.jobs.length === 0;
+        return [...entry.layouts].every(item => item !== 'direct');
     }
 
     _destinationJobsLabel(entry) {
@@ -364,16 +369,6 @@ export const JobEditor = GObject.registerClass({
                 });
                 use.connect('clicked', () => this._useExistingDestination(entry.descriptor));
                 row.add_suffix(use);
-            } else if (this.isNew && this._currentJobType() === 'sync' &&
-                [...entry.types].every(type => type === 'backup')) {
-                const convert = new Gtk.Button({
-                    label: 'Use as Backup',
-                    valign: Gtk.Align.CENTER,
-                    css_classes: ['flat', 'suggested-action'],
-                });
-                convert.connect('clicked', () =>
-                    this._switchToBackup(entry.descriptor));
-                row.add_suffix(convert);
             } else {
                 row.add_suffix(new Gtk.Label({
                     label: 'Not shareable',
@@ -383,9 +378,6 @@ export const JobEditor = GObject.registerClass({
             row.connect('activated', () => {
                 if (compatible)
                     this._useExistingDestination(entry.descriptor);
-                else if (this.isNew && this._currentJobType() === 'sync' &&
-                    [...entry.types].every(type => type === 'backup'))
-                    this._switchToBackup(entry.descriptor);
             });
             this.existingGroup.add(row);
             this.existingRows.push(row);
@@ -427,41 +419,6 @@ export const JobEditor = GObject.registerClass({
         this.existingGroup.add(newRow);
         this.existingRows.push(newRow);
         this.newDestinationGroup.visible = newSelected;
-        this._updateDestinationBanner();
-    }
-
-    _updateDestinationBanner() {
-        if (!this.destinationBanner)
-            return;
-        const type = this._currentJobType();
-        const hasBackupDestination = this.destinations
-            .some(entry => entry.types.has('backup'));
-        if (type === 'sync' && this.isNew && this._destinationMode === 'existing' &&
-            hasBackupDestination) {
-            this.destinationBanner.title =
-                'This SaveMe destination belongs to a Backup job. Change this job ' +
-                'to Backup to reuse it.';
-            this.destinationBanner.button_label = 'Change to Backup';
-            this.destinationBanner.revealed = true;
-            this.bannerGroup.visible = true;
-            return;
-        }
-        this.destinationBanner.revealed = false;
-        this.bannerGroup.visible = false;
-    }
-
-    _switchToBackup(descriptor = null) {
-        if (!this.isNew)
-            return;
-        if (this.typeRow.selected !== 1)
-            this.typeRow.selected = 1;
-        this._updateVisibility();
-        if (descriptor) {
-            this._destinationMode = 'existing';
-            this._setDestination(JSON.parse(JSON.stringify(descriptor)));
-        }
-        this._renderExistingDestinations();
-        this.parentWindow.toast('Job type changed to Backup.');
     }
 
     _useExistingDestination(descriptor) {
@@ -787,15 +744,16 @@ export const JobEditor = GObject.registerClass({
             descriptorKey(job.destination) === key);
         if (others.length === 0)
             return null;
-        const type = this._currentJobType();
-        if (type === 'backup' && others.every(job => job.type === 'backup'))
+        const layout = this.job.destinationLayout === 'direct' ? 'direct' : 'saveMe';
+        if (layout === 'saveMe' &&
+            others.every(job => job.destinationLayout !== 'direct'))
             return null;
-        if (type === 'sync' && others.every(job => job.type === 'backup')) {
-            return 'This destination belongs to a Backup job. Change this job ' +
-                'to Backup (or choose a new destination) to continue.';
+        if (layout === 'saveMe') {
+            return 'This base is used by a legacy direct sync job and cannot be ' +
+                'shared. Choose another destination.';
         }
-        return 'This destination is already used by another job. ' +
-            'Sync jobs need an exclusive destination.';
+        return 'Direct sync destinations cannot be shared with another job. ' +
+            'Choose another destination or create a new SaveMe base.';
     }
 
     _addChooseButton(row, callback) {
@@ -1238,10 +1196,6 @@ export const JobEditor = GObject.registerClass({
         if (/timeout|timed out|tempo limite|tempo esgotado/i.test(message)) {
             return 'The operation took longer than expected. The job may still be ' +
                 'finishing; check the Jobs list in a moment before trying again.';
-        }
-        if (/Destination already used by/i.test(message)) {
-            return `${message} Change the job type to Backup to share a base ` +
-                'folder, or choose a new destination.';
         }
         return message;
     }

@@ -187,19 +187,33 @@ Regras:
   gigantes na memória.
 - Nenhum argumento de shell é montado por concatenação; subprocessos usam argv.
 
-## 7. Backup e restauração
+## 7. Backup, sync e restauração
 
-Layout no destino:
+O destino escolhido é sempre uma pasta-base do SaveMe. Cada job recebe sua
+própria subpasta; sync e backup podem compartilhar a mesma base.
+
+Layout no destino para backup:
 
 ```
 <destino>/SaveMe/<job-id>/current/<caminho-relativo>
 <destino>/SaveMe/<job-id>/versions/<timestamp>-<mmm>-<run>/<caminho-relativo>
 ```
 
-O destino escolhido é a pasta-base; o app cria `SaveMe` dentro dela e recusa o
-job se essa pasta já existir. Cada job grava `manifest.json` para recuperação.
+Layout no destino para sync:
+
+```
+<destino>/SaveMe/<job-id>/current/<caminho-relativo>
+```
+
+Cada job de backup grava `manifest.json` para recuperação. A existência de
+`SaveMe` não é erro: o app cria apenas `<base>/SaveMe/<job-id>` e nunca toca nas
+pastas de outros jobs.
 Com múltiplas origens, `current` e `versions` têm uma subpasta por origem
 (nomes duplicados recebem sufixo).
+
+Jobs de sync criados antes deste layout usam `destinationLayout: "direct"` e
+continuam espelhando direto na pasta escolhida; eles não podem compartilhar a
+base com outro job.
 
 Para remote:
 
@@ -208,7 +222,7 @@ Para remote:
 <remote>:<destino>/SaveMe/<job-id>/versions/<timestamp>-<mmm>-<run>/...
 ```
 
-- `current` é o espelho do último backup.
+- `current` é o espelho do último backup ou do sync.
 - `versions/<timestamp>-<mmm>-<run>` contém os arquivos sobrescritos ou removidos naquele
   lote. Não é um snapshot completo; é o histórico incremental.
 - Cada execução com mudanças gera um diretório de versão com timestamp.
