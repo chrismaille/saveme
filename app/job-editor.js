@@ -181,6 +181,11 @@ export const JobEditor = GObject.registerClass({
 
     _buildDestinationPage() {
         const page = this._page();
+        this.destinationBanner = new Adw.Banner({revealed: false});
+        this.destinationBanner.connect('button-clicked', () => this._switchToBackup());
+        this.bannerGroup = new Adw.PreferencesGroup();
+        this.bannerGroup.add(this.destinationBanner);
+        page.add(this.bannerGroup);
         this.existingGroup = new Adw.PreferencesGroup({
             title: 'Destinations in use',
             description: 'Reuse a base folder from another job, or create a new destination.',
@@ -272,18 +277,40 @@ export const JobEditor = GObject.registerClass({
                 continue;
             const key = descriptorKey(descriptor);
             if (!entries.has(key))
-                entries.set(key, {descriptor, jobs: [], current: false});
+                entries.set(key, {descriptor, jobs: [], types: new Set(), current: false});
             entries.get(key).jobs.push(job.name || job.id);
+            entries.get(key).types.add(job.type);
         }
         const current = this.job.destination;
         if (current && (current.path || current.remote || current.volumeUuid)) {
             const key = descriptorKey(current);
             if (!entries.has(key))
-                entries.set(key, {descriptor: current, jobs: [], current: true});
+                entries.set(key, {descriptor: current, jobs: [], types: new Set(), current: true});
             else
                 entries.get(key).current = true;
         }
         return [...entries.values()];
+    }
+
+    _currentJobType() {
+        return this.typeRow?.selected === 1 ? 'backup' : 'sync';
+    }
+
+    _destinationCompatible(entry) {
+        if (!entry.jobs || entry.jobs.length === 0)
+            return true;
+        if (this._currentJobType() !== 'backup')
+            return false;
+        return [...entry.types].every(type => type === 'backup');
+    }
+
+    _destinationJobsLabel(entry) {
+        const typeNames = [...entry.types]
+            .map(type => type === 'backup' ? 'Backup' : 'Sync')
+            .join('/');
+        const jobs = entry.jobs.length > 0 ? entry.jobs.join(', ') : 'this job';
+        return `${entry.current ? 'This job · ' : ''}Used by ${jobs}` +
+            (typeNames ? ` (${typeNames})` : '');
     }
 
     _destinationServiceLabel(descriptor) {
@@ -308,27 +335,28 @@ export const JobEditor = GObject.registerClass({
         this.existingRows = [];
         this.destinations = this._usedDestinations();
         for (const entry of this.destinations) {
-            const selected = this._destinationMode === 'existing' &&
+            const compatible = this._destinationCompatible(entry);
+            const selected = this._destinationMode === 'existing' && compatible &&
                 this._matchesCurrentDestination(entry.descriptor);
             const row = new Adw.ActionRow({
                 title: this._destinationServiceLabel(entry.descriptor),
                 subtitle: `${descriptorDisplay(entry.descriptor, this.volumes)} · ` +
-                    (entry.current
-                        ? 'This job'
-                        : `Used by ${entry.jobs.join(', ')}`),
+                    this._destinationJobsLabel(entry),
             });
             row.add_prefix(new Gtk.Image({
                 icon_name: entry.descriptor.kind === 'remote'
                     ? 'folder-remote-symbolic' : 'drive-harddisk-symbolic',
                 pixel_size: 18,
             }));
+            if (!compatible)
+                row.add_css_class('saveme-destination-incompatible');
             if (selected) {
                 row.add_suffix(new Gtk.Image({
                     icon_name: 'object-select-symbolic',
                     pixel_size: 18,
                     css_classes: ['success'],
                 }));
-            } else {
+            } else if (compatible) {
                 const use = new Gtk.Button({
                     label: 'Use',
                     valign: Gtk.Align.CENTER,
@@ -336,8 +364,29 @@ export const JobEditor = GObject.registerClass({
                 });
                 use.connect('clicked', () => this._useExistingDestination(entry.descriptor));
                 row.add_suffix(use);
+            } else if (this.isNew && this._currentJobType() === 'sync' &&
+                [...entry.types].every(type => type === 'backup')) {
+                const convert = new Gtk.Button({
+                    label: 'Use as Backup',
+                    valign: Gtk.Align.CENTER,
+                    css_classes: ['flat', 'suggested-action'],
+                });
+                convert.connect('clicked', () =>
+                    this._switchToBackup(entry.descriptor));
+                row.add_suffix(convert);
+            } else {
+                row.add_suffix(new Gtk.Label({
+                    label: 'Not shareable',
+                    css_classes: ['dim-label'],
+                }));
             }
-            row.connect('activated', () => this._useExistingDestination(entry.descriptor));
+            row.connect('activated', () => {
+                if (compatible)
+                    this._useExistingDestination(entry.descriptor);
+                else if (this.isNew && this._currentJobType() === 'sync' &&
+                    [...entry.types].every(type => type === 'backup'))
+                    this._switchToBackup(entry.descriptor);
+            });
             this.existingGroup.add(row);
             this.existingRows.push(row);
         }
@@ -378,6 +427,41 @@ export const JobEditor = GObject.registerClass({
         this.existingGroup.add(newRow);
         this.existingRows.push(newRow);
         this.newDestinationGroup.visible = newSelected;
+        this._updateDestinationBanner();
+    }
+
+    _updateDestinationBanner() {
+        if (!this.destinationBanner)
+            return;
+        const type = this._currentJobType();
+        const hasBackupDestination = this.destinations
+            .some(entry => entry.types.has('backup'));
+        if (type === 'sync' && this.isNew && this._destinationMode === 'existing' &&
+            hasBackupDestination) {
+            this.destinationBanner.title =
+                'This SaveMe destination belongs to a Backup job. Change this job ' +
+                'to Backup to reuse it.';
+            this.destinationBanner.button_label = 'Change to Backup';
+            this.destinationBanner.revealed = true;
+            this.bannerGroup.visible = true;
+            return;
+        }
+        this.destinationBanner.revealed = false;
+        this.bannerGroup.visible = false;
+    }
+
+    _switchToBackup(descriptor = null) {
+        if (!this.isNew)
+            return;
+        if (this.typeRow.selected !== 1)
+            this.typeRow.selected = 1;
+        this._updateVisibility();
+        if (descriptor) {
+            this._destinationMode = 'existing';
+            this._setDestination(JSON.parse(JSON.stringify(descriptor)));
+        }
+        this._renderExistingDestinations();
+        this.parentWindow.toast('Job type changed to Backup.');
     }
 
     _useExistingDestination(descriptor) {
@@ -658,6 +742,13 @@ export const JobEditor = GObject.registerClass({
             this._showError('Choose a destination.');
             return false;
         }
+        if (index === 2) {
+            const compatibility = this._destinationCompatibilityError();
+            if (compatibility) {
+                this._showError(compatibility);
+                return false;
+            }
+        }
         if (index === 3) {
             if (this.triggerMode === TRIGGER_MODES.INTERVAL && this._intervalMinutes() < 1) {
                 this._showError('The interval must be at least one minute.');
@@ -685,6 +776,26 @@ export const JobEditor = GObject.registerClass({
     _destinationSelected() {
         const destination = this.job.destination;
         return destination && (destination.path || destination.volumeUuid || destination.remote);
+    }
+
+    _destinationCompatibilityError() {
+        if (!this._destinationSelected())
+            return null;
+        const key = descriptorKey(this.job.destination);
+        const others = (this.parentWindow.snapshot?.jobs || []).filter(job =>
+            job.id !== this.job.id && !job.draft &&
+            descriptorKey(job.destination) === key);
+        if (others.length === 0)
+            return null;
+        const type = this._currentJobType();
+        if (type === 'backup' && others.every(job => job.type === 'backup'))
+            return null;
+        if (type === 'sync' && others.every(job => job.type === 'backup')) {
+            return 'This destination belongs to a Backup job. Change this job ' +
+                'to Backup (or choose a new destination) to continue.';
+        }
+        return 'This destination is already used by another job. ' +
+            'Sync jobs need an exclusive destination.';
     }
 
     _addChooseButton(row, callback) {
@@ -757,6 +868,8 @@ export const JobEditor = GObject.registerClass({
             this.sources = [this.sources[0]];
         if (this.sourcesGroup)
             this._renderSources();
+        if (this.existingGroup)
+            this._renderExistingDestinations();
         if (!this.triggerRow)
             return;
         this._syncTriggerOptions(this.triggerMode || this.job.trigger.mode);
@@ -1118,11 +1231,19 @@ export const JobEditor = GObject.registerClass({
     }
 
     _saveErrorMessage(error) {
-        if (/timeout|timed out|tempo limite|tempo esgotado/i.test(error.message || '')) {
+        let message = String(error.message || '');
+        message = message
+            .replace(/^GDBus\.Error:[^\s]+:\s*/i, '')
+            .replace(/^Error:\s*/i, '');
+        if (/timeout|timed out|tempo limite|tempo esgotado/i.test(message)) {
             return 'The operation took longer than expected. The job may still be ' +
                 'finishing; check the Jobs list in a moment before trying again.';
         }
-        return error.message;
+        if (/Destination already used by/i.test(message)) {
+            return `${message} Change the job type to Backup to share a base ` +
+                'folder, or choose a new destination.';
+        }
+        return message;
     }
 
     async _saveFinishedInDaemon(run) {

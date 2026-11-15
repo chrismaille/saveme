@@ -208,8 +208,12 @@ export class ConfigStore {
         const key = descriptorKey(job.destination);
         const other = this.data.jobs.find(item =>
             item.id !== excludeId && descriptorKey(item.destination) === key);
-        if (other && !(other.type === 'backup' && job.type === 'backup'))
-            throw new Error(`Destination already used by job: ${other.name || other.id}`);
+        if (other && !(other.type === 'backup' && job.type === 'backup')) {
+            const otherType = other.type === 'backup' ? 'backup' : 'sync';
+            throw new Error(`Destination already used by ${otherType} job: ` +
+                `${other.name || other.id}. Backup jobs can share a base folder; ` +
+                'Sync jobs require an exclusive destination.');
+        }
     }
 
     removeJob(id) {
