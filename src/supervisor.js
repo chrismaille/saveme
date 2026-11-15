@@ -20,9 +20,15 @@ export class RunPool {
         this.waiters = [];
     }
 
-    async run(fn) {
-        while (this.active >= this.limit)
+    async run(fn, onWait = null) {
+        let notified = false;
+        while (this.active >= this.limit) {
+            if (!notified) {
+                notified = true;
+                onWait?.();
+            }
             await new Promise(resolve => this.waiters.push(resolve));
+        }
         this.active++;
         try {
             return await fn();
@@ -389,6 +395,9 @@ export class JobSupervisor {
                     runId: id,
                     onProgress: () => this.onChange?.(),
                 });
+            }, () => {
+                if (!this._stopped && !this._paused && !this.state.pausedAll)
+                    this._setStatus('queued', 'Waiting for a free job slot');
             });
             const run = await this._runningPromise;
             this._handleRunResult(run);
@@ -664,7 +673,7 @@ export class JobSupervisor {
 
     async runNow({dryRun = false, force = false, runId = null} = {}) {
         if (this._running)
-            throw new Error('Job is already running.');
+            throw new Error('Job is already running or queued.');
         return this._runFull({reason: 'manual', dryRun, force, runId, ignoreIdle: true});
     }
 

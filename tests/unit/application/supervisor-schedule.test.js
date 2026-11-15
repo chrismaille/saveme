@@ -97,6 +97,24 @@ export default suite('application/supervisor-schedule', [
         ctx.supervisor._handleRunResult({result: 'cancelled', kind: 'backup'});
         assertEqual(ctx.state.getJobState('job_test').status, 'stopped');
     }),
+    test('RunPool reports when a run has to wait for a slot', async () => {
+        const pool = new RunPool(1);
+        let release = null;
+        const gate = new Promise(resolve => {
+            release = resolve;
+        });
+        const first = pool.run(async () => {
+            await gate;
+        });
+        let waited = false;
+        const second = pool.run(async () => {}, () => {
+            waited = true;
+        });
+        await Promise.resolve();
+        assertEqual(waited, true);
+        release();
+        await Promise.all([first, second]);
+    }),
     test('RunPool applies a higher concurrency limit immediately', async () => {
         const pool = new RunPool(1);
         const started = [];

@@ -15,7 +15,7 @@ import {
     validateJob,
 } from '../src/jobs.js';
 import {INTERVAL_UNITS, WEEKDAYS, isValidTime} from '../src/domain/schedule.js';
-import {remoteTypeLabel} from './presentation/format.js';
+import {cleanError, remoteTypeLabel} from './presentation/format.js';
 
 const TRIGGER_OPTIONS = [
     {mode: TRIGGER_MODES.REALTIME, label: 'Real-time'},
@@ -1189,10 +1189,7 @@ export const JobEditor = GObject.registerClass({
     }
 
     _saveErrorMessage(error) {
-        let message = String(error.message || '');
-        message = message
-            .replace(/^GDBus\.Error:[^\s]+:\s*/i, '')
-            .replace(/^Error:\s*/i, '');
+        const message = cleanError(error.message);
         if (/timeout|timed out|tempo limite|tempo esgotado/i.test(message)) {
             return 'The operation took longer than expected. The job may still be ' +
                 'finishing; check the Jobs list in a moment before trying again.';

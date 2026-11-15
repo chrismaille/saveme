@@ -2,7 +2,10 @@ import {
     RESULT_LABELS,
     STATUS_LABELS,
     backupRootDisplay,
+    cleanError,
+    displayStatus,
     formatBytes,
+    formatDateTime,
     formatEta,
     formatWhen,
     remoteTypeLabel,
@@ -52,8 +55,24 @@ export default suite('app/presentation/format', [
         assertEqual(formatWhen('2026-01-02T10:00:00Z', NOW), '2 h ago');
         assertEqual(formatWhen('2025-12-30T12:00:00Z', NOW), '3 d ago');
     }),
+    test('display status exposes checking and queue phases', () => {
+        assertEqual(displayStatus('running', 'checking'), 'checking');
+        assertEqual(displayStatus('running', 'syncing'), 'running');
+        assertEqual(displayStatus('running', 'cleanup'), 'finalizing');
+        assertEqual(displayStatus('queued'), 'queued');
+        assertEqual(displayStatus('stopped'), 'stopped');
+        assertEqual(displayStatus(null), 'idle');
+        assertEqual(formatDateTime('2026-11-15T12:30:00'), '15/11/2026 12:30');
+        assertEqual(formatDateTime(''), '');
+        assertEqual(cleanError(
+            'GDBus.Error:org.gnome.gjs.JS.Error: Job is already running.'),
+        'Job is already running.');
+        assertEqual(cleanError('plain error'), 'plain error');
+    }),
     test('labels and icons map every job status', () => {
         assertEqual(statusLabel('running'), 'Running');
+        assertEqual(statusLabel('queued'), 'Queued');
+        assertEqual(statusLabel('checking'), 'Checking');
         assertEqual(statusLabel('waiting-source'), 'Source missing');
         assertEqual(statusLabel('no-space'), 'Not enough disk space');
         assertEqual(statusLabel('unknown'), 'unknown');
@@ -65,6 +84,7 @@ export default suite('app/presentation/format', [
         assertEqual(statusIconName('delete-guard'), 'dialog-error-symbolic');
         assertEqual(statusIconName('running'), 'emblem-synchronizing-symbolic');
         assertEqual(statusIconName('paused'), 'media-playback-pause-symbolic');
+        assertEqual(statusIconName('queued'), 'appointment-soon-symbolic');
         assertEqual(statusIconName('disabled'), 'media-playback-pause-symbolic');
         assertEqual(statusIconName('waiting-destination'), 'dialog-warning-symbolic');
         assertEqual(statusIconName('offline'), 'dialog-warning-symbolic');

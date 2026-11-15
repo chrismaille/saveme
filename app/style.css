@@ -101,6 +101,7 @@
 }
 
 .saveme-job-status-checking,
+.saveme-job-status-queued,
 .saveme-job-status-stopped,
 .saveme-job-status-draft,
 .saveme-job-status-paused,

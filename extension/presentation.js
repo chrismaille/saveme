@@ -1,6 +1,7 @@
 export const STATUS_LABELS = {
     'idle': 'Idle',
     'running': 'Running',
+    'queued': 'Queued',
     'checking': 'Checking',
     'finalizing': 'Finalizing',
     'paused': 'Paused',
@@ -25,6 +26,7 @@ const STATUS_ICONS = {
     'paused': 'media-playback-pause-symbolic',
     'stopped': 'media-playback-stop-symbolic',
     'draft': 'document-edit-symbolic',
+    'queued': 'appointment-soon-symbolic',
     'disabled': 'media-playback-pause-symbolic',
     'waiting-source': 'dialog-warning-symbolic',
     'waiting-destination': 'dialog-warning-symbolic',

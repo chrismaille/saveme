@@ -7,6 +7,7 @@ import {triggerLabel} from '../../src/domain/schedule.js';
 import {RecoverDialog} from '../recover-dialog.js';
 import {
     backupRootDisplay,
+    cleanError,
     displayStatus,
     formatBytes,
     formatDateTime,
@@ -262,8 +263,7 @@ export class JobsPage {
         const state = job.state || {};
         const progress = state.progress;
         const display = displayStatus(state.status, progress?.phase);
-        if (display === 'checking') {
-            const listed = Number(progress?.listed || 0);
+        if (display === 'checking') {            const listed = Number(progress?.listed || 0);
             return listed > 0
                 ? `Checking · ${listed.toLocaleString()} files`
                 : 'Checking · preparing backup';
@@ -274,6 +274,8 @@ export class JobsPage {
         }
         if (display === 'finalizing')
             return 'Finalizing · cleaning versions';
+        if (display === 'queued')
+            return 'Queued · waiting for a free slot';
         if (state.lastFinishedAt)
             return `Last backup ${formatDateTime(state.lastFinishedAt)}`;
         return 'Never backed up';
@@ -282,7 +284,7 @@ export class JobsPage {
     _updateSidebarProgress(entry, job) {
         const progress = job.state?.progress;
         const display = displayStatus(job.state?.status, progress?.phase);
-        if (display === 'checking') {
+        if (display === 'checking' || display === 'queued') {
             entry.progress.visible = true;
             entry.progress.pulse();
             return;
@@ -610,19 +612,19 @@ export class JobsPage {
     _play(job) {
         this.window.client.playJob(job.id)
             .then(() => this.window.toast('Job started.'))
-            .catch(e => this.window.toast(e.message));
+            .catch(e => this.window.toast(cleanError(e.message)));
     }
 
     _pause(job) {
         this.window.client.pauseJob(job.id, true)
             .then(() => this.window.toast('Job paused.'))
-            .catch(e => this.window.toast(e.message));
+            .catch(e => this.window.toast(cleanError(e.message)));
     }
 
     _stop(job) {
         this.window.client.cancelJob(job.id)
             .then(() => this.window.toast('Job stopped. Press Play to resume.'))
-            .catch(e => this.window.toast(e.message));
+            .catch(e => this.window.toast(cleanError(e.message)));
     }
 
     _currentJob() {
@@ -709,11 +711,13 @@ export class JobsPage {
                 this.detail.current.visible = false;
             }
         } else {
-            this.detail.headlineEta.set_text(state.status === 'running'
-                ? 'Starting…'
-                : state.lastFinishedAt
-                    ? `Last backup ${formatWhen(state.lastFinishedAt)}`
-                    : '');
+            this.detail.headlineEta.set_text(state.status === 'queued'
+                ? 'Waiting for a free job slot'
+                : state.status === 'running'
+                    ? 'Starting…'
+                    : state.lastFinishedAt
+                        ? `Last backup ${formatWhen(state.lastFinishedAt)}`
+                        : '');
             this.detail.progress.visible = false;
             this.detail.progress.set_fraction(0);
             this.detail.current.visible = false;
@@ -754,13 +758,14 @@ export class JobsPage {
 
         const draft = Boolean(job.draft);
         const running = state.status === 'running' && !draft;
+        const queued = state.status === 'queued' && !draft;
         const paused = Boolean(state.paused);
         const stopped = Boolean(state.stopped);
         const usable = !draft && job.enabled !== false;
         this.detail.controls.playButton.visible = !draft;
         this.detail.controls.pauseButton.visible = !draft;
         this.detail.controls.stopButton.visible = !draft;
-        this.detail.controls.playButton.sensitive = usable && !running;
+        this.detail.controls.playButton.sensitive = usable && !running && !queued;
         this.detail.controls.pauseButton.sensitive = usable && !paused && !stopped;
         this.detail.controls.stopButton.sensitive = usable && !stopped;
     }

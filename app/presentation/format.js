@@ -1,6 +1,7 @@
 export const STATUS_LABELS = {
     'idle': 'Idle',
     'running': 'Running',
+    'queued': 'Queued',
     'checking': 'Checking',
     'finalizing': 'Finalizing',
     'paused': 'Paused',
@@ -91,6 +92,12 @@ export function formatDateTime(iso) {
         `${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+export function cleanError(message) {
+    return String(message || '')
+        .replace(/^GDBus\.Error:[^\s]+:\s*/i, '')
+        .replace(/^Error:\s*/i, '');
+}
+
 export function resultClass(result) {
     if (result === 'error')
         return 'saveme-status-error';
@@ -140,6 +147,8 @@ export function statusIconName(status) {
         return 'media-playback-stop-symbolic';
     if (status === 'draft')
         return 'document-edit-symbolic';
+    if (status === 'queued')
+        return 'appointment-soon-symbolic';
     if (['waiting-source', 'waiting-destination', 'waiting-idle', 'offline', 'no-space']
         .includes(status))
         return 'dialog-warning-symbolic';

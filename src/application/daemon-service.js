@@ -184,7 +184,7 @@ export class DaemonService {
         if (!supervisor)
             throw new Error(`Job not found: ${jobId}`);
         if (supervisor.running)
-            throw new Error('Job is already running.');
+            throw new Error('Job is already running or queued.');
         const runId = this.idFactory('run_');
         this.manager.runJob(jobId, {dryRun, force, runId}).then(run => {
             if (!run)
@@ -200,7 +200,7 @@ export class DaemonService {
         if (!supervisor)
             throw new Error(`Job not found: ${jobId}`);
         if (supervisor.running)
-            throw new Error('Job is already running.');
+            throw new Error('Job is already running or queued.');
         const runId = this.idFactory('run_');
         this.manager.playJob(jobId, {runId}).then(run => {
             if (!run)
