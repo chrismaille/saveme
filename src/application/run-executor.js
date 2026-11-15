@@ -444,7 +444,7 @@ export class RunExecutor {
     }
 
     writeIncludeFilter(ctx, suffix, job, {files = [], dirs = []} = {}) {
-        const rules = filterRules(job);
+        const rules = filterRules(job, {includeSelection: false});
         for (const rel of files)
             rules.push(`+ /${escapeFilterPath(rel)}`);
         for (const rel of dirs)

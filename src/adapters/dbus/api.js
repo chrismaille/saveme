@@ -44,8 +44,8 @@ export class DaemonApi {
         return this.service.inspectBackup(path);
     }
 
-    DeleteJob(jobId) {
-        this.service.deleteJob(jobId);
+    DeleteJob(jobId, deleteData) {
+        this.service.deleteJob(jobId, Boolean(deleteData));
     }
 
     GetRun(jobId, runId) {

@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-VERSION="${VERSION:-1.0.0~dev11}"
+VERSION="${VERSION:-1.0.0~dev12}"
 ARCH="${ARCH:-$(dpkg --print-architecture)}"
 MAINTAINER="${MAINTAINER:-chrismaille <chrismaille@users.noreply.github.com>}"
 STAGE="$ROOT_DIR/build/deb/saveme_${VERSION}_${ARCH}"
@@ -50,8 +50,8 @@ install -Dm644 "$ROOT_DIR/data/io.github.chrismaille.SaveMe.Daemon.desktop" \
     "$STAGE/usr/share/applications/io.github.chrismaille.SaveMe.Daemon.desktop"
 install -Dm644 "$ROOT_DIR/data/saveme-daemon-autostart.desktop" \
     "$STAGE/etc/xdg/autostart/saveme-daemon.desktop"
-install -Dm644 "$ROOT_DIR/data/io.github.chrismaille.SaveMe.svg" \
-    "$STAGE/usr/share/icons/hicolor/scalable/apps/io.github.chrismaille.SaveMe.svg"
+install -Dm644 "$ROOT_DIR/assets/icon.png" \
+    "$STAGE/usr/share/icons/hicolor/256x256/apps/io.github.chrismaille.SaveMe.png"
 install -Dm644 "$EXT_ZIP" "$STAGE/usr/share/saveme/extension.zip"
 install -Dm644 "$ROOT_DIR/LICENSE" "$STAGE/usr/share/doc/saveme/LICENSE"
 install -Dm644 "$ROOT_DIR/data/rclone-LICENSE" "$STAGE/usr/share/doc/saveme/rclone-LICENSE"

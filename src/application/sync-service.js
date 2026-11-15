@@ -15,6 +15,7 @@ import {
 } from '../domain/rclone-command.js';
 import {planChanges} from './change-planner.js';
 import {resolveJobTargets} from './job-target.js';
+import {isPathIncluded} from '../domain/include-filter.js';
 
 export class SyncService {
     constructor({executor, files, volumes}) {
@@ -155,6 +156,13 @@ export class SyncService {
             const prep = resolveJobTargets(job, {files: this.files, volumes: this.volumes});
             if (!prep.sourceIsLocal)
                 throw new Error('Incremental sync requires a local source.');
+            const selected = changes.filter(change => {
+                const rel = this.files.relativePath(prep.source, change.path);
+                return rel === null || rel === '' || isPathIncluded(job, rel);
+            });
+            if (selected.length === 0)
+                return this.executor.endRun(ctx, 'noop', 'Outside selected content.');
+            changes = selected;
             const plan = planChanges({
                 source: prep.source,
                 changes,

@@ -359,7 +359,25 @@ export class DaemonService {
         }
     }
 
-    deleteJob(jobId) {
+    deleteJob(jobId, deleteData = false) {
+        const job = this.config.getJob(jobId);
+        if (!job)
+            throw new Error(`Job not found: ${jobId}`);
+        if (deleteData) {
+            if (job.destinationLayout === 'direct') {
+                throw new Error('Deleting data is not supported for legacy direct ' +
+                    'sync destinations; remove that folder manually.');
+            }
+            const supervisor = this.manager.get(jobId);
+            if (supervisor?.running)
+                throw new Error('Stop the job before deleting its destination data.');
+            const root = backupRootFor(job, this._resolveJobDestination(job));
+            const result = this.transfer.runCapture(['purge', root]);
+            if (!isSuccessExit(result.exitCode) && result.exitCode !== 3) {
+                throw new Error(rcloneErrorMessage(result,
+                    `Cannot delete ${root}: ${exitCodeMessage(result.exitCode)}`));
+            }
+        }
         this.config.removeJob(jobId);
         this.manager.removeJob(jobId);
         this._snapshot(true);

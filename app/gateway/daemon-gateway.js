@@ -61,8 +61,8 @@ export class DaemonGateway {
         return this.client.inspectBackup(path);
     }
 
-    deleteJob(jobId) {
-        return this.client.deleteJob(jobId);
+    deleteJob(jobId, deleteData = false) {
+        return this.client.deleteJob(jobId, deleteData);
     }
 
     getRun(jobId, runId) {

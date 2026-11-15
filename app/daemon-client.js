@@ -140,8 +140,9 @@ export class DaemonClient {
         return JSON.parse(reply.deepUnpack()[0]);
     }
 
-    async deleteJob(jobId) {
-        await this._call('DeleteJob', new GLib.Variant('(s)', [jobId]));
+    async deleteJob(jobId, deleteData = false) {
+        await this._call('DeleteJob',
+            new GLib.Variant('(sb)', [jobId, Boolean(deleteData)]), 180_000);
     }
 
     async getRun(jobId, runId) {

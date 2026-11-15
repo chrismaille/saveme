@@ -1,5 +1,6 @@
 import {deepClone, mergeDeep, toNumber} from './object.js';
 import {isValidTime} from './schedule.js';
+import {normalizeIncludes} from './include-filter.js';
 
 export const JOB_TYPES = {
     SYNC: 'sync',
@@ -39,7 +40,7 @@ export function jobDefaults(input = {}, {
             time: '18:00',
             idleOnly: false,
         },
-        filters: {exclude: []},
+        filters: {exclude: [], include: []},
         options: {
             maxDeletePercent: 10,
             maxDeleteMinimum: 10,
@@ -106,6 +107,7 @@ export function normalizeJobFields(job) {
         ? job.trigger.time : '18:00';
     job.trigger.idleOnly = Boolean(job.trigger.idleOnly);
     job.filters.exclude = Array.isArray(job.filters.exclude) ? job.filters.exclude : [];
+    job.filters.include = normalizeIncludes(job.filters.include);
     job.options.maxDeletePercent = toNumber(job.options.maxDeletePercent, 10);
     job.options.maxDeleteMinimum = toNumber(job.options.maxDeleteMinimum, 10);
     job.options.transfers = toNumber(job.options.transfers, 4);

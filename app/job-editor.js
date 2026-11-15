@@ -5,12 +5,14 @@ import {VolumeResolver} from '../src/volumes.js';
 import {AccountDialog} from './account-dialog.js';
 import {AccountsDialog} from './accounts-dialog.js';
 import {RemoteBrowserDialog} from './remote-browser.js';
+import {SyncSelectionDialog} from './sync-selection-dialog.js';
 import {
     JOB_TYPES,
     TRIGGER_MODES,
     defaultJob,
     descriptorDisplay,
     descriptorKey,
+    localPathFor,
     normalizeJob,
     validateJob,
 } from '../src/jobs.js';
@@ -59,6 +61,7 @@ export const JobEditor = GObject.registerClass({
             .map(source => JSON.parse(JSON.stringify(source)));
         if (this.sources.length === 0)
             this.sources.push({kind: 'local', path: ''});
+        this.includes = [...(this.job.filters.include || [])];
         this._step = this.job.draft ? this.job.draftStep : 0;
         this._build();
     }
@@ -176,6 +179,26 @@ export const JobEditor = GObject.registerClass({
         });
         filters.add(this.filtersRow);
         page.add(filters);
+
+        this.contentGroup = new Adw.PreferencesGroup({
+            title: 'Content selection',
+            description: 'Choose root folders/files to include. Selected folders ' +
+                'include their descendants; the exclude filters above still apply.',
+        });
+        this.contentRow = new Adw.ActionRow({
+            title: 'Content to sync',
+            subtitle: 'All source content',
+        });
+        this.contentButton = new Gtk.Button({
+            label: 'Select',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat'],
+        });
+        this.contentButton.connect('clicked', () => this._selectSyncContent());
+        this.contentRow.add_suffix(this.contentButton);
+        this.contentGroup.add(this.contentRow);
+        page.add(this.contentGroup);
+        this._updateContentSummary();
         return page;
     }
 
@@ -783,7 +806,13 @@ export const JobEditor = GObject.registerClass({
             this._addChooseButton(row, () => {
                 this._chooseSourceDescriptor(index, this.sources[index],
                     descriptor => {
+                        const previous = descriptorKey(this.sources[index]);
                         this.sources[index] = descriptor;
+                        if (index === 0 && this.typeRow.selected !== 1 &&
+                            descriptorKey(descriptor) !== previous) {
+                            this.includes = [];
+                            this._updateContentSummary();
+                        }
                         this._renderSources();
                     });
             });
@@ -820,6 +849,51 @@ export const JobEditor = GObject.registerClass({
         this._renderSources();
     }
 
+    _updateContentSummary() {
+        if (!this.contentRow || !this.contentButton)
+            return;
+        const sync = this.typeRow?.selected !== 1;
+        this.contentGroup.visible = sync;
+        if (!sync)
+            return;
+        const source = this.sources[0];
+        const path = source ? localPathFor(source, this.volumes) : null;
+        this.contentButton.sensitive = Boolean(path);
+        if (!path) {
+            this.contentRow.set_subtitle(
+                'Content selection is available for local source folders.');
+            return;
+        }
+        if (this.includes.length === 0) {
+            this.contentRow.set_subtitle('All source content');
+            return;
+        }
+        const summary = this.includes.join(', ');
+        this.contentRow.set_subtitle(`${this.includes.length} selected: ` +
+            (summary.length > 80 ? `${summary.slice(0, 79)}…` : summary));
+        this.contentRow.set_tooltip_text(summary);
+    }
+
+    _selectSyncContent() {
+        if (this.typeRow.selected === 1)
+            return;
+        const source = this.sources[0];
+        const path = source ? localPathFor(source, this.volumes) : null;
+        if (!path) {
+            this.parentWindow.toast('Choose a local source folder first.');
+            return;
+        }
+        new SyncSelectionDialog(this.parentWindow, {
+            rootPath: path,
+            selected: this.includes,
+            transientFor: this,
+            onDone: includes => {
+                this.includes = includes;
+                this._updateContentSummary();
+            },
+        }).present();
+    }
+
     _updateVisibility() {
         const type = this.typeRow.selected === 1 ? JOB_TYPES.BACKUP : JOB_TYPES.SYNC;
         if (type !== JOB_TYPES.BACKUP && this.sources.length > 1)
@@ -828,6 +902,8 @@ export const JobEditor = GObject.registerClass({
             this._renderSources();
         if (this.existingGroup)
             this._renderExistingDestinations();
+        if (this.contentGroup)
+            this._updateContentSummary();
         if (!this.triggerRow)
             return;
         this._syncTriggerOptions(this.triggerMode || this.job.trigger.mode);
@@ -1062,6 +1138,7 @@ export const JobEditor = GObject.registerClass({
                     .split(',')
                     .map(value => value.trim())
                     .filter(Boolean),
+                include: this.includes,
             },
             options: {
                 ...this.job.options,

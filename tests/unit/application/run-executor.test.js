@@ -324,6 +324,19 @@ export default suite('application/run-executor', [
         assert(/\+ \/a\.txt/.test(text));
         assert(/\+ \/dir\/\*\*/.test(text));
         assert(/- \*/.test(text));
+
+        const selected = {
+            ...job,
+            filters: {exclude: ['private/**'], include: ['keep']},
+        };
+        const selectedFilter = executor.writeIncludeFilter(ctx, 'selected', selected, {
+            files: ['keep/a.txt'],
+        });
+        const selectedText = files.writes
+            .find(write => write.path === selectedFilter).text;
+        assert(selectedText.includes('- private/**'));
+        assert(selectedText.includes('+ /keep/a.txt'));
+        assert(!selectedText.includes('- **'));
     }),
     test('filterFile and versionDir use the injected paths and clock', () => {
         const {executor, job, files} = context();

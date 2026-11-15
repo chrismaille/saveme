@@ -204,6 +204,31 @@ export default suite('application/daemon-service', [
         assertEqual(ctx.service.playJob('job_1'), 'run_fixed');
         assertEqual(ctx.manager.calls[0][0], 'playJob');
     }),
+    test('deleteJob can remove the job folder in the destination', () => {
+        const ctx = makeService();
+        ctx.config.jobs = [backupJob()];
+        ctx.manager.addSupervisor('job_1');
+        ctx.transfer.paths.add('/dst/SaveMe/job_1');
+        ctx.service.deleteJob('job_1', true);
+        assert(ctx.transfer.captures.some(args =>
+            args[0] === 'purge' && args[1] === '/dst/SaveMe/job_1'));
+        assertEqual(ctx.config.getJob('job_1'), null);
+    }),
+    test('deleteJob refuses destination data for direct or running jobs', () => {
+        const ctx = makeService();
+        ctx.config.jobs = [{
+            ...backupJob(),
+            destinationLayout: 'direct',
+        }];
+        assertThrows(() => ctx.service.deleteJob('job_1', true), /legacy direct/);
+        assert(ctx.config.getJob('job_1'));
+
+        const running = makeService();
+        running.config.jobs = [backupJob()];
+        running.manager.addSupervisor('job_1');
+        running.manager.supervisors.get('job_1').running = true;
+        assertThrows(() => running.service.deleteJob('job_1', true), /Stop the job/);
+    }),
     test('job mutations delegate and snapshot', () => {
         const ctx = makeService();
         ctx.config.jobs = [backupJob()];

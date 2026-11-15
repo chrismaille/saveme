@@ -1,3 +1,5 @@
+import {normalizeIncludes} from './include-filter.js';
+
 export const DEFAULT_EXCLUDES = [
     '.saveme/**',
     '.saveme-versions/**',
@@ -19,7 +21,7 @@ export function escapeFilterPath(path) {
         .replace(/\]/g, '\\]');
 }
 
-export function filterRules(job) {
+export function filterRules(job, {includeSelection = true} = {}) {
     const all = [...DEFAULT_EXCLUDES, ...(job.filters?.exclude ?? [])];
     const rules = [];
     for (const raw of all) {
@@ -30,6 +32,17 @@ export function filterRules(job) {
             rules.push(value);
         else
             rules.push(`- ${value}`);
+    }
+    const includes = includeSelection && job.type === 'sync'
+        ? normalizeIncludes(job.filters?.include)
+        : [];
+    if (includes.length > 0) {
+        for (const item of includes) {
+            const escaped = escapeFilterPath(item);
+            rules.push(`+ /${escaped}`);
+            rules.push(`+ /${escaped}/**`);
+        }
+        rules.push('- **');
     }
     return [...new Set(rules)];
 }

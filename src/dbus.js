@@ -42,6 +42,7 @@ export const DAEMON_INTERFACE = `
     </method>
     <method name="DeleteJob">
       <arg type="s" direction="in"/>
+      <arg type="b" direction="in"/>
     </method>
     <method name="GetRun">
       <arg type="s" direction="in"/>

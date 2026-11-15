@@ -77,6 +77,7 @@ export default suite('app/gateway/daemon-gateway', [
         assertEqual(await gateway.setJobEnabled('job', false), 'setJobEnabled-result');
         assertEqual(await gateway.pauseAll(true), 'pauseAll-result');
         assertEqual(await gateway.deleteJob('job'), 'deleteJob-result');
+        assertEqual(await gateway.deleteJob('job', true), 'deleteJob-result');
         assertEqual(byName(client, 'runJob')[0][1].join(','), 'job,false,false');
         assertEqual(byName(client, 'runJob')[1][1].join(','), 'job,true,true');
     }),

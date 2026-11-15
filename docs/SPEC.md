@@ -95,7 +95,8 @@ usa polling a cada 5 minutos (configurável) e reconciliação completa periódi
     "idleOnly": false
   },
   "filters": {
-    "exclude": []
+    "exclude": [],
+    "include": []
   },
   "options": {
     "maxDeletePercent": 10,
@@ -138,8 +139,15 @@ Regras:
 - `source` e `destination` nunca podem ser iguais, nem um dentro do outro.
 - Dois jobs não podem escrever no mesmo destino ao mesmo tempo.
 - Filtros de exclusão usam a sintaxe de filtros do rclone.
+- `filters.include` é usado somente por jobs de sync: lista caminhos relativos à
+  raiz da origem. Uma pasta selecionada inclui seus descendentes; os padrões de
+  exclusão continuam valendo dentro dela. Lista vazia significa toda a origem.
+  A seleção é feita em um diálogo que lista apenas os itens da raiz da origem.
 - Exclusões padrão: `.saveme/**`, `.saveme-versions/**`, `.Trash-*/**`,
   `.DS_Store`, `Thumbs.db`, `desktop.ini`, `*.tmp`, `*.partial`.
+- Ao excluir um job, os arquivos de destino são mantidos por padrão. A UI oferece
+  uma opção explícita para apagar `<base>/SaveMe/<job-id>`; jobs `direct`
+  legados não oferecem essa opção.
 - O job guarda `confirmedAt` depois que o usuário viu o dry-run inicial.
 
 ## 5. Tempo real

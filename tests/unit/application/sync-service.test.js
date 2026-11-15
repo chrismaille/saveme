@@ -256,6 +256,16 @@ export default suite('application/sync-service', [
         assertEqual(ctx.transfer.runs[0].args[1], '/src/sub');
         assertEqual(ctx.transfer.runs[0].args[2], '/dst/SaveMe/job_test/current/sub');
     }),
+    test('incremental sync ignores changes outside the include selection', async () => {
+        const ctx = syncContext();
+        ctx.files.addFile('/src/skip.txt');
+        const job = makeJob('sync', {filters: {include: ['a.txt']}});
+        const run = await ctx.sync.runIncremental(job, [
+            {path: '/src/skip.txt', kind: 'upsert'},
+        ]);
+        assertEqual(run.result, 'noop');
+        assertEqual(ctx.transfer.runs.length, 0);
+    }),
     test('incremental sync reports step cancellation and errors', async () => {
         const cancelled = syncContext();
         cancelled.files.addFile('/src/a.txt');

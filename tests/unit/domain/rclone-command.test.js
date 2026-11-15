@@ -50,6 +50,29 @@ export default suite('domain/rclone-command', [
     test('filterRules handles missing filters', () => {
         assertEqual(filterRules({}).length, DEFAULT_EXCLUDES.length);
     }),
+    test('sync include selection is ordered after excludes', () => {
+        const rules = filterRules({
+            type: 'sync',
+            filters: {
+                exclude: ['private/**'],
+                include: ['/docs/', 'photos', 'photo[1].jpg'],
+            },
+            options: {},
+        });
+        const excludeIndex = rules.indexOf('- private/**');
+        const docsIndex = rules.indexOf('+ /docs');
+        assert(excludeIndex >= 0);
+        assert(docsIndex > excludeIndex);
+        assert(rules.includes('+ /docs/**'));
+        assert(rules.includes('+ /photos'));
+        assert(rules.includes('+ /photo\\[1\\].jpg'));
+        assertEqual(rules.at(-1), '- **');
+        assertEqual(filterRules({
+            type: 'backup',
+            filters: {include: ['docs']},
+            options: {},
+        }).includes('+ /docs'), false);
+    }),
     test('commonJobArgs includes copy and optional flags', () => {
         assertEqual(JSON.stringify(commonJobArgs(job(), '/tmp/filter')), JSON.stringify([
             '--filter-from', '/tmp/filter',

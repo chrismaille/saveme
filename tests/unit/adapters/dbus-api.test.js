@@ -31,7 +31,7 @@ export default suite('adapters/dbus/api', [
         assertEqual(api.SaveJob('{}'), 'saveJob-result');
         assertEqual(api.ImportJob('{}'), 'importJob-result');
         assertEqual(api.InspectBackup('/SaveMe'), 'inspectBackup-result');
-        api.DeleteJob('job');
+        api.DeleteJob('job', true);
         assertEqual(api.GetRun('job', 'run'), 'getRun-result');
         assertEqual(api.GetRunLog('job', 'run'), 'getRunLog-result');
         assertEqual(api.ListRuns('job', 5), 'listRuns-result');
@@ -56,6 +56,8 @@ export default suite('adapters/dbus/api', [
         assertEqual(JSON.stringify(run[1]), JSON.stringify(['job', true, false]));
         const pause = calls.find(call => call[0] === 'pauseJob');
         assertEqual(JSON.stringify(pause[1]), JSON.stringify(['job', true]));
+        const remove = calls.find(call => call[0] === 'deleteJob');
+        assertEqual(JSON.stringify(remove[1]), JSON.stringify(['job', true]));
         assertEqual(JSON.stringify(calls.find(call => call[0] === 'pauseAll')[1]),
             JSON.stringify([true]));
         assertEqual(JSON.stringify(calls.find(call => call[0] === 'listRemote')[1]),

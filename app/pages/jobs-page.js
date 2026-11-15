@@ -552,15 +552,8 @@ export class JobsPage {
             addAction('Versions / restore', 'document-revert-symbolic', [],
                 () => this.window.openVersions(job));
         }
-        addAction('Delete', 'edit-delete-symbolic', ['destructive-action'], () => {
-            this.window.confirm('Delete job?',
-                `Delete “${job.name}”? The destination files are not removed.`,
-                true, () => {
-                    this.window.client.deleteJob(job.id)
-                        .then(() => this.window.toast('Job deleted.'))
-                        .catch(e => this.window.toast(e.message));
-                });
-        });
+        addAction('Delete', 'edit-delete-symbolic', ['destructive-action'],
+            () => this._confirmDeleteJob(job));
         actions.add(flow);
         page.add(actions);
 
@@ -625,6 +618,45 @@ export class JobsPage {
         this.window.client.cancelJob(job.id)
             .then(() => this.window.toast('Job stopped. Press Play to resume.'))
             .catch(e => this.window.toast(cleanError(e.message)));
+    }
+
+    _confirmDeleteJob(job) {
+        const destination = job.destination;
+        const canDeleteData = job.destinationLayout !== 'direct' &&
+            Boolean(destination?.path || destination?.remote);
+        const dialog = new Adw.AlertDialog({
+            heading: 'Delete job?',
+            body: `Delete “${job.name}”? The job configuration is removed. ` +
+                (canDeleteData
+                    ? 'The destination folder is kept unless you select the option below.'
+                    : 'The destination files are kept.'),
+        });
+        let deleteDataCheck = null;
+        if (canDeleteData) {
+            const box = new Gtk.Box({
+                orientation: Gtk.Orientation.VERTICAL,
+                spacing: 6,
+            });
+            deleteDataCheck = new Gtk.CheckButton({
+                label: 'Also delete this job’s folder in the destination',
+            });
+            box.append(deleteDataCheck);
+            dialog.set_extra_child(box);
+        }
+        dialog.add_response('cancel', 'Cancel');
+        dialog.add_response('delete', 'Delete');
+        dialog.set_response_appearance('delete', Adw.ResponseAppearance.DESTRUCTIVE);
+        dialog.connect('response', (_dialog, response) => {
+            if (response !== 'delete')
+                return;
+            const deleteData = Boolean(deleteDataCheck?.active);
+            this.window.client.deleteJob(job.id, deleteData)
+                .then(() => this.window.toast(deleteData
+                    ? 'Job and destination folder deleted.'
+                    : 'Job deleted.'))
+                .catch(e => this.window.toast(cleanError(e.message)));
+        });
+        dialog.present(this.window);
     }
 
     _currentJob() {

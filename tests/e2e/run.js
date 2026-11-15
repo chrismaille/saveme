@@ -240,6 +240,27 @@ async function syncScenario() {
     await waitFor(() => fileEquals(
         GLib.build_filenamev([nextCurrent, 'sub', 'b.txt']), 'world'));
     ok('sync: destination change starts a new mirror');
+
+    await client.saveJob({
+        ...updated,
+        filters: {...updated.filters, include: ['keep.txt', 'later.txt']},
+    });
+    write(path('sync-src', 'keep.txt'), 'yes');
+    write(path('sync-src', 'skip.txt'), 'no');
+    await waitFor(() => fileEquals(
+        GLib.build_filenamev([nextCurrent, 'keep.txt']), 'yes'));
+    write(path('sync-src', 'later.txt'), 'later');
+    await waitFor(() => fileEquals(
+        GLib.build_filenamev([nextCurrent, 'later.txt']), 'later'));
+    await sleep(800);
+    if (GLib.file_test(GLib.build_filenamev([nextCurrent, 'skip.txt']),
+        GLib.FileTest.EXISTS))
+        throw new Error('unselected root file was copied');
+    ok('sync: include selection limits root content');
+
+    await client.deleteJob(job.id, true);
+    await waitFor(() => !GLib.file_test(nextCurrent, GLib.FileTest.EXISTS));
+    ok('sync: deleting the job removes its destination folder');
 }
 
 async function backupScenario() {

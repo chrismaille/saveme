@@ -36,6 +36,11 @@ interrupts the current run and its recurrence until Play is pressed again.
 Interrupted backups resume automatically when the daemon starts after a reboot.
 The Settings page controls how many jobs may run concurrently.
 
+Sync jobs can additionally select which root folders/files are included. Selected
+folders bring their descendants, while the exclude patterns still apply inside
+them. Deleting a job keeps destination files by default; the delete dialog can
+also remove that job's `SaveMe/<job-id>` folder.
+
 The heavy lifting (cloud APIs, OAuth, retries, checksums, rate limits) is done
 by [rclone](https://rclone.org/). SaveMe owns the UX, scheduling, real-time
 watching, safety rules, status, logs and restore flow.

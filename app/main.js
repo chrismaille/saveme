@@ -10,6 +10,7 @@ import Adw from 'gi://Adw?version=1';
 import {DaemonGateway} from './gateway/daemon-gateway.js';
 import {JobEditor} from './job-editor.js';
 import {AccountsDialog} from './accounts-dialog.js';
+import {SyncSelectionDialog} from './sync-selection-dialog.js';
 import {defaultJob} from '../src/jobs.js';
 import {AppLog} from './observability/app-log.js';
 import {AppMonitor} from './observability/app-monitor.js';
@@ -171,6 +172,11 @@ const SaveMeApplication = GObject.registerClass({
             draftEditor.close();
             const accounts = new AccountsDialog(this._window, {provider: 'onedrive'});
             accounts.close();
+            const selector = new SyncSelectionDialog(this._window, {
+                rootPath: '/tmp',
+                selected: [],
+            });
+            selector.close();
             for (const view of ['jobs', 'accounts', 'logs', 'settings', 'debug'])
                 this._window.showView(view);
         } catch (e) {
