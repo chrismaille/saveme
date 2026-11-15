@@ -34,12 +34,20 @@ export default suite('application/backup-service', [
             trigger: {mode: 'interval', intervalMinutes: 60},
         });
         const percents = [];
+        const phases = [];
         const run = await services.backup.runFull(job, {
-            onProgress: progress => percents.push(progress.percent),
+            onProgress: progress => {
+                percents.push(progress.percent);
+                phases.push(progress.phase);
+            },
         });
         assertEqual(run.result, 'success');
         for (let index = 1; index < percents.length; index++)
             assert(percents[index] >= percents[index - 1]);
+        assert(phases.includes('checking'));
+        assert(phases.includes('syncing'));
+        assert(phases.includes('cleanup'));
+        assert(phases.includes('done'));
         assert(percents.includes(95));
         assertEqual(percents.at(-1), 100);
     }),

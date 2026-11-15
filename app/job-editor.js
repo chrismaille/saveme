@@ -10,10 +10,12 @@ import {
     TRIGGER_MODES,
     defaultJob,
     descriptorDisplay,
+    descriptorKey,
     normalizeJob,
     validateJob,
 } from '../src/jobs.js';
 import {INTERVAL_UNITS, WEEKDAYS, isValidTime} from '../src/domain/schedule.js';
+import {remoteTypeLabel} from './presentation/format.js';
 
 const TRIGGER_OPTIONS = [
     {mode: TRIGGER_MODES.REALTIME, label: 'Real-time'},
@@ -179,10 +181,20 @@ export const JobEditor = GObject.registerClass({
 
     _buildDestinationPage() {
         const page = this._page();
-        const group = new Adw.PreferencesGroup({
-            title: 'Destination',
-            description: 'Choose the provider and the base folder. SaveMe will create its backup folder inside that base folder; it must not already exist.',
+        this.existingGroup = new Adw.PreferencesGroup({
+            title: 'Destinations in use',
+            description: 'Reuse a base folder from another job, or create a new destination.',
         });
+        this.existingRows = [];
+        this.destinations = this._usedDestinations();
+        this._destinationMode = this.destinations.length > 0 ? 'existing' : 'new';
+        page.add(this.existingGroup);
+
+        const group = new Adw.PreferencesGroup({
+            title: 'New destination',
+            description: 'Choose the provider and the base folder. SaveMe creates its own job folder inside that base; several jobs can share the same base.',
+        });
+        this.newDestinationGroup = group;
         this.providerButtons = new Map();
         const providers = [
             ['local', 'Local folder', 'drive-harddisk-symbolic'],
@@ -240,11 +252,144 @@ export const JobEditor = GObject.registerClass({
         });
         manage.connect('clicked', () => this._manageAccounts());
         this.accountsRow.add_suffix(manage);
-        group.add(this.accountsRow);
+        this.accountsGroup = new Adw.PreferencesGroup({title: 'Cloud accounts'});
+        this.accountsGroup.add(this.accountsRow);
         page.add(group);
+        page.add(this.accountsGroup);
+        this._renderExistingDestinations();
         this._updateProviderSelection();
         this._updateAccountsHint();
         return page;
+    }
+
+    _usedDestinations() {
+        const entries = new Map();
+        for (const job of this.parentWindow.snapshot?.jobs || []) {
+            if (job.id === this.job.id || job.draft)
+                continue;
+            const descriptor = job.destination;
+            if (!descriptor || !(descriptor.path || descriptor.remote || descriptor.volumeUuid))
+                continue;
+            const key = descriptorKey(descriptor);
+            if (!entries.has(key))
+                entries.set(key, {descriptor, jobs: [], current: false});
+            entries.get(key).jobs.push(job.name || job.id);
+        }
+        const current = this.job.destination;
+        if (current && (current.path || current.remote || current.volumeUuid)) {
+            const key = descriptorKey(current);
+            if (!entries.has(key))
+                entries.set(key, {descriptor: current, jobs: [], current: true});
+            else
+                entries.get(key).current = true;
+        }
+        return [...entries.values()];
+    }
+
+    _destinationServiceLabel(descriptor) {
+        if (descriptor?.kind === 'remote') {
+            const remote = (this.parentWindow.snapshot?.remotes || [])
+                .find(item => item.name === descriptor.remote);
+            return `${remoteTypeLabel(remote?.type || 'cloud')} · ${descriptor.remote}`;
+        }
+        return 'Local folder';
+    }
+
+    _matchesCurrentDestination(descriptor) {
+        const current = this.job.destination;
+        if (!current || !(current.path || current.remote || current.volumeUuid))
+            return false;
+        return descriptorKey(current) === descriptorKey(descriptor);
+    }
+
+    _renderExistingDestinations() {
+        for (const row of this.existingRows || [])
+            this.existingGroup.remove(row);
+        this.existingRows = [];
+        this.destinations = this._usedDestinations();
+        for (const entry of this.destinations) {
+            const selected = this._destinationMode === 'existing' &&
+                this._matchesCurrentDestination(entry.descriptor);
+            const row = new Adw.ActionRow({
+                title: this._destinationServiceLabel(entry.descriptor),
+                subtitle: `${descriptorDisplay(entry.descriptor, this.volumes)} · ` +
+                    (entry.current
+                        ? 'This job'
+                        : `Used by ${entry.jobs.join(', ')}`),
+            });
+            row.add_prefix(new Gtk.Image({
+                icon_name: entry.descriptor.kind === 'remote'
+                    ? 'folder-remote-symbolic' : 'drive-harddisk-symbolic',
+                pixel_size: 18,
+            }));
+            if (selected) {
+                row.add_suffix(new Gtk.Image({
+                    icon_name: 'object-select-symbolic',
+                    pixel_size: 18,
+                    css_classes: ['success'],
+                }));
+            } else {
+                const use = new Gtk.Button({
+                    label: 'Use',
+                    valign: Gtk.Align.CENTER,
+                    css_classes: ['flat'],
+                });
+                use.connect('clicked', () => this._useExistingDestination(entry.descriptor));
+                row.add_suffix(use);
+            }
+            row.connect('activated', () => this._useExistingDestination(entry.descriptor));
+            this.existingGroup.add(row);
+            this.existingRows.push(row);
+        }
+        if (this.destinations.length === 0) {
+            const empty = new Adw.ActionRow({
+                title: 'No destinations in use',
+                subtitle: 'Create the first destination below.',
+                sensitive: false,
+            });
+            this.existingGroup.add(empty);
+            this.existingRows.push(empty);
+        }
+        const newSelected = this._destinationMode === 'new';
+        const newRow = new Adw.ActionRow({
+            title: 'Create new destination',
+            subtitle: 'Choose a provider and a new base folder.',
+        });
+        newRow.add_prefix(new Gtk.Image({
+            icon_name: 'list-add-symbolic',
+            pixel_size: 18,
+        }));
+        if (newSelected) {
+            newRow.add_suffix(new Gtk.Image({
+                icon_name: 'object-select-symbolic',
+                pixel_size: 18,
+                css_classes: ['success'],
+            }));
+        } else {
+            const create = new Gtk.Button({
+                label: 'New',
+                valign: Gtk.Align.CENTER,
+                css_classes: ['flat', 'suggested-action'],
+            });
+            create.connect('clicked', () => this._useNewDestination());
+            newRow.add_suffix(create);
+        }
+        newRow.connect('activated', () => this._useNewDestination());
+        this.existingGroup.add(newRow);
+        this.existingRows.push(newRow);
+        this.newDestinationGroup.visible = newSelected;
+    }
+
+    _useExistingDestination(descriptor) {
+        this._destinationMode = 'existing';
+        this._setDestination(JSON.parse(JSON.stringify(descriptor)));
+        this._renderExistingDestinations();
+    }
+
+    _useNewDestination() {
+        this._destinationMode = 'new';
+        this._setDestination({kind: 'local', path: ''});
+        this._renderExistingDestinations();
     }
 
     _buildSchedulePage() {
@@ -623,6 +768,8 @@ export const JobEditor = GObject.registerClass({
         this.destinationRow.set_subtitle(
             descriptorDisplay(descriptor, this.volumes) || 'Not selected');
         this._updateProviderSelection();
+        if (this.existingGroup)
+            this._renderExistingDestinations();
     }
 
     _updateProviderSelection() {

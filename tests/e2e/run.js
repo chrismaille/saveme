@@ -403,21 +403,18 @@ async function multiSourceBackupScenario() {
         throw new Error('multi-source job not recovered');
     ok('backup: manifest and recovery inventory');
 
-    let rejected = false;
-    try {
-        await client.saveJob(defaultJob({
-            name: 'E2E Duplicate Container',
-            type: JOB_TYPES.BACKUP,
-            sources: [{kind: 'local', path: sourceA}],
-            destination: {kind: 'local', path: destination},
-            trigger: {mode: 'manual'},
-        }));
-    } catch (e) {
-        rejected = /already exists/.test(e.message);
-    }
-    if (!rejected)
-        throw new Error('existing SaveMe container was not rejected');
-    ok('backup: existing SaveMe container rejected');
+    const shared = await client.saveJob(defaultJob({
+        name: 'E2E Shared Container',
+        type: JOB_TYPES.BACKUP,
+        sources: [{kind: 'local', path: sourceA}],
+        destination: {kind: 'local', path: destination},
+        trigger: {mode: 'manual'},
+    }));
+    const sharedManifest = path('multi-dst', 'SaveMe', shared.id, 'manifest.json');
+    if (!GLib.file_test(sharedManifest, GLib.FileTest.EXISTS))
+        throw new Error('shared destination did not create its job folder');
+    ok('backup: existing destination reused by a new job');
+    await client.deleteJob(shared.id);
 
     const restoreTarget = path('multi-restore');
     GLib.mkdir_with_parents(restoreTarget, 0o700);

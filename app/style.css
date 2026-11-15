@@ -2,6 +2,14 @@
     font-size: 1.1em;
 }
 
+.saveme-status-spinner {
+    color: #3584e4;
+}
+
+.saveme-status-spinner-checking {
+    color: #e5a50a;
+}
+
 .saveme-status-idle {
     color: #2ec27e;
 }
@@ -50,12 +58,39 @@
     font-weight: 600;
 }
 
+.saveme-badge {
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 0.78em;
+    font-weight: 600;
+    background: rgb(255 255 255 / 8%);
+}
+
+.saveme-badge-backup {
+    background: rgb(53 132 228 / 18%);
+    color: #62a0ea;
+}
+
+.saveme-badge-sync {
+    background: rgb(46 194 126 / 18%);
+    color: #2ec27e;
+}
+
+.saveme-badge-sources {
+    color: #c0bfbc;
+}
+
+.saveme-job-draft {
+    background: rgb(229 165 10 / 6%);
+}
+
 .saveme-job-progress {
     min-height: 16px;
     border-radius: 8px;
 }
 
-.saveme-job-status-running {
+.saveme-job-status-running,
+.saveme-job-status-finalizing {
     color: #3584e4;
 }
 
@@ -65,7 +100,9 @@
     color: #e01b24;
 }
 
+.saveme-job-status-checking,
 .saveme-job-status-stopped,
+.saveme-job-status-draft,
 .saveme-job-status-paused,
 .saveme-job-status-waiting-source,
 .saveme-job-status-waiting-destination,

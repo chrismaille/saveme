@@ -92,7 +92,7 @@ O E2E já cobre:
 - sync remoto grande bloqueado por espaço local insuficiente;
 - browser remoto recusando pasta com muitas entradas;
 - backup multi-origem, manifesto, recuperação e restore para outra pasta;
-- recusa de um segundo job quando `SaveMe` já existe.
+- reutilização da mesma base por um segundo job, com pastas por `job-id`.
 
 Próximos cenários:
 
@@ -215,7 +215,7 @@ Use uma instalação limpa do Ubuntu 26.04.
 - [ ] Browser remoto de pasta com >2.000 entradas pede para abrir subpasta
 - [ ] Backup para OneDrive com duas pastas locais; conferir
       `SaveMe/<job-id>/current/<fonte>/`
-- [ ] Criar outro job no mesmo destino; deve falhar porque `SaveMe` já existe
+- [ ] Criar outro job no mesmo destino; deve criar outra pasta de job
 - [ ] No app, abrir **Recover backup**, escolher a pasta `SaveMe`, importar o
       job e restaurar para uma pasta local diferente
 - [ ] Sync nuvem → nuvem

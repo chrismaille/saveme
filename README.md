@@ -20,7 +20,9 @@ The new-job assistant has five steps (name/type, sources, destination,
 schedule, safety). From the second step onward it saves a draft automatically;
 drafts appear in the job list and reopen where they stopped. Cloud accounts can
 be added, reconnected or deleted from the destination step without cancelling
-the assistant.
+the assistant. Destinations already used by other jobs are listed for reuse;
+new destinations go through the provider/folder picker. Several backup jobs can
+share the same base folder because each job owns `SaveMe/<job-id>`.
 
 Schedules support intervals in minutes/hours/days, weekly and monthly runs, a
 configurable time (also used for dusk), startup and manual mode. Scheduled runs

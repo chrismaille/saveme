@@ -1,8 +1,11 @@
 export const STATUS_LABELS = {
     'idle': 'Idle',
     'running': 'Running',
+    'checking': 'Checking',
+    'finalizing': 'Finalizing',
     'paused': 'Paused',
     'stopped': 'Stopped',
+    'draft': 'Draft',
     'waiting-source': 'Source missing',
     'waiting-destination': 'Destination missing',
     'waiting-idle': 'Waiting for idle',
@@ -17,8 +20,11 @@ export const STATUS_LABELS = {
 const STATUS_ICONS = {
     'idle': 'emblem-ok-symbolic',
     'running': 'emblem-synchronizing-symbolic',
+    'checking': 'emblem-synchronizing-symbolic',
+    'finalizing': 'emblem-synchronizing-symbolic',
     'paused': 'media-playback-pause-symbolic',
     'stopped': 'media-playback-stop-symbolic',
+    'draft': 'document-edit-symbolic',
     'disabled': 'media-playback-pause-symbolic',
     'waiting-source': 'dialog-warning-symbolic',
     'waiting-destination': 'dialog-warning-symbolic',

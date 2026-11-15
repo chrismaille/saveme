@@ -250,12 +250,14 @@ export default suite('application/daemon-service', [
 
         const other = makeService();
         other.transfer.paths.add('/dst/SaveMe');
-        assertThrows(() => other.service.saveJob(JSON.stringify({
+        const shared = JSON.parse(other.service.saveJob(JSON.stringify({
             id: 'job_2', name: 'Other', type: 'backup',
             source: {kind: 'local', path: '/src'},
             destination: {kind: 'local', path: '/dst'},
-        })), /already exists/);
-        assertEqual(other.config.getJob('job_2'), null);
+        })));
+        assertEqual(shared.id, 'job_2');
+        assert(other.transfer.paths.has('/dst/SaveMe/job_2/current'));
+        assert(other.transfer.files.has('/dst/SaveMe/job_2/manifest.json'));
     }),
     test('manifest write failures remove a new backup job', () => {
         const ctx = makeService();
@@ -267,7 +269,7 @@ export default suite('application/daemon-service', [
         })), /remote offline/);
         assertEqual(ctx.config.getJob('job_1'), null);
         assert(ctx.transfer.captures.some(args =>
-            args[0] === 'purge' && args[1] === '/dst/SaveMe'));
+            args[0] === 'purge' && args[1] === '/dst/SaveMe/job_1'));
     }),
     test('draft backups skip the container until finalized', () => {
         const ctx = makeService();
@@ -327,12 +329,14 @@ export default suite('application/daemon-service', [
             enabled: false,
             sources: [backupJob().source],
         })));
-        ctx.transfer.paths.add('/dst/SaveMe');
+        ctx.transfer.writeText = () => {
+            throw new Error('offline');
+        };
         assertThrows(() => ctx.service.saveJob(JSON.stringify({
             ...draft,
             draft: false,
             enabled: true,
-        })), /already exists/);
+        })), /offline/);
         assertEqual(ctx.config.getJob('job_1').draft, true);
         assertEqual(ctx.config.getJob('job_1').enabled, false);
     }),

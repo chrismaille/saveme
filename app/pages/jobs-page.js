@@ -7,19 +7,23 @@ import {triggerLabel} from '../../src/domain/schedule.js';
 import {RecoverDialog} from '../recover-dialog.js';
 import {
     backupRootDisplay,
+    displayStatus,
     formatBytes,
+    formatDateTime,
     formatEta,
     formatWhen,
     statusLabel,
     remoteTypeLabel,
+    RESULT_LABELS,
     truncate,
     typeLabel,
 } from '../presentation/format.js';
 import {
     basenameOf,
+    iconButton,
     iconLabelButton,
-    makeStatusIcon,
-    setStatusIcon,
+    makeStatusVisual,
+    setStatusVisual,
 } from '../widgets/common.js';
 
 export class JobsPage {
@@ -173,7 +177,7 @@ export class JobsPage {
             margin_end: 10,
         });
         const top = new Gtk.Box({orientation: Gtk.Orientation.HORIZONTAL, spacing: 8});
-        const dot = makeStatusIcon(job.state?.status || 'idle');
+        const dot = makeStatusVisual(job.draft ? 'draft' : (job.state?.status || 'idle'));
         const name = new Gtk.Label({
             label: job.name || job.id,
             xalign: 0,
@@ -181,13 +185,30 @@ export class JobsPage {
             ellipsize: Pango.EllipsizeMode.END,
         });
         name.add_css_class('saveme-job-title');
+        const display = job.draft
+            ? 'draft'
+            : displayStatus(job.state?.status, job.state?.progress?.phase);
         const status = new Gtk.Label({
-            label: statusLabel(job.state?.status),
-            css_classes: ['dim-label'],
+            label: statusLabel(display),
+            css_classes: ['saveme-badge', `saveme-job-status-${display}`],
         });
         top.append(dot);
         top.append(name);
         top.append(status);
+
+        const meta = new Gtk.Box({orientation: Gtk.Orientation.HORIZONTAL, spacing: 6});
+        const typeBadge = new Gtk.Label({
+            label: typeLabel(job.type),
+            css_classes: ['saveme-badge', `saveme-badge-${job.type}`],
+        });
+        const sourceCount = jobSources(job).length;
+        const sourcesBadge = new Gtk.Label({
+            label: `${sourceCount} source${sourceCount === 1 ? '' : 's'}`,
+            css_classes: ['saveme-badge', 'saveme-badge-sources'],
+        });
+        meta.append(typeBadge);
+        if (sourceCount > 1)
+            meta.append(sourcesBadge);
 
         const subtitle = new Gtk.Label({
             label: this._sidebarSubtitle(job),
@@ -208,11 +229,15 @@ export class JobsPage {
             margin_top: 2,
         });
         box.append(top);
+        box.append(meta);
         box.append(subtitle);
         box.append(paths);
         box.append(progress);
         row.set_child(box);
-        const entry = {row, dot, name, status, subtitle, paths, progress, job};
+        if (job.draft)
+            row.add_css_class('saveme-job-draft');
+        const entry = {row, dot, name, status, typeBadge, sourcesBadge, subtitle,
+            paths, progress, job};
         this._updateSidebarProgress(entry, job);
         return entry;
     }
@@ -236,19 +261,33 @@ export class JobsPage {
             return 'Draft · continue setup';
         const state = job.state || {};
         const progress = state.progress;
-        if (state.status === 'running' && progress) {
-            return `${typeLabel(job.type)} · ${Math.round(progress.percent || 0)}% · ` +
+        const display = displayStatus(state.status, progress?.phase);
+        if (display === 'checking') {
+            const listed = Number(progress?.listed || 0);
+            return listed > 0
+                ? `Checking · ${listed.toLocaleString()} files`
+                : 'Checking · preparing backup';
+        }
+        if (display === 'running' && progress) {
+            return `${Math.round(progress.percent || 0)}% · ` +
                 `${formatBytes(progress.bytes)} / ${formatBytes(progress.totalBytes)}`;
         }
-        let text = `${typeLabel(job.type)} · ${statusLabel(state.status)}`;
-        if (state.lastRunAt)
-            text += ` · ${formatWhen(state.lastRunAt)}`;
-        return text;
+        if (display === 'finalizing')
+            return 'Finalizing · cleaning versions';
+        if (state.lastFinishedAt)
+            return `Last backup ${formatDateTime(state.lastFinishedAt)}`;
+        return 'Never backed up';
     }
 
     _updateSidebarProgress(entry, job) {
         const progress = job.state?.progress;
-        if (job.state?.status === 'running' && progress) {
+        const display = displayStatus(job.state?.status, progress?.phase);
+        if (display === 'checking') {
+            entry.progress.visible = true;
+            entry.progress.pulse();
+            return;
+        }
+        if (display === 'running' && progress) {
             entry.progress.visible = true;
             entry.progress.set_fraction(
                 Math.max(0, Math.min(1, Number(progress.percent || 0) / 100)));
@@ -264,11 +303,28 @@ export class JobsPage {
             return;
         entry.job = job;
         entry.name.set_text(job.name || job.id);
-        entry.status.set_text(statusLabel(job.state?.status));
-        setStatusIcon(entry.dot, job.state?.status || 'idle');
+        const display = job.draft
+            ? 'draft'
+            : displayStatus(job.state?.status, job.state?.progress?.phase);
+        entry.status.set_text(statusLabel(display));
+        for (const cssClass of [...entry.status.get_css_classes()]) {
+            if (cssClass.startsWith('saveme-job-status-'))
+                entry.status.remove_css_class(cssClass);
+        }
+        entry.status.add_css_class(`saveme-job-status-${display}`);
+        setStatusVisual(entry.dot,
+            job.draft ? 'draft' : (job.state?.status || 'idle'),
+            job.state?.progress?.phase || null);
+        const sourceCount = jobSources(job).length;
+        entry.typeBadge.set_text(typeLabel(job.type));
+        entry.sourcesBadge.set_text(`${sourceCount} source${sourceCount === 1 ? '' : 's'}`);
+        entry.sourcesBadge.visible = sourceCount > 1;
         entry.subtitle.set_text(this._sidebarSubtitle(job));
         entry.paths.set_text(this._sidebarPaths(job));
         entry.paths.set_tooltip_text(this._sidebarPaths(job, false));
+        entry.row.remove_css_class('saveme-job-draft');
+        if (job.draft)
+            entry.row.add_css_class('saveme-job-draft');
         this._updateSidebarProgress(entry, job);
     }
 
@@ -324,7 +380,7 @@ export class JobsPage {
             subtitle: job.draft ? 'Draft · continue setup'
                 : `${typeLabel(job.type)} · ${statusLabel(state.status)}`,
         });
-        const dot = makeStatusIcon(state.status || 'idle');
+        const dot = makeStatusVisual(state.status || 'idle');
         statusRow.add_prefix(dot);
         const statusText = job.draft ? 'Draft · continue setup'
             : `${typeLabel(job.type)} · ${statusLabel(state.status)}`;
@@ -332,34 +388,27 @@ export class JobsPage {
 
         const controls = new Gtk.Box({
             orientation: Gtk.Orientation.HORIZONTAL,
-            spacing: 6,
+            spacing: 4,
             valign: Gtk.Align.CENTER,
         });
-        const playButton = iconLabelButton('Play', 'media-playback-start-symbolic', {
-            cssClasses: ['flat', 'suggested-action'],
-            tooltip: 'Start this job now',
-        });
+        const playButton = iconButton('media-playback-start-symbolic',
+            'Start this job now', {cssClasses: ['flat', 'suggested-action']});
         playButton.connect('clicked', () => this._play(job));
-        const pauseButton = iconLabelButton('Pause', 'media-playback-pause-symbolic', {
-            cssClasses: ['flat'],
-            tooltip: 'Pause the current run and its schedule',
-        });
+        const pauseButton = iconButton('media-playback-pause-symbolic',
+            'Pause the current run and its schedule', {cssClasses: ['flat']});
         pauseButton.connect('clicked', () => this._pause(job));
-        const stopButton = iconLabelButton('Stop', 'media-playback-stop-symbolic', {
-            cssClasses: ['flat', 'destructive-action'],
-            tooltip: 'Stop the current run and its recurrence',
-        });
+        const stopButton = iconButton('media-playback-stop-symbolic',
+            'Stop the current run and its recurrence',
+            {cssClasses: ['flat', 'destructive-action']});
         stopButton.connect('clicked', () => this._stop(job));
+        const openButton = iconButton('folder-open-symbolic', 'Open destination',
+            {cssClasses: ['flat']});
+        openButton.connect('clicked', () => this.window.openDestination(job));
         controls.append(playButton);
         controls.append(pauseButton);
         controls.append(stopButton);
+        controls.append(openButton);
         statusRow.add_suffix(controls);
-
-        const openButton = iconLabelButton('Open destination', 'folder-open-symbolic', {
-            cssClasses: ['flat'],
-        });
-        openButton.connect('clicked', () => this.window.openDestination(job));
-        statusRow.add_suffix(openButton);
         statusGroup.add(statusRow);
 
         const progressBox = new Gtk.Box({
@@ -450,7 +499,7 @@ export class JobsPage {
             machineMemory: this._statRow('Machine memory'),
             deletes: this._statRow('Deletes / errors'),
             free: this._statRow('Destination free'),
-            last: this._statRow('Last run'),
+            last: this._statRow('Last backup'),
             message: this._statRow('Message'),
         };
         for (const row of Object.values(statsRows))
@@ -595,23 +644,41 @@ export class JobsPage {
         const state = job.state || {};
         const progress = state.progress;
         const last = state.lastStats;
+        const display = displayStatus(state.status, progress?.phase);
         this.detail.statusRow.set_subtitle(job.draft
             ? 'Draft · continue setup'
-            : `${typeLabel(job.type)} · ${statusLabel(state.status)}`);
-        setStatusIcon(this.detail.dot, state.status || 'idle');
+            : `${typeLabel(job.type)} · ${statusLabel(display)}`);
+        setStatusVisual(this.detail.dot,
+            job.draft ? 'draft' : (state.status || 'idle'),
+            progress?.phase || null);
         this.detail.destinationRow.set_subtitle(this._destinationLabel(job));
 
-        const statusName = job.draft ? 'draft' : state.status || 'idle';
+        const statusName = job.draft ? 'draft' : display;
         this.detail.headlineStatus.set_text(job.draft
             ? 'Draft'
-            : statusLabel(state.status));
+            : statusLabel(display));
         for (const cssClass of [...this.detail.headlineStatus.get_css_classes()]) {
             if (cssClass.startsWith('saveme-job-status-'))
                 this.detail.headlineStatus.remove_css_class(cssClass);
         }
         this.detail.headlineStatus.add_css_class(`saveme-job-status-${statusName}`);
 
-        if (progress) {
+        if (display === 'checking' && progress) {
+            const listed = Number(progress.listed || 0);
+            this.detail.headlineEta.set_text(listed > 0
+                ? `${listed.toLocaleString()} files checked`
+                : 'Preparing backup…');
+            this.detail.progress.visible = true;
+            this.detail.progress.pulse();
+            const currentPath = progress.currentPath || progress.currentFile;
+            if (currentPath) {
+                this.detail.current.set_text(truncate(basenameOf(currentPath), 64));
+                this.detail.current.set_tooltip_text(currentPath);
+                this.detail.current.visible = true;
+            } else {
+                this.detail.current.visible = false;
+            }
+        } else if (progress) {
             const parts = [`${Math.round(progress.percent || 0)}%`];
             if (progress.eta !== null && progress.eta !== undefined)
                 parts.push(`ETA ${formatEta(progress.eta)}`);
@@ -635,18 +702,20 @@ export class JobsPage {
             this.detail.headlineEta.set_text(state.status === 'running'
                 ? 'Starting…'
                 : state.lastFinishedAt
-                    ? `Last run ${formatWhen(state.lastFinishedAt)}`
+                    ? `Last backup ${formatWhen(state.lastFinishedAt)}`
                     : '');
             this.detail.progress.visible = false;
             this.detail.progress.set_fraction(0);
             this.detail.current.visible = false;
         }
 
-        this.detail.stats.files.set_subtitle(progress
-            ? `${progress.files || 0} / ${progress.totalFiles || 0}`
-            : last
-                ? `${last.files || 0} / ${last.totalFiles || last.files || 0}`
-                : '-');
+        this.detail.stats.files.set_subtitle(display === 'checking' && progress
+            ? `${Number(progress.listed || 0).toLocaleString()} listed`
+            : progress
+                ? `${progress.files || 0} / ${progress.totalFiles || 0}`
+                : last
+                    ? `${last.files || 0} / ${last.totalFiles || last.files || 0}`
+                    : '-');
         this.detail.stats.data.set_subtitle(progress
             ? `${formatBytes(progress.bytes)} / ${formatBytes(progress.totalBytes)}`
             : last ? formatBytes(last.bytes) : '-');
@@ -665,8 +734,10 @@ export class JobsPage {
             ? `${progress.deletes || 0} / ${progress.errors || 0}`
             : last ? `${last.deletes || 0} / ${last.errors || 0}` : '-');
         this.detail.stats.free.set_subtitle(this._destinationFree(job));
-        this.detail.stats.last.set_subtitle(state.lastRunAt
-            ? `${state.lastResult || '-'} · ${formatWhen(state.lastRunAt)}`
+        const finished = state.lastFinishedAt || state.lastRunAt;
+        this.detail.stats.last.set_subtitle(finished
+            ? `${formatDateTime(finished)} · ` +
+                `${RESULT_LABELS[state.lastResult] || state.lastResult || '-'}`
             : 'never');
         this.detail.stats.message.set_subtitle(state.message || '');
         this.detail.stats.message.visible = Boolean(state.message);

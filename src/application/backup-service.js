@@ -38,6 +38,7 @@ export class BackupService {
         });
         ctx.onProgress = onProgress;
         try {
+            this.executor.updateProgress(ctx, {percent: 0, phase: 'checking'});
             const prep = resolveJobTargets(job, {files: this.files, volumes: this.volumes});
             const stats = await Promise.all(prep.sources.map(source =>
                 this.executor.sourceStats(job, {
@@ -64,16 +65,21 @@ export class BackupService {
             const totalSources = Math.max(1, prep.sources.length);
             let sourceIndex = 0;
             let sourceFraction = 0;
+            let sourceStarted = false;
             // Report one overall bar: each source owns an equal slice and the
             // fraction inside a slice never moves backwards while rclone is
             // still counting the source.
             ctx.progressMapper = progress => {
+                if (Number(progress.bytes || 0) > 0 ||
+                    Number(progress.transfers || 0) > 0 ||
+                    Number(progress.percent || 0) > 0)
+                    sourceStarted = true;
                 const current = Math.max(0,
                     Math.min(1, Number(progress.percent || 0) / 100));
                 sourceFraction = Math.max(sourceFraction, current);
                 return {
                     ...progress,
-                    phase: 'syncing',
+                    phase: sourceStarted ? 'syncing' : 'checking',
                     percent: ((sourceIndex + sourceFraction) / totalSources) * 95,
                 };
             };
@@ -81,6 +87,11 @@ export class BackupService {
             for (const [index, source] of prep.sources.entries()) {
                 sourceIndex = index;
                 sourceFraction = 0;
+                sourceStarted = false;
+                this.executor.updateProgress(ctx, {
+                    percent: (index / totalSources) * 95,
+                    phase: 'checking',
+                });
                 const current = multi
                     ? joinRclonePath(baseCurrent, labels[index])
                     : baseCurrent;

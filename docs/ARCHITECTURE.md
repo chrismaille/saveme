@@ -256,7 +256,8 @@ energia e rede.
 ### Backup, manifesto e recuperação
 
 - O destino escolhido é a base; o daemon cria `<base>/SaveMe/<job-id>/`.
-- Se `SaveMe` já existir na base, o novo job é recusado.
+- Jobs de backup podem compartilhar a mesma base: cada job usa
+  `SaveMe/<job-id>` e nunca sobrescreve a pasta de outro job.
 - Cada job de backup grava `manifest.json` com id, fontes, destino, trigger,
   filtros, opções e retenção.
 - Job com uma fonte usa `current/<arquivos>` e `versions/<data>/...`.

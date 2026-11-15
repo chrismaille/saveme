@@ -1,8 +1,11 @@
 export const STATUS_LABELS = {
     'idle': 'Idle',
     'running': 'Running',
+    'checking': 'Checking',
+    'finalizing': 'Finalizing',
     'paused': 'Paused',
     'stopped': 'Stopped',
+    'draft': 'Draft',
     'waiting-source': 'Source missing',
     'waiting-destination': 'Destination missing',
     'waiting-idle': 'Waiting for idle',
@@ -67,6 +70,27 @@ export function statusLabel(status) {
     return STATUS_LABELS[status] || status || 'Idle';
 }
 
+export function displayStatus(status, phase = null) {
+    if (status !== 'running')
+        return status || 'idle';
+    if (phase === 'checking')
+        return 'checking';
+    if (phase === 'cleanup' || phase === 'done')
+        return 'finalizing';
+    return 'running';
+}
+
+export function formatDateTime(iso) {
+    if (!iso)
+        return '';
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime()))
+        return '';
+    const pad = value => String(value).padStart(2, '0');
+    return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/` +
+        `${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 export function resultClass(result) {
     if (result === 'error')
         return 'saveme-status-error';
@@ -108,10 +132,14 @@ export function statusIconName(status) {
         return 'dialog-error-symbolic';
     if (status === 'running')
         return 'emblem-synchronizing-symbolic';
+    if (status === 'checking' || status === 'finalizing')
+        return 'emblem-synchronizing-symbolic';
     if (status === 'paused' || status === 'disabled')
         return 'media-playback-pause-symbolic';
     if (status === 'stopped')
         return 'media-playback-stop-symbolic';
+    if (status === 'draft')
+        return 'document-edit-symbolic';
     if (['waiting-source', 'waiting-destination', 'waiting-idle', 'offline', 'no-space']
         .includes(status))
         return 'dialog-warning-symbolic';

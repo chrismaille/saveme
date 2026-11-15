@@ -39,6 +39,7 @@ export class SyncService {
         });
         ctx.onProgress = onProgress;
         try {
+            this.executor.updateProgress(ctx, {percent: 0, phase: 'checking'});
             const prep = resolveJobTargets(job, {files: this.files, volumes: this.volumes});
             const source = await this.executor.sourceStats(job, prep, {
                 exact: true,
@@ -93,11 +94,20 @@ export class SyncService {
                 args = withDryRun(args);
 
             let syncFraction = 0;
+            let syncStarted = false;
             ctx.progressMapper = progress => {
+                if (Number(progress.bytes || 0) > 0 ||
+                    Number(progress.transfers || 0) > 0 ||
+                    Number(progress.percent || 0) > 0)
+                    syncStarted = true;
                 const current = Math.max(0,
                     Math.min(1, Number(progress.percent || 0) / 100));
                 syncFraction = Math.max(syncFraction, current);
-                return {...progress, phase: 'syncing', percent: syncFraction * 95};
+                return {
+                    ...progress,
+                    phase: syncStarted ? 'syncing' : 'checking',
+                    percent: syncFraction * 95,
+                };
             };
             const result = await this.executor.runRclone(ctx, args, {
                 phase: 'syncing',

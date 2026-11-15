@@ -22,12 +22,19 @@ export default suite('application/sync-service', [
             return {exitCode: 0, stats: emptyStats(), lastError: null, cancelled: false};
         };
         const percents = [];
+        const phases = [];
         const run = await ctx.sync.runFull(makeJob('sync'), {
-            onProgress: progress => percents.push(progress.percent),
+            onProgress: progress => {
+                percents.push(progress.percent);
+                phases.push(progress.phase);
+            },
         });
         assertEqual(run.result, 'success');
         for (let index = 1; index < percents.length; index++)
             assert(percents[index] >= percents[index - 1]);
+        assert(phases.includes('checking'));
+        assert(phases.includes('syncing'));
+        assertEqual(phases.at(-1), 'done');
         assertEqual(percents.at(-1), 100);
     }),
     test('cancellation during source sizing is reported as cancelled', async () => {

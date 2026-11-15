@@ -39,6 +39,44 @@ export function makeStatusIcon(status) {
     return icon;
 }
 
+export function makeStatusVisual(status = 'idle') {
+    const stack = new Gtk.Stack({
+        valign: Gtk.Align.CENTER,
+        width_request: 18,
+        height_request: 18,
+    });
+    const spinner = new Gtk.Spinner({
+        spinning: false,
+        width_request: 18,
+        height_request: 18,
+    });
+    spinner.add_css_class('saveme-status-spinner');
+    const icon = makeStatusIcon(status);
+    stack.add_named(spinner, 'spinner');
+    stack.add_named(icon, 'icon');
+    stack._saveMeSpinner = spinner;
+    stack._saveMeIcon = icon;
+    setStatusVisual(stack, status);
+    return stack;
+}
+
+export function setStatusVisual(stack, status, phase = null) {
+    if (!stack)
+        return;
+    const active = status === 'running';
+    const display = active
+        ? phase === 'checking' ? 'checking' : 'running'
+        : status || 'idle';
+    stack._saveMeSpinner.spinning = active;
+    for (const cssClass of [...stack._saveMeSpinner.get_css_classes()]) {
+        if (cssClass.startsWith('saveme-status-spinner-'))
+            stack._saveMeSpinner.remove_css_class(cssClass);
+    }
+    stack._saveMeSpinner.add_css_class(`saveme-status-spinner-${display}`);
+    setStatusIcon(stack._saveMeIcon, display);
+    stack.set_visible_child_name(active ? 'spinner' : 'icon');
+}
+
 export function iconLabelButton(label, iconName, {cssClasses = [], tooltip = null} = {}) {
     const box = new Gtk.Box({
         orientation: Gtk.Orientation.HORIZONTAL,
@@ -53,5 +91,18 @@ export function iconLabelButton(label, iconName, {cssClasses = [], tooltip = nul
         button.set_tooltip_text(tooltip);
     button._saveMeIcon = icon;
     button._saveMeLabel = text;
+    return button;
+}
+
+export function iconButton(iconName, tooltip, {cssClasses = [], pixelSize = 20} = {}) {
+    const button = new Gtk.Button({
+        child: new Gtk.Image({icon_name: iconName, pixel_size: pixelSize}),
+        css_classes: cssClasses,
+        width_request: 38,
+        height_request: 38,
+        valign: Gtk.Align.CENTER,
+    });
+    button.set_tooltip_text(tooltip);
+    button.set_accessible_name?.(tooltip);
     return button;
 }

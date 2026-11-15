@@ -130,6 +130,7 @@ export function progressFromStats(stats, {
         errors: stats.errors,
         speed: stats.speed,
         eta: stats.eta,
+        listed: toNumber(stats.listed),
         currentFile: currentPath ? rcloneBasename(currentPath) : null,
         currentPath,
     };
