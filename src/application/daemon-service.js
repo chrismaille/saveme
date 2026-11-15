@@ -195,6 +195,22 @@ export class DaemonService {
         return runId;
     }
 
+    playJob(jobId) {
+        const supervisor = this.manager.get(jobId);
+        if (!supervisor)
+            throw new Error(`Job not found: ${jobId}`);
+        if (supervisor.running)
+            throw new Error('Job is already running.');
+        const runId = this.idFactory('run_');
+        this.manager.playJob(jobId, {runId}).then(run => {
+            if (!run)
+                this.logger?.warn(`Run ${runId} did not start`);
+        }).catch(e => {
+            this.logger?.error(`Run ${runId} failed: ${e.message}`);
+        });
+        return runId;
+    }
+
     cancelJob(jobId) {
         this.manager.cancelJob(jobId);
         this._snapshot(true);
@@ -496,6 +512,8 @@ export class DaemonService {
         if (!payload || typeof payload !== 'object' || Array.isArray(payload))
             throw new Error('Invalid settings payload.');
         const settings = this.config.updateSettings(payload);
+        if (Object.prototype.hasOwnProperty.call(payload, 'maxConcurrentJobs'))
+            this.manager.setConcurrency?.(settings.maxConcurrentJobs);
         this.logs?.prune();
         return JSON.stringify(settings);
     }

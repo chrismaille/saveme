@@ -29,6 +29,10 @@ export class DaemonGateway {
         return this.client.runJob(jobId, dryRun, force);
     }
 
+    playJob(jobId) {
+        return this.client.playJob(jobId);
+    }
+
     cancelJob(jobId) {
         return this.client.cancelJob(jobId);
     }

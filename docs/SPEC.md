@@ -237,6 +237,15 @@ job começa um novo espelho; os arquivos do destino antigo não são movidos.
 - `mount-added` e `mount-removed` são observados.
 - Origem ausente: status `waiting-source`; destino ausente:
   `waiting-destination`. Sem spam de erro; retry quando o volume voltar.
+- Backups interrompidos por reboot/crash guardam `interrupted` no estado e são
+  retomados uma vez quando o daemon inicia.
+- Os status de job são `idle`, `running`, `paused`, `stopped`, `error` e os
+  estados de espera (`waiting-source`, `waiting-destination`, `waiting-idle`,
+  `offline`, `no-space`).
+- `Stop` interrompe a execução atual e remove a recorrência até o usuário
+  pressionar `Play`; `Pause` mantém o job retido e `Play` também o retoma.
+- `maxConcurrentJobs` nas configurações limita quantas execuções rodam ao mesmo
+  tempo e é aplicado imediatamente pelo pool do daemon.
 - Se o disco sumir no meio de uma execução, o job é cancelado e o destino não
   sofre a deleção em massa.
 - Discos internos montados permanentemente também podem ser cadastrados por

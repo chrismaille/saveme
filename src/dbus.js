@@ -10,6 +10,10 @@ export const DAEMON_INTERFACE = `
       <arg type="b" direction="in"/>
       <arg type="s" direction="out"/>
     </method>
+    <method name="PlayJob">
+      <arg type="s" direction="in"/>
+      <arg type="s" direction="out"/>
+    </method>
     <method name="CancelJob">
       <arg type="s" direction="in"/>
     </method>

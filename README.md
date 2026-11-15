@@ -27,6 +27,11 @@ configurable time (also used for dusk), startup and manual mode. Scheduled runs
 can wait until the computer is idle. Backup versions can be kept for a number of
 days or forever, independently.
 
+Each job has Play/Pause/Stop controls at the top of its detail view. Stop
+interrupts the current run and its recurrence until Play is pressed again.
+Interrupted backups resume automatically when the daemon starts after a reboot.
+The Settings page controls how many jobs may run concurrently.
+
 The heavy lifting (cloud APIs, OAuth, retries, checksums, rate limits) is done
 by [rclone](https://rclone.org/). SaveMe owns the UX, scheduling, real-time
 watching, safety rules, status, logs and restore flow.

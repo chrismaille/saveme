@@ -1,7 +1,7 @@
 import Gio from 'gi://Gio';
 import {ChangeQueue} from './queue.js';
 import {RecursiveWatcher, WatcherLimitError} from './adapters/gio/watcher.js';
-import {jobSources, localPathFor, remotePathFor, TRIGGER_MODES} from './jobs.js';
+import {jobSources, localPathFor, remotePathFor, JOB_TYPES, TRIGGER_MODES} from './jobs.js';
 import {humanBytes, uniqueId} from './util.js';
 import {isRunOverdue, nextRunDelay} from './domain/schedule.js';
 import {
@@ -15,23 +15,32 @@ import {Scheduler} from './application/scheduler.js';
 
 export class RunPool {
     constructor(limit = 1) {
-        this.limit = Math.max(1, limit);
+        this.limit = Math.max(1, Number(limit) || 1);
         this.active = 0;
         this.waiters = [];
     }
 
     async run(fn) {
-        if (this.active >= this.limit)
+        while (this.active >= this.limit)
             await new Promise(resolve => this.waiters.push(resolve));
         this.active++;
         try {
             return await fn();
         } finally {
             this.active--;
-            const next = this.waiters.shift();
-            if (next)
-                next();
+            this._wake();
         }
+    }
+
+    setLimit(limit) {
+        this.limit = Math.max(1, Number(limit) || 1);
+        this._wake();
+    }
+
+    _wake() {
+        const waiters = this.waiters.splice(0);
+        for (const wake of waiters)
+            wake();
     }
 }
 
@@ -71,6 +80,7 @@ export class JobSupervisor {
         this._lastNotifyKey = null;
         this._pendingDueRun = false;
         this._pendingDueReason = null;
+        this._resumeInterrupted = false;
     }
 
     get id() {
@@ -86,8 +96,9 @@ export class JobSupervisor {
         this.job = job;
     }
 
-    start() {
+    start({resumeInterrupted = false} = {}) {
         this._stopped = false;
+        this._resumeInterrupted = resumeInterrupted;
         this._start().catch(e => {
             this.logger.error(`Cannot start job: ${e.message}`);
             this._setStatus('error', e.message);
@@ -117,8 +128,22 @@ export class JobSupervisor {
             return;
         }
         if (this._paused || this.state.pausedAll) {
-            this._setStatus('paused', '');
+            const stopped = Boolean(this.state.getJobState(this.job.id).stopped);
+            this._setStatus(stopped ? 'stopped' : 'paused', '');
             return;
+        }
+
+        if (this._resumeInterrupted) {
+            this._resumeInterrupted = false;
+            const persisted = this.state.getJobState(this.job.id);
+            const interrupted = Boolean(persisted.interrupted) ||
+                persisted.lastResult === 'cancelled';
+            if (this.job.type === JOB_TYPES.BACKUP &&
+                this.job.trigger.mode !== TRIGGER_MODES.MANUAL &&
+                interrupted) {
+                await this._runFull({reason: 'resume'});
+                return;
+            }
         }
 
         const availability = this._checkAvailability();
@@ -282,6 +307,7 @@ export class JobSupervisor {
             const status = cancelledStatus({
                 enabled: this.job.enabled,
                 paused: this._paused,
+                stopped: Boolean(this.state.getJobState(this.job.id).stopped),
                 pausedAll: this.state.pausedAll,
                 sourceAvailable: availability.sourceAvailable,
             });
@@ -343,6 +369,11 @@ export class JobSupervisor {
         }
         this._pendingDueRun = false;
         this._pendingDueReason = null;
+        try {
+            this.state.setJobState(this.job.id, {interrupted: false});
+        } catch (_) {
+            // Best effort.
+        }
         const id = runId || uniqueId('run_');
         const cancellable = new Gio.Cancellable();
         this._running = {cancellable, runId: id};
@@ -547,7 +578,27 @@ export class JobSupervisor {
         try {
             this.state.setJobState(this.job.id, {
                 paused: true,
+                stopped: false,
                 status: 'paused',
+                message: '',
+                progress: null,
+            });
+        } catch (_) {
+            // Best effort.
+        }
+        this.onChange?.();
+    }
+
+    stopByUser() {
+        this._paused = true;
+        this._clearTimers();
+        this._stopRealtime();
+        this.cancel();
+        try {
+            this.state.setJobState(this.job.id, {
+                paused: true,
+                stopped: true,
+                status: 'stopped',
                 message: '',
                 progress: null,
             });
@@ -560,11 +611,37 @@ export class JobSupervisor {
     resume() {
         this._paused = false;
         try {
-            this.state.setJobState(this.job.id, {paused: false});
+            this.state.setJobState(this.job.id, {
+                paused: false,
+                stopped: false,
+            });
         } catch (_) {
             // Best effort.
         }
         this.start();
+    }
+
+    async play({dryRun = false, force = false, runId = null} = {}) {
+        if (this._running)
+            throw new Error('Job is already running.');
+        this._stopped = false;
+        this._paused = false;
+        this._resumeInterrupted = false;
+        this._clearTimers();
+        this._stopRealtime();
+        try {
+            this.state.setJobState(this.job.id, {
+                paused: false,
+                stopped: false,
+                interrupted: false,
+                status: 'idle',
+                message: '',
+                progress: null,
+            });
+        } catch (_) {
+            // Best effort.
+        }
+        return this._runFull({reason: 'manual', dryRun, force, runId, ignoreIdle: true});
     }
 
     suspend() {
@@ -576,7 +653,8 @@ export class JobSupervisor {
         } catch (_) {
             // Best effort.
         }
-        this._setStatus('paused', '');
+        const stopped = Boolean(this.state.getJobState(this.job.id).stopped);
+        this._setStatus(stopped ? 'stopped' : 'paused', '');
     }
 
     resumeFromGlobal() {
@@ -675,7 +753,7 @@ export class JobManager {
             this.supervisors.set(job.id, supervisor);
         }
         for (const supervisor of this.supervisors.values())
-            supervisor.start();
+            supervisor.start({resumeInterrupted: true});
         this.onChange?.();
     }
 
@@ -747,10 +825,19 @@ export class JobManager {
         const supervisor = this.get(jobId);
         if (!supervisor)
             throw new Error(`Job not found: ${jobId}`);
-        // Cancelling a run stops the job. This avoids a running watcher
-        // immediately starting a new run after the user pressed Cancel.
-        supervisor.cancel();
-        supervisor.pause();
+        // Stopping a job also stops its recurrence until the user presses Play.
+        supervisor.stopByUser();
+    }
+
+    async playJob(jobId, options = {}) {
+        const supervisor = this.get(jobId);
+        if (!supervisor)
+            throw new Error(`Job not found: ${jobId}`);
+        return supervisor.play(options);
+    }
+
+    setConcurrency(limit) {
+        this.pool.setLimit(limit);
     }
 
     pauseJob(jobId, paused) {

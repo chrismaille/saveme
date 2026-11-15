@@ -15,6 +15,7 @@ function fakeClient() {
         'onRemoteAuth',
         'getSnapshot',
         'runJob',
+        'playJob',
         'cancelJob',
         'pauseJob',
         'setJobEnabled',
@@ -70,6 +71,7 @@ export default suite('app/gateway/daemon-gateway', [
         assertEqual(await gateway.getSnapshot(), 'getSnapshot-result');
         assertEqual(await gateway.runJob('job'), 'runJob-result');
         assertEqual(await gateway.runJob('job', true, true), 'runJob-result');
+        assertEqual(await gateway.playJob('job'), 'playJob-result');
         assertEqual(await gateway.cancelJob('job'), 'cancelJob-result');
         assertEqual(await gateway.pauseJob('job', true), 'pauseJob-result');
         assertEqual(await gateway.setJobEnabled('job', false), 'setJobEnabled-result');

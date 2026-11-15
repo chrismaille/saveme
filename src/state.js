@@ -18,11 +18,15 @@ function defaultJobState() {
         status: 'idle',
         message: '',
         paused: false,
+        stopped: false,
+        interrupted: false,
         lastRunId: null,
         lastResult: null,
         lastRunAt: null,
+        lastFinishedAt: null,
         nextRunAt: null,
         progress: null,
+        lastStats: null,
         lastSourceFileCount: 0,
         consecutiveErrors: 0,
     };
@@ -91,6 +95,7 @@ export class StateStore {
                 this.data.jobs[jobId] = mergeDeep(jobState, {
                     status: 'error',
                     message: 'Daemon restarted during the run.',
+                    interrupted: true,
                     progress: null,
                 });
                 changed = true;
@@ -110,7 +115,18 @@ export class StateStore {
             lastRunAt: run.startedAt,
             lastFinishedAt: run.finishedAt,
             message: run.message || '',
+            interrupted: false,
             progress: null,
+            lastStats: {
+                files: Number(run.stats?.transfers || 0),
+                totalFiles: Number(run.stats?.totalTransfers || 0),
+                bytes: Number(run.stats?.bytes || 0),
+                totalBytes: Number(run.stats?.totalBytes || 0),
+                deletes: Number(run.stats?.deletes || 0),
+                errors: Number(run.stats?.errors || 0),
+                result: run.result,
+                finishedAt: run.finishedAt,
+            },
         };
         if (run.result === 'success' || run.result === 'noop')
             patch.consecutiveErrors = 0;

@@ -23,6 +23,7 @@ export default suite('adapters/dbus/api', [
         const {api, calls, quit} = makeApi();
         assertEqual(api.GetSnapshot(), 'snapshotJson-result');
         assertEqual(api.RunJob('job', 1, 0), 'runJob-result');
+        assertEqual(api.PlayJob('job'), 'playJob-result');
         api.CancelJob('job');
         api.PauseJob('job', 1);
         api.SetJobEnabled('job', 0);

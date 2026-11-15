@@ -4,6 +4,7 @@ export const JOB_STATUS = {
     IDLE: 'idle',
     RUNNING: 'running',
     PAUSED: 'paused',
+    STOPPED: 'stopped',
     WAITING_SOURCE: 'waiting-source',
     WAITING_DESTINATION: 'waiting-destination',
     WAITING_IDLE: 'waiting-idle',

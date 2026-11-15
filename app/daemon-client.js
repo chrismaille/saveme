@@ -98,6 +98,12 @@ export class DaemonClient {
         return reply.deepUnpack()[0];
     }
 
+    async playJob(jobId) {
+        const reply = await this._call('PlayJob',
+            new GLib.Variant('(s)', [jobId]));
+        return reply.deepUnpack()[0];
+    }
+
     async cancelJob(jobId) {
         await this._call('CancelJob', new GLib.Variant('(s)', [jobId]));
     }

@@ -15,9 +15,12 @@ export function idleStatus({enabled = true, paused = false, pausedAll = false} =
 export function cancelledStatus({
     enabled = true,
     paused = false,
+    stopped = false,
     pausedAll = false,
     sourceAvailable = true,
 } = {}) {
+    if (stopped)
+        return JOB_STATUS.STOPPED;
     if (!enabled || paused || pausedAll)
         return JOB_STATUS.PAUSED;
     if (!sourceAvailable)

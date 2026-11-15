@@ -11,6 +11,7 @@ import {
     formatEta,
     formatWhen,
     statusLabel,
+    remoteTypeLabel,
     truncate,
     typeLabel,
 } from '../presentation/format.js';
@@ -328,6 +329,32 @@ export class JobsPage {
         const statusText = job.draft ? 'Draft · continue setup'
             : `${typeLabel(job.type)} · ${statusLabel(state.status)}`;
         statusRow.set_subtitle(statusText);
+
+        const controls = new Gtk.Box({
+            orientation: Gtk.Orientation.HORIZONTAL,
+            spacing: 6,
+            valign: Gtk.Align.CENTER,
+        });
+        const playButton = iconLabelButton('Play', 'media-playback-start-symbolic', {
+            cssClasses: ['flat', 'suggested-action'],
+            tooltip: 'Start this job now',
+        });
+        playButton.connect('clicked', () => this._play(job));
+        const pauseButton = iconLabelButton('Pause', 'media-playback-pause-symbolic', {
+            cssClasses: ['flat'],
+            tooltip: 'Pause the current run and its schedule',
+        });
+        pauseButton.connect('clicked', () => this._pause(job));
+        const stopButton = iconLabelButton('Stop', 'media-playback-stop-symbolic', {
+            cssClasses: ['flat', 'destructive-action'],
+            tooltip: 'Stop the current run and its recurrence',
+        });
+        stopButton.connect('clicked', () => this._stop(job));
+        controls.append(playButton);
+        controls.append(pauseButton);
+        controls.append(stopButton);
+        statusRow.add_suffix(controls);
+
         const openButton = iconLabelButton('Open destination', 'folder-open-symbolic', {
             cssClasses: ['flat'],
         });
@@ -337,17 +364,40 @@ export class JobsPage {
 
         const progressBox = new Gtk.Box({
             orientation: Gtk.Orientation.VERTICAL,
-            spacing: 4,
-            margin_top: 6,
-            margin_bottom: 6,
+            spacing: 6,
+            margin_top: 8,
+            margin_bottom: 8,
+            margin_start: 12,
+            margin_end: 12,
         });
-        const progress = new Gtk.ProgressBar({show_text: true});
+        const headline = new Gtk.Box({
+            orientation: Gtk.Orientation.HORIZONTAL,
+            spacing: 12,
+        });
+        const headlineStatus = new Gtk.Label({
+            xalign: 0,
+            hexpand: true,
+            css_classes: ['title-3'],
+        });
+        const headlineEta = new Gtk.Label({
+            xalign: 1,
+            css_classes: ['title-4', 'dim-label'],
+        });
+        headline.append(headlineStatus);
+        headline.append(headlineEta);
+        const progress = new Gtk.ProgressBar({
+            show_text: false,
+            height_request: 16,
+            valign: Gtk.Align.CENTER,
+        });
+        progress.add_css_class('saveme-job-progress');
         const current = new Gtk.Label({
             xalign: 0,
             ellipsize: Pango.EllipsizeMode.END,
             css_classes: ['dim-label'],
             visible: false,
         });
+        progressBox.append(headline);
         progressBox.append(progress);
         progressBox.append(current);
         statusGroup.add(progressBox);
@@ -369,9 +419,7 @@ export class JobsPage {
         }
         const destinationRow = new Adw.ActionRow({
             title: 'Destination',
-            subtitle: job.type === JOB_TYPES.BACKUP
-                ? `${descriptorDisplay(job.destination, this.window.volumes)} (base)`
-                : descriptorDisplay(job.destination, this.window.volumes),
+            subtitle: this._destinationLabel(job),
         });
         const destinationOpen = iconLabelButton('Open', 'folder-open-symbolic', {
             cssClasses: ['flat'],
@@ -424,16 +472,9 @@ export class JobsPage {
             flow.append(button);
             return button;
         };
-        const runButton = addAction('Run now', 'media-playback-start-symbolic',
-            ['suggested-action'], () => {
-                this.window.client.runJob(job.id)
-                    .then(() => this.window.toast('Run started.'))
-                    .catch(e => this.window.toast(e.message));
-            });
         if (job.draft) {
             addAction('Continue setup', 'document-edit-symbolic', ['suggested-action'],
                 () => this.window.editJob(job));
-            runButton.visible = false;
         }
         const dryRunButton = addAction('Dry run', 'system-run-symbolic', [], () => {
             this.window.client.runJob(job.id, true)
@@ -442,21 +483,6 @@ export class JobsPage {
         });
         if (job.draft)
             dryRunButton.visible = false;
-        const pauseButton = addAction(state.paused ? 'Resume' : 'Pause',
-            state.paused ? 'media-playback-start-symbolic' : 'media-playback-pause-symbolic',
-            [], () => {
-                this.window.client.pauseJob(job.id, !this._currentJob()?.state?.paused)
-                    .catch(e => this.window.toast(e.message));
-            });
-        const stopButton = addAction('Stop', 'process-stop-symbolic',
-            ['destructive-action'], () => {
-                this.window.client.cancelJob(job.id)
-                    .catch(e => this.window.toast(e.message));
-            });
-        if (job.draft) {
-            pauseButton.visible = false;
-            stopButton.visible = false;
-        }
         if (!job.draft)
             addAction('Edit', 'document-edit-symbolic', [], () => this.window.editJob(job));
         addAction('Logs', 'text-x-generic-symbolic', [], () => this.window.openLogs(job.id));
@@ -498,12 +524,46 @@ export class JobsPage {
             dot,
             progress,
             current,
+            headlineStatus,
+            headlineEta,
+            destinationRow,
+            controls: {playButton, pauseButton, stopButton},
             stats: statsRows,
-            runButton,
-            pauseButton,
-            stopButton,
         };
         this._updateDetails(job);
+    }
+
+    _destinationLabel(job) {
+        const destination = job.destination;
+        let service = 'Local folder';
+        if (destination?.kind === 'remote') {
+            const remote = (this.window.snapshot?.remotes || [])
+                .find(item => item.name === destination.remote);
+            service = remote
+                ? remoteTypeLabel(remote.type)
+                : 'Cloud';
+        }
+        const path = descriptorDisplay(destination, this.window.volumes) || '-';
+        return `${service} · ${path}` +
+            (job.type === JOB_TYPES.BACKUP ? ' (base)' : '');
+    }
+
+    _play(job) {
+        this.window.client.playJob(job.id)
+            .then(() => this.window.toast('Job started.'))
+            .catch(e => this.window.toast(e.message));
+    }
+
+    _pause(job) {
+        this.window.client.pauseJob(job.id, true)
+            .then(() => this.window.toast('Job paused.'))
+            .catch(e => this.window.toast(e.message));
+    }
+
+    _stop(job) {
+        this.window.client.cancelJob(job.id)
+            .then(() => this.window.toast('Job stopped. Press Play to resume.'))
+            .catch(e => this.window.toast(e.message));
     }
 
     _currentJob() {
@@ -534,17 +594,34 @@ export class JobsPage {
         }
         const state = job.state || {};
         const progress = state.progress;
+        const last = state.lastStats;
         this.detail.statusRow.set_subtitle(job.draft
             ? 'Draft · continue setup'
             : `${typeLabel(job.type)} · ${statusLabel(state.status)}`);
         setStatusIcon(this.detail.dot, state.status || 'idle');
+        this.detail.destinationRow.set_subtitle(this._destinationLabel(job));
+
+        const statusName = job.draft ? 'draft' : state.status || 'idle';
+        this.detail.headlineStatus.set_text(job.draft
+            ? 'Draft'
+            : statusLabel(state.status));
+        for (const cssClass of [...this.detail.headlineStatus.get_css_classes()]) {
+            if (cssClass.startsWith('saveme-job-status-'))
+                this.detail.headlineStatus.remove_css_class(cssClass);
+        }
+        this.detail.headlineStatus.add_css_class(`saveme-job-status-${statusName}`);
 
         if (progress) {
+            const parts = [`${Math.round(progress.percent || 0)}%`];
+            if (progress.eta !== null && progress.eta !== undefined)
+                parts.push(`ETA ${formatEta(progress.eta)}`);
+            const speed = Number(progress.speed || 0);
+            if (speed > 0)
+                parts.push(`${formatBytes(speed)}/s`);
+            this.detail.headlineEta.set_text(parts.join(' · '));
+            this.detail.progress.visible = true;
             this.detail.progress.set_fraction(
                 Math.max(0, Math.min(1, Number(progress.percent || 0) / 100)));
-            this.detail.progress.set_text(
-                `${Math.round(progress.percent || 0)}% · ` +
-                `${formatBytes(progress.bytes)} / ${formatBytes(progress.totalBytes)}`);
             const currentPath = progress.currentPath || progress.currentFile;
             if (currentPath) {
                 this.detail.current.set_text(
@@ -555,17 +632,24 @@ export class JobsPage {
                 this.detail.current.visible = false;
             }
         } else {
+            this.detail.headlineEta.set_text(state.status === 'running'
+                ? 'Starting…'
+                : state.lastFinishedAt
+                    ? `Last run ${formatWhen(state.lastFinishedAt)}`
+                    : '');
+            this.detail.progress.visible = false;
             this.detail.progress.set_fraction(0);
-            this.detail.progress.set_text(statusLabel(state.status));
             this.detail.current.visible = false;
         }
 
         this.detail.stats.files.set_subtitle(progress
             ? `${progress.files || 0} / ${progress.totalFiles || 0}`
-            : '-');
+            : last
+                ? `${last.files || 0} / ${last.totalFiles || last.files || 0}`
+                : '-');
         this.detail.stats.data.set_subtitle(progress
             ? `${formatBytes(progress.bytes)} / ${formatBytes(progress.totalBytes)}`
-            : '-');
+            : last ? formatBytes(last.bytes) : '-');
         this.detail.stats.speed.set_subtitle(progress
             ? `${formatBytes(progress.speed)}/s · ETA ${formatEta(progress.eta)}`
             : '-');
@@ -579,7 +663,7 @@ export class JobsPage {
             : '-');
         this.detail.stats.deletes.set_subtitle(progress
             ? `${progress.deletes || 0} / ${progress.errors || 0}`
-            : '-');
+            : last ? `${last.deletes || 0} / ${last.errors || 0}` : '-');
         this.detail.stats.free.set_subtitle(this._destinationFree(job));
         this.detail.stats.last.set_subtitle(state.lastRunAt
             ? `${state.lastResult || '-'} · ${formatWhen(state.lastRunAt)}`
@@ -587,15 +671,16 @@ export class JobsPage {
         this.detail.stats.message.set_subtitle(state.message || '');
         this.detail.stats.message.visible = Boolean(state.message);
 
-        const running = state.status === 'running';
-        this.detail.runButton.sensitive = !running;
-        this.detail.stopButton.sensitive = running;
-        if (this.detail.pauseButton._saveMeLabel)
-            this.detail.pauseButton._saveMeLabel.label = state.paused ? 'Resume' : 'Pause';
-        if (this.detail.pauseButton._saveMeIcon) {
-            this.detail.pauseButton._saveMeIcon.icon_name = state.paused
-                ? 'media-playback-start-symbolic'
-                : 'media-playback-pause-symbolic';
-        }
+        const draft = Boolean(job.draft);
+        const running = state.status === 'running' && !draft;
+        const paused = Boolean(state.paused);
+        const stopped = Boolean(state.stopped);
+        const usable = !draft && job.enabled !== false;
+        this.detail.controls.playButton.visible = !draft;
+        this.detail.controls.pauseButton.visible = !draft;
+        this.detail.controls.stopButton.visible = !draft;
+        this.detail.controls.playButton.sensitive = usable && !running;
+        this.detail.controls.pauseButton.sensitive = usable && !paused && !stopped;
+        this.detail.controls.stopButton.sensitive = usable && !stopped;
     }
 }

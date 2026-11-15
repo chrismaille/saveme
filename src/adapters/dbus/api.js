@@ -12,6 +12,10 @@ export class DaemonApi {
         return this.service.runJob(jobId, Boolean(dryRun), Boolean(force));
     }
 
+    PlayJob(jobId) {
+        return this.service.playJob(jobId);
+    }
+
     CancelJob(jobId) {
         this.service.cancelJob(jobId);
     }

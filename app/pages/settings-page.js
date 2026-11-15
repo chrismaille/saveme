@@ -10,6 +10,8 @@ export class SettingsPage {
         this.widget = new Adw.PreferencesPage();
         this.blockPauseUpdate = false;
         this.blockPolicyUpdate = false;
+        this.blockMaxJobsUpdate = false;
+        this.maxJobsDirty = false;
         this.policyDirty = false;
         const daemonGroup = new Adw.PreferencesGroup({title: 'Daemon'});
         this.statusRow = new Adw.ActionRow({title: 'Status', subtitle: 'Unknown'});
@@ -20,6 +22,28 @@ export class SettingsPage {
                 return;
             this.window.client.pauseAll(this.pauseAllRow.active)
                 .catch(e => this.window.toast(e.message));
+        });
+        this.maxJobsRow = new Adw.SpinRow({
+            title: 'Concurrent jobs',
+            subtitle: 'jobs running at the same time',
+            digits: 0,
+            adjustment: new Gtk.Adjustment({
+                lower: 1,
+                upper: 8,
+                step_increment: 1,
+                page_increment: 1,
+            }),
+        });
+        const applyMaxJobs = new Gtk.Button({
+            label: 'Apply',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat'],
+        });
+        applyMaxJobs.connect('clicked', () => this._saveConcurrency());
+        this.maxJobsRow.add_suffix(applyMaxJobs);
+        this.maxJobsRow.connect('notify::value', () => {
+            if (!this.blockMaxJobsUpdate)
+                this.maxJobsDirty = true;
         });
         this.doctorRow = new Adw.ActionRow({
             title: 'Diagnostics',
@@ -46,6 +70,7 @@ export class SettingsPage {
         daemonGroup.add(this.statusRow);
         daemonGroup.add(this.rcloneRow);
         daemonGroup.add(this.pauseAllRow);
+        daemonGroup.add(this.maxJobsRow);
         daemonGroup.add(this.doctorRow);
         daemonGroup.add(this.logsRow);
         this.widget.add(daemonGroup);
@@ -185,6 +210,12 @@ export class SettingsPage {
         this.blockPauseUpdate = false;
         this.versionRow.set_subtitle(snapshot.version || '-');
         const settings = snapshot.settings || {};
+        if (!this.maxJobsDirty) {
+            this.blockMaxJobsUpdate = true;
+            this.maxJobsRow.value = Math.max(1,
+                Math.min(8, Number(settings.maxConcurrentJobs ?? 1)));
+            this.blockMaxJobsUpdate = false;
+        }
         if (!this.policyDirty) {
             this.blockPolicyUpdate = true;
             this.retentionRow.value = Number(settings.logRetentionDays ?? 30);
@@ -215,6 +246,18 @@ export class SettingsPage {
             : 'Within budget');
         this.perfSamplesRow.set_subtitle(
             `${metrics.samples} · last sample ${formatWhen(metrics.sampledAt)}`);
+    }
+
+    async _saveConcurrency() {
+        try {
+            await this.window.client.updateSettings({
+                maxConcurrentJobs: Math.round(this.maxJobsRow.value),
+            });
+            this.maxJobsDirty = false;
+            this.window.toast('Concurrency updated.');
+        } catch (e) {
+            this.window.toast(e.message);
+        }
     }
 
     async _saveLogPolicy() {

@@ -1,4 +1,4 @@
-import {JobSupervisor} from '../../../src/supervisor.js';
+import {JobSupervisor, RunPool} from '../../../src/supervisor.js';
 import {assert, assertEqual, suite, test} from '../../harness.js';
 import {FakeClock, FakeLogger, FakeState, makeJob} from './fakes.js';
 
@@ -39,6 +39,88 @@ function makeSupervisor(job, {idle = true} = {}) {
 }
 
 export default suite('application/supervisor-schedule', [
+    test('stopped jobs stay stopped until Play, which clears the hold', async () => {
+        const ctx = makeSupervisor(makeJob('backup', {
+            source: {kind: 'local', path: '/tmp'},
+            trigger: {mode: 'interval', intervalMinutes: 60},
+        }));
+        ctx.supervisor.stopByUser();
+        assertEqual(ctx.state.getJobState('job_test').status, 'stopped');
+        assertEqual(ctx.state.getJobState('job_test').stopped, true);
+        assertEqual(ctx.supervisor.scheduler.size, 0);
+
+        await ctx.supervisor._start();
+        assertEqual(ctx.state.getJobState('job_test').status, 'stopped');
+        assertEqual(ctx.runs.length, 0);
+
+        await ctx.supervisor.play();
+        assertEqual(ctx.runs.length, 1);
+        assertEqual(ctx.state.getJobState('job_test').stopped, false);
+        assertEqual(ctx.state.getJobState('job_test').status, 'idle');
+    }),
+    test('interrupted backups resume once when the daemon starts', async () => {
+        const job = makeJob('backup', {
+            source: {kind: 'local', path: '/tmp'},
+            trigger: {mode: 'interval', intervalMinutes: 60},
+        });
+        const ctx = makeSupervisor(job);
+        ctx.state.setJobState('job_test', {
+            status: 'error',
+            lastResult: 'error',
+            interrupted: true,
+        });
+        ctx.supervisor._resumeInterrupted = true;
+        await ctx.supervisor._start();
+        assertEqual(ctx.runs.length, 1);
+        assertEqual(ctx.runs[0].options.reason, 'resume');
+        assertEqual(ctx.state.getJobState('job_test').interrupted, false);
+        assertEqual(ctx.state.getJobState('job_test').status, 'idle');
+
+        const clean = makeSupervisor(job);
+        clean.state.setJobState('job_test', {
+            status: 'idle',
+            lastResult: 'success',
+            lastRunAt: clean.clock.nowIso(),
+            interrupted: false,
+        });
+        clean.supervisor._resumeInterrupted = true;
+        await clean.supervisor._start();
+        assertEqual(clean.runs.length, 0);
+    }),
+    test('cancelling a stopped run reports the stopped status', () => {
+        const ctx = makeSupervisor(makeJob('backup', {
+            source: {kind: 'local', path: '/tmp'},
+            trigger: {mode: 'manual'},
+        }));
+        ctx.state.setJobState('job_test', {stopped: true});
+        ctx.supervisor._paused = true;
+        ctx.supervisor._handleRunResult({result: 'cancelled', kind: 'backup'});
+        assertEqual(ctx.state.getJobState('job_test').status, 'stopped');
+    }),
+    test('RunPool applies a higher concurrency limit immediately', async () => {
+        const pool = new RunPool(1);
+        const started = [];
+        let release = null;
+        const gate = new Promise(resolve => {
+            release = resolve;
+        });
+        const first = pool.run(async () => {
+            started.push(1);
+            await gate;
+        });
+        const second = pool.run(async () => {
+            started.push(2);
+        });
+        await Promise.resolve();
+        assertEqual(started.length, 1);
+        pool.setLimit(2);
+        await Promise.resolve();
+        await Promise.resolve();
+        assertEqual(started.length, 2);
+        release();
+        await Promise.all([first, second]);
+        assertEqual(pool.active, 0);
+    }),
     test('idle-only defers a due run and retries when the computer becomes idle', async () => {
         const job = makeJob('backup', {
             source: {kind: 'local', path: '/tmp'},

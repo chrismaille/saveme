@@ -51,12 +51,14 @@ class FakeManager {
     get(id) { return this.supervisors.get(id) || null; }
     addSupervisor(id) { this.supervisors.set(id, {id, running: this.running}); }
     async runJob(id, options) { this.calls.push(['runJob', id, options]); return {id: 'run'}; }
+    async playJob(id, options) { this.calls.push(['playJob', id, options]); return {id: 'run'}; }
     cancelJob(id) { this.calls.push(['cancelJob', id]); }
     pauseJob(id, paused) { this.calls.push(['pauseJob', id, paused]); }
     updateJob(id, job) { this.calls.push(['updateJob', id, job]); }
     addJob(job) { this.calls.push(['addJob', job]); }
     removeJob(id) { this.calls.push(['removeJob', id]); }
     pauseAll(paused) { this.calls.push(['pauseAll', paused]); }
+    setConcurrency(limit) { this.calls.push(['setConcurrency', limit]); }
 }
 
 class FakeTransfer {
@@ -191,6 +193,16 @@ export default suite('application/daemon-service', [
         ctx.manager.supervisors.get('job_1').running = false;
         assertEqual(ctx.service.runJob('job_1', true, true), 'run_fixed');
         assertEqual(ctx.manager.calls[0][0], 'runJob');
+    }),
+    test('playJob validates supervisor state and starts a run', async () => {
+        const ctx = makeService();
+        await assertThrows(() => ctx.service.playJob('missing'), /Job not found/);
+        ctx.manager.addSupervisor('job_1');
+        ctx.manager.supervisors.get('job_1').running = true;
+        await assertThrows(() => ctx.service.playJob('job_1'), /already running/);
+        ctx.manager.supervisors.get('job_1').running = false;
+        assertEqual(ctx.service.playJob('job_1'), 'run_fixed');
+        assertEqual(ctx.manager.calls[0][0], 'playJob');
     }),
     test('job mutations delegate and snapshot', () => {
         const ctx = makeService();
@@ -497,6 +509,11 @@ export default suite('application/daemon-service', [
         const settings = JSON.parse(ctx.service.updateSettingsJson(
             JSON.stringify({logRetentionDays: 7})));
         assertEqual(settings.logRetentionDays, 7);
+        const concurrent = JSON.parse(ctx.service.updateSettingsJson(
+            JSON.stringify({maxConcurrentJobs: 3})));
+        assertEqual(concurrent.maxConcurrentJobs, 3);
+        assert(JSON.stringify(ctx.manager.calls.at(-1)) ===
+            JSON.stringify(['setConcurrency', 3]));
         await assertThrows(() => ctx.service.updateSettingsJson('[]'), /Invalid settings/);
         const withoutLogs = makeService({logs: null});
         await assertThrows(() => withoutLogs.service.logsInfoJson(),

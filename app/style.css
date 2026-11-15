@@ -15,6 +15,10 @@
     color: #9a9996;
 }
 
+.saveme-status-stopped {
+    color: #e5a50a;
+}
+
 .saveme-status-waiting-source,
 .saveme-status-waiting-destination,
 .saveme-status-waiting-idle,
@@ -44,6 +48,31 @@
 
 .saveme-job-title {
     font-weight: 600;
+}
+
+.saveme-job-progress {
+    min-height: 16px;
+    border-radius: 8px;
+}
+
+.saveme-job-status-running {
+    color: #3584e4;
+}
+
+.saveme-job-status-error,
+.saveme-job-status-needs-auth,
+.saveme-job-status-delete-guard {
+    color: #e01b24;
+}
+
+.saveme-job-status-stopped,
+.saveme-job-status-paused,
+.saveme-job-status-waiting-source,
+.saveme-job-status-waiting-destination,
+.saveme-job-status-waiting-idle,
+.saveme-job-status-no-space,
+.saveme-job-status-offline {
+    color: #e5a50a;
 }
 
 .saveme-sidebar-paths {

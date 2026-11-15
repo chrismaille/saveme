@@ -2,6 +2,7 @@ export const STATUS_LABELS = {
     'idle': 'Idle',
     'running': 'Running',
     'paused': 'Paused',
+    'stopped': 'Stopped',
     'waiting-source': 'Source missing',
     'waiting-destination': 'Destination missing',
     'waiting-idle': 'Waiting for idle',
@@ -109,6 +110,8 @@ export function statusIconName(status) {
         return 'emblem-synchronizing-symbolic';
     if (status === 'paused' || status === 'disabled')
         return 'media-playback-pause-symbolic';
+    if (status === 'stopped')
+        return 'media-playback-stop-symbolic';
     if (['waiting-source', 'waiting-destination', 'waiting-idle', 'offline', 'no-space']
         .includes(status))
         return 'dialog-warning-symbolic';
