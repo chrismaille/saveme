@@ -170,7 +170,8 @@ export default suite('runner (integration)', [
                 deleteFile(GLib.build_filenamev([ctx.source, `f${i}.txt`]));
             run = await ctx.runner.runFull(job);
             assertEqual(run.result, 'error');
-            assert(/Delete guard/.test(run.message), run.message);
+            assert(/Deletion blocked/.test(run.message), run.message);
+            assert(/Delete guard/.test(run.technicalMessage), run.technicalMessage);
             assertEqual(relativeFiles(ctx.dest).length, 20);
             run = await ctx.runner.runFull(job, {force: true});
             assertEqual(run.result, 'success', `force failed: ${run.message}`);
@@ -192,7 +193,8 @@ export default suite('runner (integration)', [
             deleteFile(GLib.build_filenamev([ctx.source, 'b.txt']));
             run = await ctx.runner.runFull(job);
             assertEqual(run.result, 'error');
-            assert(/Source is empty/.test(run.message), run.message);
+            assert(/source is empty/i.test(run.message), run.message);
+            assert(/Source is empty/.test(run.technicalMessage), run.technicalMessage);
             assertEqual(relativeFiles(ctx.dest).length, 2);
         } finally {
             cleanup(ctx.root);
@@ -330,7 +332,8 @@ export default suite('runner (integration)', [
             }
             run = await ctx.runner.runIncremental(job, changes);
             assertEqual(run.result, 'error');
-            assert(/Delete guard/.test(run.message), run.message);
+            assert(/Deletion blocked/.test(run.message), run.message);
+            assert(/Delete guard/.test(run.technicalMessage), run.technicalMessage);
             assertEqual(relativeFiles(ctx.dest).length, 20);
             run = await ctx.runner.runIncremental(job, changes, {force: true});
             assertEqual(run.result, 'success', `force failed: ${run.message}`);
@@ -351,7 +354,8 @@ export default suite('runner (integration)', [
             Gio.File.new_for_path(ctx.source).delete(null);
             run = await ctx.runner.runFull(job);
             assertEqual(run.result, 'error');
-            assert(/Source does not exist/.test(run.message), run.message);
+            assert(/Source folder not found/.test(run.message), run.message);
+            assert(/Source does not exist/.test(run.technicalMessage), run.technicalMessage);
             assertEqual(readFile(GLib.build_filenamev([ctx.dest, 'a.txt'])), 'a');
         } finally {
             cleanup(ctx.root);

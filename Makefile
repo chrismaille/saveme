@@ -99,11 +99,16 @@ doctor: setup
 run: setup
 	SAVEME_RCLONE=$(abspath $(RCLONE)) gjs -m bin/saveme.js $(ARGS)
 
-extension:
+extension: extension/i18n.js
 	mkdir -p dist
 	gnome-extensions pack extension -f -o dist --extra-source=icons \
 		--extra-source=daemon-client.js --extra-source=presentation.js \
-		--extra-source=system-launcher.js --extra-source=ui
+		--extra-source=system-launcher.js --extra-source=ui \
+		--extra-source=i18n.js
+
+extension/i18n.js: src/i18n.js
+	printf '%s\n' '// Generated from src/i18n.js by make extension. Do not edit.' > $@
+	cat src/i18n.js >> $@
 
 deb: extension $(RCLONE)
 	./scripts/build-deb.sh

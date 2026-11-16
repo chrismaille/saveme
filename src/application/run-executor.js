@@ -12,13 +12,8 @@ import {
     progressFromStats,
 } from '../domain/rclone-log.js';
 import {escapeFilterPath, filterRules} from '../domain/rclone-command.js';
-import {
-    DeleteGuardError,
-    DestinationUnavailableError,
-    DiskSpaceError,
-    EmptySourceError,
-    SourceUnavailableError,
-} from '../domain/errors.js';
+import {DiskSpaceError, EmptySourceError} from '../domain/errors.js';
+import {friendlyError as toFriendlyError} from './friendly-errors.js';
 import {DEFAULT_DISK_GUARD, planDiskCheck} from '../domain/disk-space.js';
 
 export class RunExecutor {
@@ -94,7 +89,10 @@ export class RunExecutor {
     endRun(ctx, result, message = '') {
         ctx.rawLog.close();
         const finishedAt = this.clock.nowIso();
-        const finalMessage = message || ctx.lastError || '';
+        const technicalMessage = message || ctx.lastError || '';
+        const finalMessage = result === 'error'
+            ? toFriendlyError(technicalMessage)
+            : technicalMessage;
         const run = {
             id: ctx.runId,
             jobId: ctx.job.id,
@@ -108,6 +106,9 @@ export class RunExecutor {
             result,
             exitCode: ctx.exitCode,
             message: finalMessage,
+            technicalMessage: technicalMessage && technicalMessage !== finalMessage
+                ? technicalMessage
+                : undefined,
             stats: ctx.stats,
             sourceFileCount: Number.isFinite(ctx.sourceFileCount) ? ctx.sourceFileCount : undefined,
             versionsDir: ctx.versionsDir || undefined,
@@ -121,6 +122,7 @@ export class RunExecutor {
             deletes: ctx.stats.deletes,
             errors: ctx.stats.errors,
             message: finalMessage || undefined,
+            technicalMessage: run.technicalMessage,
         });
         ctx.logger.close();
         for (const path of ctx.tempFiles) {
@@ -233,6 +235,7 @@ export class RunExecutor {
         });
         if (ctx.progressMapper)
             progress = ctx.progressMapper(progress) || progress;
+        progress = this.smoothProgress(ctx, progress);
         ctx.progress = progress;
         try {
             this.state?.updateProgress(ctx.job.id, progress);
@@ -240,6 +243,48 @@ export class RunExecutor {
             // State writes are best effort.
         }
         ctx.onProgress?.(progress);
+    }
+
+    smoothProgress(ctx, progress) {
+        const previous = ctx.smoothedProgress || {};
+        const next = {...progress};
+        const peak = key => Math.max(
+            Number(previous[key] || 0),
+            Number(progress[key] || 0));
+        // rclone discovers files while it works, so its totals and ETA can
+        // move backwards. Keep displayed totals and work done monotonic.
+        next.bytes = peak('bytes');
+        next.files = peak('files');
+        next.totalBytes = peak('totalBytes');
+        next.totalFiles = peak('totalFiles');
+        const total = next.totalBytes > 0 ? next.totalBytes : next.totalFiles;
+        const done = next.totalBytes > 0 ? next.bytes : next.files;
+        const computed = total > 0 ? (done / total) * 100 : 0;
+        next.percent = Math.min(95, Math.max(
+            Number(previous.percent || 0),
+            Number(progress.percent || 0),
+            computed));
+        const speed = Number(progress.speed || 0);
+        const previousSpeed = Number(previous.speed || 0);
+        next.speed = speed > 0
+            ? (previousSpeed > 0 ? previousSpeed * 0.7 + speed * 0.3 : speed)
+            : previousSpeed;
+        let eta = null;
+        if (next.speed > 0 && next.totalBytes > 0) {
+            eta = Math.max(0, (next.totalBytes - next.bytes) / next.speed);
+        } else if (progress.eta !== null && progress.eta !== undefined &&
+            Number.isFinite(Number(progress.eta)) && Number(progress.eta) >= 0) {
+            eta = Number(progress.eta);
+        }
+        const hasPreviousEta = previous.eta !== null && previous.eta !== undefined;
+        const previousEta = hasPreviousEta ? Number(previous.eta) : Number.NaN;
+        if (eta === null && Number.isFinite(previousEta) && previousEta >= 0)
+            eta = previousEta;
+        else if (eta !== null && Number.isFinite(previousEta) && previousEta >= 0)
+            eta = previousEta * 0.6 + eta * 0.4;
+        next.eta = eta;
+        ctx.smoothedProgress = next;
+        return next;
     }
 
     updateProgress(ctx, patch) {
@@ -251,6 +296,10 @@ export class RunExecutor {
             ...(ctx.progress || {}),
             ...patch,
         };
+        if (patch.percent !== undefined && patch.phase !== 'done') {
+            const previous = Number(ctx.progress?.percent || 0);
+            progress.percent = Math.max(previous, Number(patch.percent || 0));
+        }
         ctx.progress = progress;
         try {
             this.state?.updateProgress(ctx.job.id, progress);
@@ -364,13 +413,7 @@ export class RunExecutor {
     }
 
     friendlyError(error) {
-        if (error instanceof SourceUnavailableError ||
-            error instanceof DestinationUnavailableError ||
-            error instanceof EmptySourceError ||
-            error instanceof DiskSpaceError ||
-            error instanceof DeleteGuardError)
-            return error.message;
-        return error?.message || String(error);
+        return toFriendlyError(error);
     }
 
     versionDir(job, dest, ctx) {

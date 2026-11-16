@@ -1,14 +1,16 @@
+import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
-import {Extension, gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
+import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {SaveMeDaemonClient} from './daemon-client.js';
 import {SystemLauncher} from './system-launcher.js';
 import {JobRow} from './ui/job-row.js';
 import {displayStatus} from './presentation.js';
+import {t} from './i18n.js';
 
 export default class SaveMeExtension extends Extension {
     enable() {
@@ -26,17 +28,22 @@ export default class SaveMeExtension extends Extension {
             style_class: 'system-status-icon',
         });
         this._panelIconKey = null;
+        this._panelSpin = null;
         this._pauseAllKey = null;
         this._indicator.add_child(this._panelIcon);
         this._indicator.menu.connect('open-state-changed', (_menu, open) => {
-            if (open)
+            if (open) {
+                this._stopPanelAnimation();
+                this._panelIconKey = null;
                 this._refresh();
-            else
+            } else {
                 this._updatePanelIcon();
+            }
         });
         Main.panel.addToStatusArea(this.uuid, this._indicator);
 
         this._buildMenu();
+        this._setFixedWidth(380);
 
         this._daemonClient = new SaveMeDaemonClient({
             onSnapshot: json => this._applySnapshot(json),
@@ -51,6 +58,7 @@ export default class SaveMeExtension extends Extension {
             GLib.source_remove(this._refreshTimer);
             this._refreshTimer = 0;
         }
+        this._stopPanelAnimation();
         this._daemonClient?.disconnect();
         this._daemonClient = null;
         this._rows?.clear();
@@ -58,6 +66,12 @@ export default class SaveMeExtension extends Extension {
         this._indicator?.destroy();
         this._indicator = null;
         this._snapshot = null;
+    }
+
+    _setFixedWidth(width) {
+        const actor = this._indicator?.menu?.actor;
+        if (actor)
+            actor.set_width(width);
     }
 
     _buildMenu() {
@@ -90,10 +104,10 @@ export default class SaveMeExtension extends Extension {
         });
         const footerBox = new St.BoxLayout({vertical: false, style_class: 'saveme-footer'});
         this._openAppButton = this._footerButton(
-            'preferences-system-symbolic', _('Open SaveMe'),
+            'preferences-system-symbolic', t('Open SaveMe'),
             () => this.openSettings());
         this._pauseAllButton = this._footerButton(
-            'media-playback-pause-symbolic', _('Pause all'),
+            'media-playback-pause-symbolic', t('Pause all'),
             () => this._togglePauseAll());
         this._pauseAllIcon = this._pauseAllButton.child.get_first_child();
         this._pauseAllLabel = this._pauseAllIcon.get_next_sibling();
@@ -173,6 +187,37 @@ export default class SaveMeExtension extends Extension {
             this._panelIcon.icon_name = icons[key];
         }
         this._panelIcon.accessible_name = `SaveMe: ${key}`;
+        this._setPanelAnimation(key === 'running');
+    }
+
+    _startPanelAnimation() {
+        if (!this._panelIcon || this._panelSpin || this._indicator?.menu?.isOpen)
+            return;
+        const spin = new Clutter.PropertyTransition({
+            property_name: 'rotation-angle-z',
+            duration: 1400,
+            repeat_count: -1,
+            progress_mode: Clutter.AnimationMode.LINEAR,
+        });
+        spin.set_from(0);
+        spin.set_to(360);
+        this._panelIcon.add_transition('saveme-panel-spin', spin);
+        this._panelSpin = spin;
+    }
+
+    _stopPanelAnimation() {
+        if (!this._panelIcon || !this._panelSpin)
+            return;
+        this._panelIcon.remove_transition('saveme-panel-spin');
+        this._panelIcon.rotation_angle_z = 0;
+        this._panelSpin = null;
+    }
+
+    _setPanelAnimation(active) {
+        if (active)
+            this._startPanelAnimation();
+        else
+            this._stopPanelAnimation();
     }
 
     _refresh() {
@@ -196,7 +241,7 @@ export default class SaveMeExtension extends Extension {
             this._snapshot = JSON.parse(json);
             this._daemonError = null;
         } catch (_) {
-            this._setDaemonError(_('Invalid daemon response'));
+            this._setDaemonError(t('Invalid daemon response'));
             return;
         }
         this._render();
@@ -220,7 +265,7 @@ export default class SaveMeExtension extends Extension {
             this._pauseAllIcon.icon_name = pausedAll
                 ? 'media-playback-start-symbolic'
                 : 'media-playback-pause-symbolic';
-            const label = pausedAll ? _('Resume all') : _('Pause all');
+            const label = pausedAll ? t('Resume all') : t('Pause all');
             this._pauseAllLabel.text = label;
             this._pauseAllButton.accessible_name = label;
         }
@@ -233,7 +278,7 @@ export default class SaveMeExtension extends Extension {
                 reactive: false, activate: false, hover: false,
             });
             const box = new St.BoxLayout({vertical: true, style_class: 'saveme-empty'});
-            box.add_child(new St.Label({text: _('SaveMe daemon is not available')}));
+            box.add_child(new St.Label({text: t('SaveMe daemon is not available')}));
             const detail = new St.Label({
                 text: this._daemonError,
                 style_class: 'saveme-job-detail',
@@ -264,7 +309,7 @@ export default class SaveMeExtension extends Extension {
                     reactive: false, activate: false, hover: false,
                 });
                 const box = new St.BoxLayout({vertical: true, style_class: 'saveme-empty'});
-                box.add_child(new St.Label({text: _('No active jobs')}));
+                box.add_child(new St.Label({text: t('No active jobs')}));
                 item.add_child(box);
                 this._jobsSection.addMenuItem(item);
             }
@@ -299,7 +344,7 @@ export default class SaveMeExtension extends Extension {
         try {
             const program = this._launcher.find('saveme-settings');
             if (!program) {
-                Main.notify('SaveMe', _('SaveMe Settings is not installed'));
+                Main.notify('SaveMe', t('SaveMe Settings is not installed'));
                 return;
             }
             this._launcher.spawn([program, ...args]);

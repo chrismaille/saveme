@@ -12,6 +12,7 @@
     "**/*.js",
     "!build/**",
     "!dist/**",
+    "!extension/i18n.js",
     "!tools/**",
     "!node_modules/**",
     "!.venv/**"

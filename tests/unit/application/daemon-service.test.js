@@ -59,6 +59,7 @@ class FakeManager {
     removeJob(id) { this.calls.push(['removeJob', id]); }
     pauseAll(paused) { this.calls.push(['pauseAll', paused]); }
     setConcurrency(limit) { this.calls.push(['setConcurrency', limit]); }
+    startAll() { this.calls.push(['startAll']); }
 }
 
 class FakeTransfer {
@@ -543,6 +544,11 @@ export default suite('application/daemon-service', [
         assertEqual(concurrent.maxConcurrentJobs, 3);
         assert(JSON.stringify(ctx.manager.calls.at(-1)) ===
             JSON.stringify(['setConcurrency', 3]));
+        ctx.config.settings.startAtLogin = false;
+        const login = JSON.parse(ctx.service.updateSettingsJson(
+            JSON.stringify({startAtLogin: true})));
+        assertEqual(login.startAtLogin, true);
+        assertEqual(ctx.manager.calls.at(-1)[0], 'startAll');
         await assertThrows(() => ctx.service.updateSettingsJson('[]'), /Invalid settings/);
         const withoutLogs = makeService({logs: null});
         await assertThrows(() => withoutLogs.service.logsInfoJson(),

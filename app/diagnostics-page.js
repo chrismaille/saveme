@@ -1,6 +1,7 @@
 import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
 import {t} from '../src/i18n.js';
+import {createIconViewSwitcher} from './widgets/view-switcher.js';
 
 export class DiagnosticsPage {
     constructor(_window, logsPage, debugPage) {
@@ -11,10 +12,10 @@ export class DiagnosticsPage {
             .set_icon_name('text-x-generic-symbolic');
         this.stack.add_titled(debugPage.widget, 'debug', t('Debug'))
             .set_icon_name('utilities-terminal-symbolic');
-        this.switcher = new Adw.ViewSwitcher({
-            stack: this.stack,
-            policy: Adw.ViewSwitcherPolicy.WIDE,
-        });
+        this.switcher = createIconViewSwitcher(this.stack, [
+            {name: 'logs', title: t('Logs'), icon: 'text-x-generic-symbolic'},
+            {name: 'debug', title: t('Debug'), icon: 'utilities-terminal-symbolic'},
+        ]);
         const switcherBox = new Gtk.Box({
             orientation: Gtk.Orientation.HORIZONTAL,
             halign: Gtk.Align.CENTER,

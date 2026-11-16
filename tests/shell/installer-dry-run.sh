@@ -54,7 +54,7 @@ fi
 printf '%s\n' "$OUTPUT" | grep -q 'apt-get install -y --reinstall'
 
 OUTPUT="$(run_plan --deb "$FAKE_DEB")"
-printf '%s\n' "$OUTPUT" | grep -q 'extension: skipped'
+printf '%s\n' "$OUTPUT" | grep -q 'shell-extension.zip'
 
 OUTPUT="$(SAVEME_FAKE_NOT_INSTALLED=1 run_plan --deb "$FAKE_DEB")"
 printf '%s\n' "$OUTPUT" | grep -q 'is not installed; installing'

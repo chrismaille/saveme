@@ -23,6 +23,10 @@ export default suite('domain/run-state', [
         assertEqual(statusFromError('Source is not a directory'), JOB_STATUS.WAITING_SOURCE);
         assertEqual(statusFromError('Destination is not a directory'), JOB_STATUS.WAITING_DESTINATION);
         assertEqual(statusFromError('destination volume unavailable'), JOB_STATUS.WAITING_DESTINATION);
+        assertEqual(statusFromError('error reading source directory: directory not found'),
+            JOB_STATUS.WAITING_SOURCE);
+        assertEqual(statusFromError('dial tcp: lookup graph.microsoft.com: server misbehaving'),
+            JOB_STATUS.OFFLINE);
     }),
     test('statusFromError classifies auth, delete guard and generic errors', () => {
         assertEqual(statusFromError('auth required'), JOB_STATUS.NEEDS_AUTH);
@@ -32,6 +36,9 @@ export default suite('domain/run-state', [
         assertEqual(statusFromError('HTTP 401'), JOB_STATUS.NEEDS_AUTH);
         assertEqual(statusFromError('HTTP 403'), JOB_STATUS.NEEDS_AUTH);
         assertEqual(statusFromError('reauth needed'), JOB_STATUS.NEEDS_AUTH);
+        assertEqual(statusFromError('unable to get drive_id and drive_type'),
+            JOB_STATUS.NEEDS_AUTH);
+        assertEqual(statusFromError('invalid_grant: token expired'), JOB_STATUS.NEEDS_AUTH);
         assertEqual(statusFromError('Delete guard: 5 > 2'), JOB_STATUS.DELETE_GUARD);
         assertEqual(statusFromError('Not enough free disk space at /dest: 1 GiB free'),
             JOB_STATUS.NO_SPACE);

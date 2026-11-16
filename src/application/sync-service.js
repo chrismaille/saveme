@@ -98,7 +98,7 @@ export class SyncService {
             let syncStarted = false;
             ctx.progressMapper = progress => {
                 if (Number(progress.bytes || 0) > 0 ||
-                    Number(progress.transfers || 0) > 0 ||
+                    Number(progress.files || 0) > 0 ||
                     Number(progress.percent || 0) > 0)
                     syncStarted = true;
                 const current = Math.max(0,
@@ -132,7 +132,7 @@ export class SyncService {
         } catch (e) {
             if (cancellable?.is_cancelled())
                 return this.executor.endRun(ctx, 'cancelled', 'Cancelled');
-            return this.executor.endRun(ctx, 'error', this.executor.friendlyError(e));
+            return this.executor.endRun(ctx, 'error', e.message || String(e));
         }
     }
 
@@ -239,7 +239,7 @@ export class SyncService {
 
             return this.executor.endRun(ctx, 'success');
         } catch (e) {
-            return this.executor.endRun(ctx, 'error', this.executor.friendlyError(e));
+            return this.executor.endRun(ctx, 'error', e.message || String(e));
         }
     }
 }

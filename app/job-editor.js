@@ -18,17 +18,20 @@ import {
 } from '../src/jobs.js';
 import {INTERVAL_UNITS, WEEKDAYS, isValidTime} from '../src/domain/schedule.js';
 import {cleanError, remoteTypeLabel} from './presentation/format.js';
+import {t} from '../src/i18n.js';
 
 const TRIGGER_OPTIONS = [
-    {mode: TRIGGER_MODES.REALTIME, label: 'Real-time'},
-    {mode: TRIGGER_MODES.INTERVAL, label: 'Interval'},
-    {mode: TRIGGER_MODES.WEEKLY, label: 'Weekly'},
-    {mode: TRIGGER_MODES.MONTHLY, label: 'Monthly'},
-    {mode: TRIGGER_MODES.STARTUP, label: 'At computer startup'},
-    {mode: TRIGGER_MODES.DUSK, label: 'At dusk'},
-    {mode: TRIGGER_MODES.MANUAL, label: 'Manual'},
+    {mode: TRIGGER_MODES.REALTIME, label: t('Real-time')},
+    {mode: TRIGGER_MODES.INTERVAL, label: t('Interval')},
+    {mode: TRIGGER_MODES.WEEKLY, label: t('Weekly')},
+    {mode: TRIGGER_MODES.MONTHLY, label: t('Monthly')},
+    {mode: TRIGGER_MODES.STARTUP, label: t('At computer startup')},
+    {mode: TRIGGER_MODES.DUSK, label: t('At dusk')},
+    {mode: TRIGGER_MODES.MANUAL, label: t('Manual')},
 ];
-const STEP_TITLES = ['General', 'Sources', 'Destination', 'Schedule', 'Safety'];
+const STEP_TITLES = [
+    t('General'), t('Sources'), t('Destination'), t('Schedule'), t('Safety'),
+];
 
 export const JobEditor = GObject.registerClass({
     GTypeName: 'SaveMeJobEditor',
@@ -37,7 +40,7 @@ export const JobEditor = GObject.registerClass({
         super({
             transient_for: parentWindow,
             modal: true,
-            title: job?.draft ? 'Continue job' : job ? 'Edit job' : 'New job',
+            title: job?.draft ? t('Continue job') : job ? t('Edit job') : t('New job'),
             default_width: 720,
             default_height: 700,
         });
@@ -72,29 +75,29 @@ export const JobEditor = GObject.registerClass({
         this.windowTitle = new Adw.WindowTitle({title: this.title});
         header.set_title_widget(this.windowTitle);
 
-        const cancel = new Gtk.Button({label: 'Cancel'});
+        const cancel = new Gtk.Button({label: t('Cancel')});
         this.cancelButton = cancel;
         cancel.connect('clicked', () => this.close());
         header.pack_start(cancel);
         this.backButton = new Gtk.Button({
             icon_name: 'go-previous-symbolic',
-            tooltip_text: 'Back',
+            tooltip_text: t('Back'),
             css_classes: ['flat'],
         });
         this.backButton.connect('clicked', () => this._showStep(this._step - 1));
         header.pack_start(this.backButton);
 
         this.nextButton = new Gtk.Button({
-            label: 'Next',
+            label: t('Next'),
             css_classes: ['suggested-action'],
         });
         this.nextButton.connect('clicked', () => this._next());
         header.pack_end(this.nextButton);
-        this.saveButton = new Gtk.Button({label: 'Save'});
+        this.saveButton = new Gtk.Button({label: t('Save')});
         this.saveButton.connect('clicked', () => this._save(false));
         header.pack_end(this.saveButton);
         this.runButton = new Gtk.Button({
-            label: 'Save & Run',
+            label: t('Save & Run'),
             css_classes: ['suggested-action'],
         });
         this.runButton.connect('clicked', () => this._save(true));
@@ -128,18 +131,18 @@ export const JobEditor = GObject.registerClass({
     _buildGeneralPage() {
         const page = this._page();
         const group = new Adw.PreferencesGroup({
-            title: 'General',
+            title: t('General'),
             description: this.isNew
-                ? 'Name the job and choose whether it mirrors or keeps versions.'
-                : 'The job type cannot be changed after creation.',
+                ? t('Name the job and choose whether it mirrors or keeps versions.')
+                : t('The job type cannot be changed after creation.'),
         });
         this.nameRow = new Adw.EntryRow({
-            title: 'Name',
+            title: t('Name'),
             text: this.job.name || '',
         });
         this.typeRow = new Adw.ComboRow({
-            title: 'Type',
-            model: Gtk.StringList.new(['Sync', 'Backup']),
+            title: t('Type'),
+            model: Gtk.StringList.new([t('Sync'), t('Backup')]),
             selected: this.job.type === JOB_TYPES.BACKUP ? 1 : 0,
         });
         this.typeRow.sensitive = this.isNew;
@@ -153,16 +156,16 @@ export const JobEditor = GObject.registerClass({
     _buildSourcesPage() {
         const page = this._page();
         this.sourcesGroup = new Adw.PreferencesGroup({
-            title: 'Sources',
-            description: 'Backup can combine multiple local folders. Sync uses one source.',
+            title: t('Sources'),
+            description: t('Backup can combine multiple local folders. Sync uses one source.'),
         });
         this.sourceRows = [];
         this.addSourceRow = new Adw.ActionRow({
-            title: 'Add another source',
-            subtitle: 'Combine another folder in this backup.',
+            title: t('Add another source'),
+            subtitle: t('Combine another folder in this backup.'),
         });
         const add = new Gtk.Button({
-            label: 'Add',
+            label: t('Add'),
             valign: Gtk.Align.CENTER,
             css_classes: ['flat'],
         });
@@ -172,25 +175,25 @@ export const JobEditor = GObject.registerClass({
         this._renderSources();
         page.add(this.sourcesGroup);
 
-        const filters = new Adw.PreferencesGroup({title: 'Filters'});
+        const filters = new Adw.PreferencesGroup({title: t('Filters')});
         this.filtersRow = new Adw.EntryRow({
-            title: 'Exclude patterns (comma-separated)',
+            title: t('Exclude patterns (comma-separated)'),
             text: (this.job.filters.exclude || []).join(', '),
         });
         filters.add(this.filtersRow);
         page.add(filters);
 
         this.contentGroup = new Adw.PreferencesGroup({
-            title: 'Content selection',
-            description: 'Choose root folders/files to include. Selected folders ' +
-                'include their descendants; the exclude filters above still apply.',
+            title: t('Content selection'),
+            description: t('Choose root folders/files to include. Selected folders ' +
+                'include their descendants; the exclude filters above still apply.'),
         });
         this.contentRow = new Adw.ActionRow({
-            title: 'Content to sync',
-            subtitle: 'All source content',
+            title: t('Content to sync'),
+            subtitle: t('All source content'),
         });
         this.contentButton = new Gtk.Button({
-            label: 'Select',
+            label: t('Select'),
             valign: Gtk.Align.CENTER,
             css_classes: ['flat'],
         });
@@ -205,8 +208,8 @@ export const JobEditor = GObject.registerClass({
     _buildDestinationPage() {
         const page = this._page();
         this.existingGroup = new Adw.PreferencesGroup({
-            title: 'Destinations in use',
-            description: 'Reuse a base folder from another job, or create a new destination.',
+            title: t('Destinations in use'),
+            description: t('Reuse a base folder from another job, or create a new destination.'),
         });
         this.existingRows = [];
         this.destinations = this._usedDestinations();
@@ -214,13 +217,13 @@ export const JobEditor = GObject.registerClass({
         page.add(this.existingGroup);
 
         const group = new Adw.PreferencesGroup({
-            title: 'New destination',
-            description: 'Choose the provider and the base folder. SaveMe creates its own job folder inside that base; several jobs can share the same base.',
+            title: t('New destination'),
+            description: t('Choose the provider and the base folder. SaveMe creates its own job folder inside that base; several jobs can share the same base.'),
         });
         this.newDestinationGroup = group;
         this.providerButtons = new Map();
         const providers = [
-            ['local', 'Local folder', 'drive-harddisk-symbolic'],
+            ['local', t('Local folder'), 'drive-harddisk-symbolic'],
             ['dropbox', 'Dropbox', 'folder-remote-symbolic'],
             ['onedrive', 'OneDrive', 'folder-remote-symbolic'],
             ['drive', 'Google Drive', 'folder-remote-symbolic'],
@@ -252,30 +255,30 @@ export const JobEditor = GObject.registerClass({
         }
         group.add(flow);
         this.destinationRow = new Adw.ActionRow({
-            title: 'Base folder in destination',
-            subtitle: descriptorDisplay(this.job.destination, this.volumes) || 'Not selected',
+            title: t('Base folder in destination'),
+            subtitle: descriptorDisplay(this.job.destination, this.volumes) || t('Not selected'),
         });
         const choose = new Gtk.Button({
-            label: 'Choose',
+            label: t('Choose'),
             valign: Gtk.Align.CENTER,
             css_classes: ['flat'],
         });
-        choose.connect('clicked', () => this._chooseDescriptor('Destination',
+        choose.connect('clicked', () => this._chooseDescriptor(t('Destination'),
             this.job.destination, descriptor => this._setDestination(descriptor)));
         this.destinationRow.add_suffix(choose);
         group.add(this.destinationRow);
         this.accountsRow = new Adw.ActionRow({
-            title: 'Cloud accounts',
-            subtitle: 'Add, reconnect or delete accounts without leaving this wizard.',
+            title: t('Cloud accounts'),
+            subtitle: t('Add, reconnect or delete accounts without leaving this wizard.'),
         });
         const manage = new Gtk.Button({
-            label: 'Manage',
+            label: t('Manage'),
             valign: Gtk.Align.CENTER,
             css_classes: ['flat'],
         });
         manage.connect('clicked', () => this._manageAccounts());
         this.accountsRow.add_suffix(manage);
-        this.accountsGroup = new Adw.PreferencesGroup({title: 'Cloud accounts'});
+        this.accountsGroup = new Adw.PreferencesGroup({title: t('Cloud accounts')});
         this.accountsGroup.add(this.accountsRow);
         page.add(group);
         page.add(this.accountsGroup);
@@ -334,10 +337,10 @@ export const JobEditor = GObject.registerClass({
 
     _destinationJobsLabel(entry) {
         const typeNames = [...entry.types]
-            .map(type => type === 'backup' ? 'Backup' : 'Sync')
+            .map(type => type === 'backup' ? t('Backup') : t('Sync'))
             .join('/');
-        const jobs = entry.jobs.length > 0 ? entry.jobs.join(', ') : 'this job';
-        return `${entry.current ? 'This job · ' : ''}Used by ${jobs}` +
+        const jobs = entry.jobs.length > 0 ? entry.jobs.join(', ') : t('this job');
+        return `${entry.current ? `${t('This job')} · ` : ''}${t('Used by {jobs}', {jobs})}` +
             (typeNames ? ` (${typeNames})` : '');
     }
 
@@ -347,7 +350,7 @@ export const JobEditor = GObject.registerClass({
                 .find(item => item.name === descriptor.remote);
             return `${remoteTypeLabel(remote?.type || 'cloud')} · ${descriptor.remote}`;
         }
-        return 'Local folder';
+        return t('Local folder');
     }
 
     _matchesCurrentDestination(descriptor) {
@@ -386,7 +389,7 @@ export const JobEditor = GObject.registerClass({
                 }));
             } else if (compatible) {
                 const use = new Gtk.Button({
-                    label: 'Use',
+                    label: t('Use'),
                     valign: Gtk.Align.CENTER,
                     css_classes: ['flat'],
                 });
@@ -394,7 +397,7 @@ export const JobEditor = GObject.registerClass({
                 row.add_suffix(use);
             } else {
                 row.add_suffix(new Gtk.Label({
-                    label: 'Not shareable',
+                    label: t('Not shareable'),
                     css_classes: ['dim-label'],
                 }));
             }
@@ -407,8 +410,8 @@ export const JobEditor = GObject.registerClass({
         }
         if (this.destinations.length === 0) {
             const empty = new Adw.ActionRow({
-                title: 'No destinations in use',
-                subtitle: 'Create the first destination below.',
+                title: t('No destinations in use'),
+                subtitle: t('Create the first destination below.'),
                 sensitive: false,
             });
             this.existingGroup.add(empty);
@@ -416,8 +419,8 @@ export const JobEditor = GObject.registerClass({
         }
         const newSelected = this._destinationMode === 'new';
         const newRow = new Adw.ActionRow({
-            title: 'Create new destination',
-            subtitle: 'Choose a provider and a new base folder.',
+            title: t('Create new destination'),
+            subtitle: t('Choose a provider and a new base folder.'),
         });
         newRow.add_prefix(new Gtk.Image({
             icon_name: 'list-add-symbolic',
@@ -431,7 +434,7 @@ export const JobEditor = GObject.registerClass({
             }));
         } else {
             const create = new Gtk.Button({
-                label: 'New',
+                label: t('New'),
                 valign: Gtk.Align.CENTER,
                 css_classes: ['flat', 'suggested-action'],
             });
@@ -459,12 +462,12 @@ export const JobEditor = GObject.registerClass({
     _buildSchedulePage() {
         const page = this._page();
         const group = new Adw.PreferencesGroup({
-            title: 'Schedule',
-            description: 'Choose when the job should run.',
+            title: t('Schedule'),
+            description: t('Choose when the job should run.'),
         });
         this.triggerModes = TRIGGER_OPTIONS;
         this.triggerRow = new Adw.ComboRow({
-            title: 'Mode',
+            title: t('Mode'),
             model: Gtk.StringList.new(TRIGGER_OPTIONS.map(item => item.label)),
             selected: 0,
         });
@@ -478,7 +481,7 @@ export const JobEditor = GObject.registerClass({
         group.add(this.triggerRow);
 
         this.intervalRow = new Adw.SpinRow({
-            title: 'Every',
+            title: t('Every'),
             adjustment: new Gtk.Adjustment({
                 lower: 1,
                 upper: 10080,
@@ -488,18 +491,18 @@ export const JobEditor = GObject.registerClass({
             }),
         });
         this.intervalUnitRow = new Adw.ComboRow({
-            title: 'Interval unit',
-            model: Gtk.StringList.new(['minutes', 'hours', 'days']),
+            title: t('Interval unit'),
+            model: Gtk.StringList.new([t('minutes'), t('hours'), t('days')]),
             selected: Math.max(0, INTERVAL_UNITS.indexOf(
                 this.job.trigger.intervalUnit || 'hours')),
         });
         this.dayOfWeekRow = new Adw.ComboRow({
-            title: 'Day of week',
+            title: t('Day of week'),
             model: Gtk.StringList.new(WEEKDAYS),
             selected: Number(this.job.trigger.dayOfWeek ?? 1),
         });
         this.dayOfMonthRow = new Adw.SpinRow({
-            title: 'Day of month',
+            title: t('Day of month'),
             adjustment: new Gtk.Adjustment({
                 lower: 1,
                 upper: 31,
@@ -509,12 +512,12 @@ export const JobEditor = GObject.registerClass({
             }),
         });
         this.timeRow = new Adw.EntryRow({
-            title: 'Time (HH:MM)',
+            title: t('Time (HH:MM)'),
             text: this.job.trigger.time || '18:00',
         });
         this.idleRow = new Adw.SwitchRow({
-            title: 'Only run when the computer is idle',
-            subtitle: 'Wait for mouse, keyboard and screen activity to stop.',
+            title: t('Only run when the computer is idle'),
+            subtitle: t('Wait for mouse, keyboard and screen activity to stop.'),
             active: Boolean(this.job.trigger.idleOnly),
         });
         group.add(this.intervalRow);
@@ -525,15 +528,15 @@ export const JobEditor = GObject.registerClass({
         group.add(this.idleRow);
         page.add(group);
 
-        this.backupGroup = new Adw.PreferencesGroup({title: 'Backup'});
+        this.backupGroup = new Adw.PreferencesGroup({title: t('Backup')});
         this.keepForeverRow = new Adw.SwitchRow({
-            title: 'Keep versions forever',
-            subtitle: 'Ignore the retention period and never remove old versions.',
+            title: t('Keep versions forever'),
+            subtitle: t('Ignore the retention period and never remove old versions.'),
             active: Boolean(this.job.backup.keepForever),
         });
         this.retentionRow = new Adw.SpinRow({
-            title: 'Keep versions for (days)',
-            subtitle: 'Disabled when versions are kept forever',
+            title: t('Keep versions for (days)'),
+            subtitle: t('Disabled when versions are kept forever'),
             adjustment: new Gtk.Adjustment({
                 lower: 1,
                 upper: 3650,
@@ -606,12 +609,12 @@ export const JobEditor = GObject.registerClass({
     _buildSafetyPage() {
         const page = this._page();
         const safety = new Adw.PreferencesGroup({
-            title: 'Safety',
-            description: 'The defaults are suitable for most jobs.',
+            title: t('Safety'),
+            description: t('The defaults are suitable for most jobs.'),
         });
         this.maxDeleteRow = new Adw.SpinRow({
-            title: 'Maximum deletion (%)',
-            subtitle: 'Abort when a run would delete more than this percentage',
+            title: t('Maximum deletion (%)'),
+            subtitle: t('Abort when a run would delete more than this percentage'),
             adjustment: new Gtk.Adjustment({
                 lower: 0,
                 upper: 100,
@@ -621,7 +624,7 @@ export const JobEditor = GObject.registerClass({
             }),
         });
         this.maxDeleteMinimumRow = new Adw.SpinRow({
-            title: 'Minimum deletion allowance (files)',
+            title: t('Minimum deletion allowance (files)'),
             adjustment: new Gtk.Adjustment({
                 lower: 0,
                 upper: 100000,
@@ -631,12 +634,12 @@ export const JobEditor = GObject.registerClass({
             }),
         });
         this.bandwidthRow = new Adw.EntryRow({
-            title: 'Bandwidth limit (e.g. 10M)',
+            title: t('Bandwidth limit (e.g. 10M)'),
             text: this.job.options.bandwidthLimit || '',
         });
         this.notifyRow = new Adw.SwitchRow({
-            title: 'Notify when the job finishes',
-            subtitle: 'Show a desktop notification after a completed backup.',
+            title: t('Notify when the job finishes'),
+            subtitle: t('Show a desktop notification after a completed backup.'),
             active: this.job.options.notifyOnComplete !== false,
         });
         safety.add(this.maxDeleteRow);
@@ -645,13 +648,13 @@ export const JobEditor = GObject.registerClass({
         safety.add(this.notifyRow);
         page.add(safety);
 
-        const advanced = new Adw.PreferencesGroup({title: 'Advanced'});
+        const advanced = new Adw.PreferencesGroup({title: t('Advanced')});
         this.advancedExpander = new Adw.ExpanderRow({
-            title: 'Performance and metadata',
-            subtitle: 'Transfers, checkers, metadata and symbolic links',
+            title: t('Performance and metadata'),
+            subtitle: t('Transfers, checkers, metadata and symbolic links'),
         });
         this.transfersRow = new Adw.SpinRow({
-            title: 'Parallel transfers',
+            title: t('Parallel transfers'),
             adjustment: new Gtk.Adjustment({
                 lower: 1,
                 upper: 64,
@@ -661,7 +664,7 @@ export const JobEditor = GObject.registerClass({
             }),
         });
         this.checkersRow = new Adw.SpinRow({
-            title: 'Parallel checkers',
+            title: t('Parallel checkers'),
             adjustment: new Gtk.Adjustment({
                 lower: 1,
                 upper: 64,
@@ -671,11 +674,11 @@ export const JobEditor = GObject.registerClass({
             }),
         });
         this.metadataRow = new Adw.SwitchRow({
-            title: 'Preserve metadata',
+            title: t('Preserve metadata'),
             active: Boolean(this.job.options.preserveMetadata),
         });
         this.symlinkRow = new Adw.SwitchRow({
-            title: 'Follow symbolic links',
+            title: t('Follow symbolic links'),
             active: Boolean(this.job.options.followSymlinks),
         });
         this.advancedExpander.add_row(this.transfersRow);
@@ -691,7 +694,7 @@ export const JobEditor = GObject.registerClass({
         this._step = Math.max(0, Math.min(STEP_TITLES.length - 1, index));
         const names = ['general', 'sources', 'destination', 'schedule', 'safety'];
         this.stack.set_visible_child_name(names[this._step]);
-        const title = this.isDraft ? 'Continue job' : this.isNew ? 'New job' : 'Edit job';
+        const title = this.isDraft ? t('Continue job') : this.isNew ? t('New job') : t('Edit job');
         this.windowTitle.title = `${title} · ` +
             `${STEP_TITLES[this._step]} (${this._step + 1}/${STEP_TITLES.length})`;
         this.backButton.visible = this._step > 0;
@@ -699,7 +702,7 @@ export const JobEditor = GObject.registerClass({
         this.saveButton.visible = this._step === STEP_TITLES.length - 1;
         this.runButton.visible = this._step === STEP_TITLES.length - 1;
         this.cancelButton.label = this._step >= 1 && (this.isNew || this.isDraft)
-            ? 'Close' : 'Cancel';
+            ? t('Close') : t('Cancel');
         if (this._ready)
             this._autosaveDraft(this._step);
     }
@@ -711,15 +714,15 @@ export const JobEditor = GObject.registerClass({
 
     _validateStep(index) {
         if (index === 0 && !this.nameRow.text.trim()) {
-            this._showError('Give the job a name.');
+            this._showError(t('Give the job a name.'));
             return false;
         }
         if (index === 1 && !this.sources.some(source => source.path || source.volumeUuid)) {
-            this._showError('Choose at least one source folder.');
+            this._showError(t('Choose at least one source folder.'));
             return false;
         }
         if (index === 2 && !this._destinationSelected()) {
-            this._showError('Choose a destination.');
+            this._showError(t('Choose a destination.'));
             return false;
         }
         if (index === 2) {
@@ -731,16 +734,16 @@ export const JobEditor = GObject.registerClass({
         }
         if (index === 3) {
             if (this.triggerMode === TRIGGER_MODES.INTERVAL && this._intervalMinutes() < 1) {
-                this._showError('The interval must be at least one minute.');
+                this._showError(t('The interval must be at least one minute.'));
                 return false;
             }
             if (this.triggerMode === TRIGGER_MODES.WEEKLY && this.dayOfWeekRow.selected < 0) {
-                this._showError('Choose a day of the week.');
+                this._showError(t('Choose a day of the week.'));
                 return false;
             }
             if ([TRIGGER_MODES.WEEKLY, TRIGGER_MODES.MONTHLY, TRIGGER_MODES.DUSK]
                 .includes(this.triggerMode) && !isValidTime(this.timeRow.text)) {
-                this._showError('Use a time in the HH:MM format (for example 18:00).');
+                this._showError(t('Use a time in the HH:MM format (for example 18:00).'));
                 return false;
             }
         }
@@ -748,8 +751,8 @@ export const JobEditor = GObject.registerClass({
     }
 
     _showError(message) {
-        const dialog = new Adw.AlertDialog({heading: 'Check this step', body: message});
-        dialog.add_response('ok', 'OK');
+        const dialog = new Adw.AlertDialog({heading: t('Check this step'), body: message});
+        dialog.add_response('ok', t('OK'));
         dialog.present(this);
     }
 
@@ -772,16 +775,16 @@ export const JobEditor = GObject.registerClass({
             others.every(job => job.destinationLayout !== 'direct'))
             return null;
         if (layout === 'saveMe') {
-            return 'This base is used by a legacy direct sync job and cannot be ' +
-                'shared. Choose another destination.';
+            return t('This base is used by a legacy direct sync job and cannot be ' +
+                'shared. Choose another destination.');
         }
-        return 'Direct sync destinations cannot be shared with another job. ' +
-            'Choose another destination or create a new SaveMe base.';
+        return t('Direct sync destinations cannot be shared with another job. ' +
+            'Choose another destination or create a new SaveMe base.');
     }
 
     _addChooseButton(row, callback) {
         const button = new Gtk.Button({
-            label: 'Choose',
+            label: t('Choose'),
             valign: Gtk.Align.CENTER,
             css_classes: ['flat'],
         });
@@ -800,8 +803,8 @@ export const JobEditor = GObject.registerClass({
         const backup = this.typeRow?.selected === 1;
         for (const [index, source] of this.sources.entries()) {
             const row = new Adw.ActionRow({
-                title: `Source ${index + 1}`,
-                subtitle: descriptorDisplay(source, this.volumes) || 'Not selected',
+                title: `${t('Source')} ${index + 1}`,
+                subtitle: descriptorDisplay(source, this.volumes) || t('Not selected'),
             });
             this._addChooseButton(row, () => {
                 this._chooseSourceDescriptor(index, this.sources[index],
@@ -819,7 +822,7 @@ export const JobEditor = GObject.registerClass({
             if (backup && this.sources.length > 1) {
                 const remove = new Gtk.Button({
                     icon_name: 'list-remove-symbolic',
-                    tooltip_text: `Remove source ${index + 1}`,
+                    tooltip_text: `${t('Remove source')} ${index + 1}`,
                     valign: Gtk.Align.CENTER,
                     css_classes: ['flat', 'destructive-action'],
                 });
@@ -842,7 +845,7 @@ export const JobEditor = GObject.registerClass({
 
     _addSource() {
         if (this.typeRow.selected !== 1) {
-            this.parentWindow.toast('Multiple sources are only available for backups.');
+            this.parentWindow.toast(t('Multiple sources are only available for backups.'));
             return;
         }
         this.sources.push({kind: 'local', path: ''});
@@ -861,15 +864,15 @@ export const JobEditor = GObject.registerClass({
         this.contentButton.sensitive = Boolean(path);
         if (!path) {
             this.contentRow.set_subtitle(
-                'Content selection is available for local source folders.');
+                t('Content selection is available for local source folders.'));
             return;
         }
         if (this.includes.length === 0) {
-            this.contentRow.set_subtitle('All source content');
+            this.contentRow.set_subtitle(t('All source content'));
             return;
         }
         const summary = this.includes.join(', ');
-        this.contentRow.set_subtitle(`${this.includes.length} selected: ` +
+        this.contentRow.set_subtitle(`${this.includes.length} ${t('selected')}: ` +
             (summary.length > 80 ? `${summary.slice(0, 79)}…` : summary));
         this.contentRow.set_tooltip_text(summary);
     }
@@ -880,7 +883,7 @@ export const JobEditor = GObject.registerClass({
         const source = this.sources[0];
         const path = source ? localPathFor(source, this.volumes) : null;
         if (!path) {
-            this.parentWindow.toast('Choose a local source folder first.');
+            this.parentWindow.toast(t('Choose a local source folder first.'));
             return;
         }
         new SyncSelectionDialog(this.parentWindow, {
@@ -913,7 +916,7 @@ export const JobEditor = GObject.registerClass({
     _setDestination(descriptor) {
         this.job.destination = descriptor;
         this.destinationRow.set_subtitle(
-            descriptorDisplay(descriptor, this.volumes) || 'Not selected');
+            descriptorDisplay(descriptor, this.volumes) || t('Not selected'));
         this._updateProviderSelection();
         if (this.existingGroup)
             this._renderExistingDestinations();
@@ -1016,21 +1019,21 @@ export const JobEditor = GObject.registerClass({
             return;
         const remotes = this.parentWindow.snapshot?.remotes || [];
         this.accountsRow.set_subtitle(remotes.length === 0
-            ? 'No accounts configured. Add one to use a cloud destination.'
-            : `${remotes.length} account${remotes.length === 1 ? '' : 's'} configured. ` +
-                'Add, reconnect or delete accounts here.');
+            ? t('No accounts configured. Add one to use a cloud destination.')
+            : `${remotes.length} ${t(remotes.length === 1 ? 'account configured.' : 'accounts configured.')} ` +
+                t('Add, reconnect or delete accounts here.'));
     }
 
     _chooseSourceDescriptor(index, current, callback) {
         const dialog = new Adw.AlertDialog({
-            heading: `Source ${index + 1}`,
-            body: `Current: ${descriptorDisplay(current, this.volumes) || 'Not selected'}`,
+            heading: `${t('Source')} ${index + 1}`,
+            body: `${t('Current')}: ${descriptorDisplay(current, this.volumes) || t('Not selected')}`,
         });
-        dialog.add_response('cancel', 'Cancel');
+        dialog.add_response('cancel', t('Cancel'));
         dialog.add_response('drive', 'Google Drive');
         dialog.add_response('onedrive', 'OneDrive');
         dialog.add_response('dropbox', 'Dropbox');
-        dialog.add_response('local', 'Local folder');
+        dialog.add_response('local', t('Local folder'));
         dialog.set_response_appearance('local', Adw.ResponseAppearance.SUGGESTED);
         dialog.connect('response', (_dialog, response) => {
             if (response === 'local') {
@@ -1074,11 +1077,11 @@ export const JobEditor = GObject.registerClass({
     _chooseDescriptor(title, current, callback) {
         const dialog = new Adw.AlertDialog({
             heading: title,
-            body: `Current: ${descriptorDisplay(current, this.volumes) || 'Not selected'}`,
+            body: `${t('Current')}: ${descriptorDisplay(current, this.volumes) || t('Not selected')}`,
         });
-        dialog.add_response('cancel', 'Cancel');
-        dialog.add_response('local', 'Local folder');
-        dialog.add_response('remote', 'Cloud remote');
+        dialog.add_response('cancel', t('Cancel'));
+        dialog.add_response('local', t('Local folder'));
+        dialog.add_response('remote', t('Cloud remote'));
         dialog.set_response_appearance('local', Adw.ResponseAppearance.SUGGESTED);
         dialog.connect('response', (_dialog, response) => {
             if (response === 'local')
@@ -1090,7 +1093,7 @@ export const JobEditor = GObject.registerClass({
     }
 
     _pickLocalFolder(callback) {
-        const dialog = new Gtk.FileDialog({title: 'Choose folder', modal: true});
+        const dialog = new Gtk.FileDialog({title: t('Choose folder'), modal: true});
         dialog.select_folder(this, null, (source, result) => {
             try {
                 const file = source.select_folder_finish(result);
@@ -1192,10 +1195,10 @@ export const JobEditor = GObject.registerClass({
                     this.parentWindow.refresh();
                     if (this._closing) {
                         this._closing = false;
-                        this.parentWindow.toast('Draft saved. Continue later from Jobs.');
+                        this.parentWindow.toast(t('Draft saved. Continue later from Jobs.'));
                     }
                 })
-                .catch(e => this.parentWindow.toast(`Cannot save draft: ${e.message}`))
+                .catch(e => this.parentWindow.toast(`${t('Cannot save draft')}: ${e.message}`))
                 .finally(() => {
                     this._draftPromise = null;
                     saveQueued();
@@ -1240,8 +1243,8 @@ export const JobEditor = GObject.registerClass({
             if (run)
                 await this.client.runJob(saved.id, false, false);
             this.parentWindow.toast(run
-                ? 'Job saved and run started.'
-                : 'Job saved.');
+                ? t('Job saved and run started.')
+                : t('Job saved.'));
             this.parentWindow.refresh();
             this.close();
         } catch (e) {
@@ -1262,14 +1265,14 @@ export const JobEditor = GObject.registerClass({
                 button.sensitive = !saving;
         }
         if (this.runButton)
-            this.runButton.label = saving ? 'Saving…' : 'Save & Run';
+            this.runButton.label = saving ? t('Saving…') : t('Save & Run');
     }
 
     _saveErrorMessage(error) {
         const message = cleanError(error.message);
         if (/timeout|timed out|tempo limite|tempo esgotado/i.test(message)) {
-            return 'The operation took longer than expected. The job may still be ' +
-                'finishing; check the Jobs list in a moment before trying again.';
+            return t('The operation took longer than expected. The job may still be ' +
+                'finishing; check the Jobs list in a moment before trying again.');
         }
         return message;
     }
@@ -1292,10 +1295,10 @@ export const JobEditor = GObject.registerClass({
                 await this.client.runJob(saved.id, false, false);
             } catch (e) {
                 if (!/already running/i.test(e.message || ''))
-                    this.parentWindow.toast(`Job saved, but the run did not start: ${e.message}`);
+                    this.parentWindow.toast(`${t('Job saved, but the run did not start')}: ${e.message}`);
             }
         }
-        this.parentWindow.toast(run ? 'Job saved and run started.' : 'Job saved.');
+        this.parentWindow.toast(run ? t('Job saved and run started.') : t('Job saved.'));
         this.parentWindow.refresh();
         this.close();
         return true;

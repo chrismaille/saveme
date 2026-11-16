@@ -19,6 +19,7 @@ import {SettingsPage} from './pages/settings-page.js';
 import {DebugPage} from './pages/debug-page.js';
 import {DiagnosticsPage} from './diagnostics-page.js';
 import {AboutPage} from './pages/about-page.js';
+import {createIconViewSwitcher} from './widgets/view-switcher.js';
 
 const APP_DIR = GLib.path_get_dirname(GLib.filename_from_uri(import.meta.url)[0]);
 const ROOT_DIR = GLib.build_filenamev([APP_DIR, '..']);
@@ -72,8 +73,6 @@ export const SaveMeWindow = GObject.registerClass({
     _buildUI() {
         const header = new Adw.HeaderBar();
         this.stack = new Adw.ViewStack();
-        this.viewSwitcher = new Adw.ViewSwitcherTitle({stack: this.stack});
-        header.set_title_widget(this.viewSwitcher);
 
         const newJob = new Gtk.Button({
             icon_name: 'list-add-symbolic',
@@ -108,6 +107,15 @@ export const SaveMeWindow = GObject.registerClass({
         diagnosticsPage.set_icon_name('utilities-terminal-symbolic');
         const aboutPage = this.stack.add_titled(this.aboutPage.widget, 'about', t('About'));
         aboutPage.set_icon_name('help-about-symbolic');
+        this.viewSwitcher = createIconViewSwitcher(this.stack, [
+            {name: 'jobs', title: t('Jobs'), icon: 'view-list-symbolic'},
+            {name: 'accounts', title: t('Accounts'), icon: 'system-users-symbolic'},
+            {name: 'settings', title: t('Settings'), icon: 'emblem-system-symbolic'},
+            {name: 'diagnostics', title: t('Logs & Debug'),
+                icon: 'utilities-terminal-symbolic'},
+            {name: 'about', title: t('About'), icon: 'help-about-symbolic'},
+        ]);
+        header.set_title_widget(this.viewSwitcher);
 
         const toolbar = new Adw.ToolbarView();
         toolbar.add_top_bar(header);

@@ -86,8 +86,8 @@ export function formatEta(value) {
     return `${hours}h ${minutes % 60}m`;
 }
 
-export function statusLabel(status) {
-    return STATUS_LABELS[status] || status || 'Idle';
+export function statusLabel(status, translate = value => value) {
+    return translate(STATUS_LABELS[status] || status || 'Idle');
 }
 
 export function displayStatus(status, phase = null) {
@@ -100,8 +100,8 @@ export function displayStatus(status, phase = null) {
     return 'running';
 }
 
-export function typeLabel(type) {
-    return type === 'backup' ? 'Backup' : 'Sync';
+export function typeLabel(type, translate = value => value) {
+    return translate(type === 'backup' ? 'Backup' : 'Sync');
 }
 
 export function statusIconName(status) {
@@ -148,7 +148,7 @@ export function jobDetail(job, {nowMs = Date.now(), translate = value => value} 
     return detail;
 }
 
-export function progressView(state) {
+export function progressView(state, {translate = value => value} = {}) {
     if (state.status === 'running' && state.progress) {
         const progress = state.progress;
         const phase = displayStatus(state.status, progress.phase);
@@ -157,7 +157,9 @@ export function progressView(state) {
             return {
                 visible: true,
                 percent: 0,
-                text: listed > 0 ? `${listed.toLocaleString()} files checked` : '',
+                text: listed > 0
+                    ? `${listed.toLocaleString()} ${translate('files checked')}`
+                    : '',
                 file: shortFile(progress.currentFile),
                 showBar: true,
             };

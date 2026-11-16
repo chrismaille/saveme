@@ -528,9 +528,14 @@ export class DaemonService {
         const payload = JSON.parse(payloadJson);
         if (!payload || typeof payload !== 'object' || Array.isArray(payload))
             throw new Error('Invalid settings payload.');
+        const previousStartAtLogin = this.config.settings.startAtLogin !== false;
         const settings = this.config.updateSettings(payload);
         if (Object.prototype.hasOwnProperty.call(payload, 'maxConcurrentJobs'))
             this.manager.setConcurrency?.(settings.maxConcurrentJobs);
+        if (Object.prototype.hasOwnProperty.call(payload, 'startAtLogin') &&
+            settings.startAtLogin !== false && !previousStartAtLogin) {
+            this.manager.startAll?.();
+        }
         this.logs?.prune();
         return JSON.stringify(settings);
     }

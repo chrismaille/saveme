@@ -66,12 +66,15 @@ export class BackupService {
             let sourceIndex = 0;
             let sourceFraction = 0;
             let sourceStarted = false;
+            let completedBytes = 0;
+            let completedFiles = 0;
             // Report one overall bar: each source owns an equal slice and the
             // fraction inside a slice never moves backwards while rclone is
-            // still counting the source.
+            // still counting the source. Counters carry over between sources
+            // so the card shows the whole operation, not a reset per folder.
             ctx.progressMapper = progress => {
                 if (Number(progress.bytes || 0) > 0 ||
-                    Number(progress.transfers || 0) > 0 ||
+                    Number(progress.files || 0) > 0 ||
                     Number(progress.percent || 0) > 0)
                     sourceStarted = true;
                 const current = Math.max(0,
@@ -80,6 +83,10 @@ export class BackupService {
                 return {
                     ...progress,
                     phase: sourceStarted ? 'syncing' : 'checking',
+                    bytes: completedBytes + Number(progress.bytes || 0),
+                    files: completedFiles + Number(progress.files || 0),
+                    totalBytes: completedBytes + Number(progress.totalBytes || 0),
+                    totalFiles: completedFiles + Number(progress.totalFiles || 0),
                     percent: ((sourceIndex + sourceFraction) / totalSources) * 95,
                 };
             };
@@ -107,6 +114,8 @@ export class BackupService {
                     phase: 'syncing',
                     cancellable,
                 });
+                completedBytes += Number(result.stats?.bytes || 0);
+                completedFiles += Number(result.stats?.transfers || 0);
                 if (result.cancelled)
                     return this.executor.endRun(ctx, 'cancelled', 'Cancelled');
                 if (!isSuccessExit(result.exitCode))
@@ -122,7 +131,7 @@ export class BackupService {
         } catch (e) {
             if (cancellable?.is_cancelled())
                 return this.executor.endRun(ctx, 'cancelled', 'Cancelled');
-            return this.executor.endRun(ctx, 'error', this.executor.friendlyError(e));
+            return this.executor.endRun(ctx, 'error', e.message || String(e));
         }
     }
 
@@ -222,7 +231,7 @@ export class BackupService {
 
             return this.executor.endRun(ctx, 'success');
         } catch (e) {
-            return this.executor.endRun(ctx, 'error', this.executor.friendlyError(e));
+            return this.executor.endRun(ctx, 'error', e.message || String(e));
         }
     }
 }

@@ -12,6 +12,7 @@ import {
 import {cancelledStatus, failureStatus, idleStatus} from './domain/job-state-machine.js';
 import {RetryPolicy} from './domain/retry-policy.js';
 import {Scheduler} from './application/scheduler.js';
+import {friendlyError} from './application/friendly-errors.js';
 import {t} from './i18n.js';
 
 export class RunPool {
@@ -108,7 +109,7 @@ export class JobSupervisor {
         this._resumeInterrupted = resumeInterrupted;
         this._start().catch(e => {
             this.logger.error(`Cannot start job: ${e.message}`);
-            this._setStatus('error', e.message);
+            this._setStatus('error', friendlyError(e));
             this._scheduleRetry();
         });
     }
@@ -155,13 +156,16 @@ export class JobSupervisor {
 
         const availability = this._checkAvailability();
         if (!availability.sourceAvailable) {
-            this._setStatus('waiting-source', availability.message || 'Source unavailable');
+            this.logger.warn(`Source unavailable: ${availability.message || 'unknown'}`);
+            this._setStatus('waiting-source',
+                friendlyError(availability.message || 'Source unavailable'));
             this._scheduleRetry();
             return;
         }
         if (!availability.destAvailable) {
+            this.logger.warn(`Destination unavailable: ${availability.message || 'unknown'}`);
             this._setStatus('waiting-destination',
-                availability.message || 'Destination unavailable');
+                friendlyError(availability.message || 'Destination unavailable'));
             this._scheduleRetry();
             return;
         }
@@ -332,7 +336,7 @@ export class JobSupervisor {
             if (this.job.trigger.mode === TRIGGER_MODES.REALTIME) {
                 this._startRealtime().catch(e => {
                     this.logger.error(`Cannot start realtime sync: ${e.message}`);
-                    this._setStatus('error', e.message);
+                    this._setStatus('error', friendlyError(e));
                     this._scheduleRetry();
                 });
                 this._scheduleReconcile();
@@ -357,15 +361,18 @@ export class JobSupervisor {
             return;
         }
 
-        // Error path.
+        // Error path. The state and notifications use a readable message;
+        // the daemon log keeps the technical cause.
+        const technicalMessage = run.technicalMessage || run.message || 'Unknown error';
         const message = run.message || 'Unknown error';
-        const status = failureStatus(message);
+        const status = failureStatus(technicalMessage);
         this._stopRealtime();
         this._setStatus(status, message);
         this._notify(status, message);
         if (shouldRetryAfterRun(status, this.job.trigger.mode))
             this._scheduleRetry();
-        this.logger.warn(`Run failed (${status}, incremental=${incremental}): ${message}`);
+        this.logger.warn(`Run failed (${status}, incremental=${incremental}): ` +
+            `${technicalMessage}`);
     }
 
     async _runFull({reason = 'manual', dryRun = false, force = false, runId = null,
@@ -463,17 +470,19 @@ export class JobSupervisor {
             logger: this.logger,
             onChange: change => this._queue?.add(change.path, change.kind),
             onUnavailable: () => {
-                this.logger.warn('Source became unavailable');
+                this.logger.warn(`Source became unavailable: ${source}`);
                 this._stopRealtime();
-                this._setStatus('waiting-source', `Source disappeared: ${source}`);
-                this._notify('waiting-source', `Source disappeared: ${source}`);
+                const message = friendlyError(`Source disappeared: ${source}`);
+                this._setStatus('waiting-source', message);
+                this._notify('waiting-source', message);
                 this._scheduleRetry();
             },
             onError: error => {
                 this.logger.warn(`Watcher error: ${error.message}`);
                 this._stopRealtime();
-                this._setStatus('error', error.message);
-                this._notify('error', error.message);
+                const message = friendlyError(error);
+                this._setStatus('error', message);
+                this._notify('error', message);
                 this._scheduleRetry();
             },
         });
@@ -756,10 +765,10 @@ export class JobManager {
     }
 
     start() {
-        this.reload();
+        this.reload({startJobs: this.config.settings.startAtLogin !== false});
     }
 
-    reload() {
+    reload({startJobs = true} = {}) {
         this.stopAll();
         this.pool = new RunPool(Number(this.config.settings.maxConcurrentJobs || 1));
         this.supervisors.clear();
@@ -767,6 +776,18 @@ export class JobManager {
             const supervisor = this._createSupervisor(job);
             this.supervisors.set(job.id, supervisor);
         }
+        for (const supervisor of this.supervisors.values()) {
+            if (startJobs) {
+                supervisor.start({resumeInterrupted: true});
+            } else {
+                supervisor.stop();
+                supervisor._setStatus('stopped', '');
+            }
+        }
+        this.onChange?.();
+    }
+
+    startAll() {
         for (const supervisor of this.supervisors.values())
             supervisor.start({resumeInterrupted: true});
         this.onChange?.();

@@ -97,7 +97,8 @@ export default suite('application/sync-service', [
             options: {maxDeletePercent: 10, maxDeleteMinimum: 0},
         }));
         assertEqual(run.result, 'error');
-        assert(/Delete guard/.test(run.message), run.message);
+        assert(/Deletion blocked/.test(run.message), run.message);
+        assert(/Delete guard/.test(run.technicalMessage), run.technicalMessage);
         assertEqual(ctx.transfer.runs.length, 1);
     }),
     test('full sync reports cancellation and transfer errors', async () => {
@@ -127,7 +128,8 @@ export default suite('application/sync-service', [
         ctx.files.addDir('/dst');
         const run = await ctx.sync.runFull(makeJob('sync'));
         assertEqual(run.result, 'error');
-        assert(/Source does not exist/.test(run.message), run.message);
+        assert(/Source folder not found/.test(run.message), run.message);
+        assert(/Source does not exist/.test(run.technicalMessage), run.technicalMessage);
         assertEqual(ctx.transfer.runs.length, 0);
     }),
     test('full sync refuses an empty source after a non-empty run', async () => {
@@ -136,7 +138,8 @@ export default suite('application/sync-service', [
         ctx.state.setJobState('job_test', {lastSourceFileCount: 5});
         const run = await ctx.sync.runFull(makeJob('sync'));
         assertEqual(run.result, 'error');
-        assert(/Source is empty/.test(run.message), run.message);
+        assert(/source is empty/i.test(run.message), run.message);
+        assert(/Source is empty/.test(run.technicalMessage), run.technicalMessage);
         assertEqual(ctx.transfer.runs.length, 0);
     }),
     test('incremental sync copies upserts, deletes and prunes directories', async () => {
@@ -163,7 +166,8 @@ export default suite('application/sync-service', [
             options: {maxDeletePercent: 0, maxDeleteMinimum: 0},
         }), [{path: '/src/old.txt', kind: 'delete'}]);
         assertEqual(run.result, 'error');
-        assert(/Delete guard/.test(run.message), run.message);
+        assert(/Deletion blocked/.test(run.message), run.message);
+        assert(/Delete guard/.test(run.technicalMessage), run.technicalMessage);
         assertEqual(ctx.transfer.runs.length, 0);
     }),
     test('incremental sync returns noop when nothing survives planning', async () => {
@@ -230,7 +234,8 @@ export default suite('application/sync-service', [
         });
         const maxRun = await maxDelete.sync.runFull(makeJob('sync'), {force: true});
         assertEqual(maxRun.result, 'error');
-        assert(/Delete limit reached/.test(maxRun.message));
+        assert(/Deletion blocked/.test(maxRun.message), maxRun.message);
+        assert(/Delete limit reached/.test(maxRun.technicalMessage));
 
         const unknown = syncContext();
         unknown.transfer.sizeAsync = async () => ({count: Number.NaN, bytes: 0});

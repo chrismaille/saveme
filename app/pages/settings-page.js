@@ -24,6 +24,19 @@ export class SettingsPage {
             this.window.client.pauseAll(this.pauseAllRow.active)
                 .catch(e => this.window.toast(e.message));
         });
+        this.startAtLoginRow = new Adw.SwitchRow({
+            title: t('Start jobs at login'),
+            subtitle: t('Start enabled jobs automatically when the daemon starts.'),
+        });
+        this.blockStartAtLoginUpdate = false;
+        this.startAtLoginRow.connect('notify::active', () => {
+            if (this.blockStartAtLoginUpdate)
+                return;
+            this.window.client.updateSettings({
+                startAtLogin: this.startAtLoginRow.active,
+            }).then(() => this.window.toast(t('Login behaviour updated.')))
+                .catch(e => this.window.toast(e.message));
+        });
         this.maxJobsRow = new Adw.SpinRow({
             title: t('Concurrent jobs'),
             subtitle: t('jobs running at the same time'),
@@ -71,6 +84,7 @@ export class SettingsPage {
         daemonGroup.add(this.statusRow);
         daemonGroup.add(this.rcloneRow);
         daemonGroup.add(this.pauseAllRow);
+        daemonGroup.add(this.startAtLoginRow);
         daemonGroup.add(this.maxJobsRow);
         daemonGroup.add(this.doctorRow);
         daemonGroup.add(this.logsRow);
@@ -190,6 +204,7 @@ export class SettingsPage {
     }
 
     update(snapshot) {
+        const settings = snapshot.settings || {};
         const daemon = snapshot.daemon || {};
         this.statusRow.set_subtitle(t('Running · PID {pid} · started {when}', {
             pid: daemon.pid ?? '?',
@@ -211,8 +226,10 @@ export class SettingsPage {
         this.blockPauseUpdate = true;
         this.pauseAllRow.active = Boolean(snapshot.pausedAll);
         this.blockPauseUpdate = false;
+        this.blockStartAtLoginUpdate = true;
+        this.startAtLoginRow.active = settings.startAtLogin !== false;
+        this.blockStartAtLoginUpdate = false;
         this.versionRow.set_subtitle(snapshot.version || '-');
-        const settings = snapshot.settings || {};
         if (!this.maxJobsDirty) {
             this.blockMaxJobsUpdate = true;
             this.maxJobsRow.value = Math.max(1,

@@ -74,7 +74,7 @@ export default suite('application/run-executor', [
             speed: 0,
             eta: null,
         });
-        assertEqual(progress.percent, 0);
+        assertEqual(progress.percent, 50);
     }),
     test('cleans --config from recorded arguments', () => {
         const {executor} = context();
@@ -213,16 +213,102 @@ export default suite('application/run-executor', [
         await assertThrows(() => executor.checkEmptySource({id: 'job_test'}, 0, false),
             /Source is empty/);
     }),
-    test('friendlyError preserves typed errors and falls back', () => {
+    test('friendlyError maps technical errors and falls back', () => {
         const {executor} = context();
         assertEqual(executor.friendlyError(new Error('plain')), 'plain');
-        assertEqual(executor.friendlyError(new SourceUnavailableError('source')), 'source');
-        assertEqual(executor.friendlyError(new DestinationUnavailableError('dest')), 'dest');
-        assertEqual(executor.friendlyError(new EmptySourceError(2)), executor.friendlyError(
-            new EmptySourceError(2)));
-        assert(executor.friendlyError(new DeleteGuardError(2, 1, 10, 10)).includes('Delete guard'));
-        assertEqual(executor.friendlyError(null), 'null');
+        assert(/Source folder not found/.test(
+            executor.friendlyError(new SourceUnavailableError('Source does not exist'))));
+        assert(/Destination folder not found/.test(
+            executor.friendlyError(new DestinationUnavailableError(
+                'Destination does not exist'))));
+        assert(/source is empty/i.test(
+            executor.friendlyError(new EmptySourceError(2))));
+        assert(/Deletion blocked/.test(
+            executor.friendlyError(new DeleteGuardError(2, 1, 10, 10))));
+        assert(/No internet connection/.test(executor.friendlyError(
+            new Error('dial tcp: lookup graph.microsoft.com: server misbehaving'))));
+        assert(/OneDrive/.test(executor.friendlyError(
+            new Error('unable to get drive_id and drive_type'))));
+        assert(/Not enough free space/.test(executor.friendlyError(
+            new Error('no space left on device'))));
+        assert(/Permission denied/.test(executor.friendlyError(
+            new Error('permission denied'))));
+        assertEqual(executor.friendlyError(null),
+            'Operation failed. Check Logs & Debug for technical details.');
         assertEqual(executor.friendlyError({}), '[object Object]');
+    }),
+    test('smooths progress totals, speed and ETA without going backwards', () => {
+        const {executor, ctx} = context();
+        const first = executor.smoothProgress(ctx, {
+            percent: 40,
+            bytes: 40,
+            totalBytes: 100,
+            files: 4,
+            totalFiles: 10,
+            speed: 10,
+            eta: 6,
+        });
+        assertEqual(first.percent, 40);
+        assertEqual(first.eta, 6);
+        const second = executor.smoothProgress(ctx, {
+            percent: 10,
+            bytes: 10,
+            totalBytes: 50,
+            files: 1,
+            totalFiles: 5,
+            speed: 0,
+            eta: null,
+        });
+        assertEqual(second.bytes, 40);
+        assertEqual(second.totalBytes, 100);
+        assertEqual(second.percent, 40);
+        assertEqual(second.speed, 10);
+        assertEqual(second.eta, 6);
+        const third = executor.smoothProgress(ctx, {
+            percent: 60,
+            bytes: 60,
+            totalBytes: 100,
+            files: 6,
+            totalFiles: 10,
+            speed: 20,
+            eta: 2,
+        });
+        assert(third.percent >= 40);
+        assert(third.speed > 10);
+        assert(third.eta < 6);
+
+        const filesCtx = executor.beginRun(makeJob('sync'), {
+            dryRun: false,
+            reason: 'manual',
+            incremental: false,
+        });
+        const filesProgress = executor.smoothProgress(filesCtx, {
+            percent: 0,
+            bytes: 0,
+            totalBytes: 0,
+            files: 2,
+            totalFiles: 4,
+            speed: 5,
+            eta: null,
+        });
+        assertEqual(filesProgress.percent, 50);
+
+        const noTotalsCtx = executor.beginRun(makeJob('sync'), {
+            dryRun: false,
+            reason: 'manual',
+            incremental: false,
+        });
+        const noTotals = executor.smoothProgress(noTotalsCtx, {
+            percent: 20,
+            bytes: 0,
+            totalBytes: 0,
+            files: 0,
+            totalFiles: 0,
+            speed: 0,
+            eta: null,
+        });
+        assertEqual(noTotals.percent, 20);
+        assertEqual(noTotals.eta, null);
     }),
     test('lists version directories and handles missing/failed roots', async () => {
         const {executor, ctx, transfer} = context();

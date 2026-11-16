@@ -19,11 +19,16 @@ export const JOB_STATUS = {
 export {BACKOFF_MS, nextBackoffDelay} from './retry-policy.js';
 
 export function statusFromError(message) {
-    if (/source.*(unavailable|does not exist|not a directory)|source volume/i.test(message))
+    if (/source.*(unavailable|does not exist|not a directory)|source volume|reading source directory/i
+        .test(message))
         return JOB_STATUS.WAITING_SOURCE;
     if (/destination.*(unavailable|not a directory)|destination volume/i.test(message))
         return JOB_STATUS.WAITING_DESTINATION;
-    if (/auth|token|unauthorized|forbidden|\b401\b|\b403\b|reauth/i.test(message))
+    if (/no such host|server misbehaving|network is unreachable|no route to host|connection refused|i\/o timeout|temporary failure in name resolution/i
+        .test(message))
+        return JOB_STATUS.OFFLINE;
+    if (/auth|token|unauthorized|forbidden|\b401\b|\b403\b|reauth|invalid_grant|access_denied|drive_id|drive_type|oauth|permission denied/i
+        .test(message))
         return JOB_STATUS.NEEDS_AUTH;
     if (/Delete guard/i.test(message))
         return JOB_STATUS.DELETE_GUARD;

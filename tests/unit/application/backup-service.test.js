@@ -146,7 +146,8 @@ export default suite('application/backup-service', [
         services.state.setJobState('job_test', {lastSourceFileCount: 5});
         const run = await services.backup.runFull(job);
         assertEqual(run.result, 'error');
-        assert(/Source is empty/.test(run.message), run.message);
+        assert(/source is empty/i.test(run.message), run.message);
+        assert(/Source is empty/.test(run.technicalMessage), run.technicalMessage);
         assertEqual(services.transfer.runs.length, 0);
     }),
     test('incremental backup copies upserts and moves deletes to versions', async () => {

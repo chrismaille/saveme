@@ -1,6 +1,7 @@
+import Clutter from 'gi://Clutter';
+import Pango from 'gi://Pango';
 import St from 'gi://St';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
-import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {
     displayStatus,
     progressView,
@@ -10,6 +11,7 @@ import {
     typeLabel,
 } from '../presentation.js';
 import {ProgressBar} from './progress-bar.js';
+import {t} from '../i18n.js';
 
 export class JobRow {
     constructor(extension, job) {
@@ -21,7 +23,11 @@ export class JobRow {
             hover: false,
         });
 
-        this.box = new St.BoxLayout({vertical: true, style_class: 'saveme-job-row'});
+        this.box = new St.BoxLayout({
+            vertical: true,
+            style_class: 'saveme-job-row',
+            x_expand: true,
+        });
         this.item.add_child(this.box);
 
         this.top = new St.BoxLayout({vertical: false, style_class: 'saveme-job-top'});
@@ -30,15 +36,19 @@ export class JobRow {
             icon_size: 16,
             style_class: 'saveme-status-icon saveme-status-idle',
         });
+        this._statusSpin = null;
         this.name = new St.Label({text: job.name, style_class: 'saveme-job-name', x_expand: true});
+        this.name.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         this.top.add_child(this.statusIcon);
         this.top.add_child(this.name);
         this.box.add_child(this.top);
 
         this.meta = new St.Label({text: '', style_class: 'saveme-job-meta'});
+        this.meta.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         this.box.add_child(this.meta);
 
         this.detail = new St.Label({text: '', style_class: 'saveme-job-detail'});
+        this.detail.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         this.box.add_child(this.detail);
 
         this.progressBar = new ProgressBar();
@@ -54,13 +64,13 @@ export class JobRow {
         this.box.add_child(this.progress);
 
         this.actions = new St.BoxLayout({vertical: false, style_class: 'saveme-actions'});
-        this.runButton = this._button('media-playback-start-symbolic', _('Play'), () => {
+        this.runButton = this._button('media-playback-start-symbolic', t('Play'), () => {
             extension.playJob(job.id);
         });
-        this.pauseButton = this._button('media-playback-pause-symbolic', _('Pause'), () => {
+        this.pauseButton = this._button('media-playback-pause-symbolic', t('Pause'), () => {
             extension.pauseJob(job.id, true);
         });
-        this.cancelButton = this._button('media-playback-stop-symbolic', _('Stop'), () => {
+        this.cancelButton = this._button('media-playback-stop-symbolic', t('Stop'), () => {
             extension.cancelJob(job.id);
         });
         this.cancelButton.add_style_class_name('saveme-stop-button');
@@ -90,6 +100,34 @@ export class JobRow {
         this.statusIcon.icon_name = statusIconName(status);
         this.statusIcon.style_class =
             `saveme-status-icon saveme-status-${status}`;
+        const active = ['running', 'checking', 'finalizing'].includes(status);
+        if (active)
+            this._startSpin();
+        else
+            this._stopSpin();
+    }
+
+    _startSpin() {
+        if (this._statusSpin)
+            return;
+        const spin = new Clutter.PropertyTransition({
+            property_name: 'rotation-angle-z',
+            duration: 1400,
+            repeat_count: -1,
+            progress_mode: Clutter.AnimationMode.LINEAR,
+        });
+        spin.set_from(0);
+        spin.set_to(360);
+        this.statusIcon.add_transition('saveme-status-spin', spin);
+        this._statusSpin = spin;
+    }
+
+    _stopSpin() {
+        if (!this._statusSpin)
+            return;
+        this.statusIcon.remove_transition('saveme-status-spin');
+        this.statusIcon.rotation_angle_z = 0;
+        this._statusSpin = null;
     }
 
     update(job) {
@@ -97,12 +135,12 @@ export class JobRow {
         const state = job.state || {};
         const display = displayStatus(state.status, state.progress?.phase);
         this.name.text = job.name || job.id;
-        this.meta.text = `${typeLabel(job.type)} · ${statusLabel(display)}`;
+        this.meta.text = `${typeLabel(job.type, t)} · ${statusLabel(display, t)}`;
         this.meta.style_class = `saveme-job-meta saveme-status-${display}`;
         this._setStatusIcon(display);
-        this.detail.text = statusDetail(job, {translate: _});
+        this.detail.text = statusDetail(job, {translate: t});
 
-        const progress = progressView(state);
+        const progress = progressView(state, {translate: t});
         this.progress.text = progress.text;
         this.progress.visible = progress.visible && Boolean(progress.text);
         this.fileLabel.text = progress.file;

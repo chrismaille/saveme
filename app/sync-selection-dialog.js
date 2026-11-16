@@ -5,6 +5,7 @@ import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
 import {normalizeIncludes} from '../src/domain/include-filter.js';
 import {formatBytes} from './presentation/format.js';
+import {t} from '../src/i18n.js';
 
 function readRootEntries(rootPath) {
     const file = Gio.File.new_for_path(rootPath);
@@ -49,7 +50,7 @@ export const SyncSelectionDialog = GObject.registerClass({
         super({
             transient_for: transientFor || parentWindow,
             modal: true,
-            title: 'Select sync content',
+            title: t('Select sync content'),
             default_width: 640,
             default_height: 640,
         });
@@ -67,11 +68,11 @@ export const SyncSelectionDialog = GObject.registerClass({
     _build() {
         const toolbar = new Adw.ToolbarView();
         const header = new Adw.HeaderBar();
-        const close = new Gtk.Button({label: 'Cancel'});
+        const close = new Gtk.Button({label: t('Cancel')});
         close.connect('clicked', () => this.close());
         header.pack_start(close);
         this.applyButton = new Gtk.Button({
-            label: 'Apply',
+            label: t('Apply'),
             css_classes: ['suggested-action'],
         });
         this.applyButton.connect('clicked', () => this._apply());
@@ -83,8 +84,8 @@ export const SyncSelectionDialog = GObject.registerClass({
             spacing: 8,
         });
         this.noteLabel = new Gtk.Label({
-            label: 'Selected folders include their descendants. Exclude filters ' +
-                'still apply inside them.',
+            label: t('Selected folders include their descendants. Exclude filters ' +
+                'still apply inside them.'),
             xalign: 0,
             wrap: true,
             margin_start: 16,
@@ -93,7 +94,7 @@ export const SyncSelectionDialog = GObject.registerClass({
             css_classes: ['dim-label'],
         });
         this.rootLabel = new Gtk.Label({
-            label: this.rootPath || 'No source selected',
+            label: this.rootPath || t('No source selected'),
             xalign: 0,
             ellipsize: Pango.EllipsizeMode.END,
             margin_start: 16,
@@ -101,7 +102,7 @@ export const SyncSelectionDialog = GObject.registerClass({
             css_classes: ['saveme-sidebar-paths'],
         });
         this.search = new Gtk.SearchEntry({
-            placeholder_text: 'Filter root items…',
+            placeholder_text: t('Filter root items…'),
             margin_start: 16,
             margin_end: 16,
         });
@@ -113,9 +114,9 @@ export const SyncSelectionDialog = GObject.registerClass({
             margin_start: 16,
             margin_end: 16,
         });
-        const selectAll = new Gtk.Button({label: 'Select all'});
+        const selectAll = new Gtk.Button({label: t('Select all')});
         selectAll.connect('clicked', () => this._setAll(true));
-        const clear = new Gtk.Button({label: 'Clear'});
+        const clear = new Gtk.Button({label: t('Clear')});
         clear.connect('clicked', () => this._setAll(false));
         buttons.append(selectAll);
         buttons.append(clear);
@@ -135,7 +136,7 @@ export const SyncSelectionDialog = GObject.registerClass({
         content.append(this.errorLabel);
 
         this.page = new Adw.PreferencesPage({vexpand: true});
-        this.group = new Adw.PreferencesGroup({title: 'Root content'});
+        this.group = new Adw.PreferencesGroup({title: t('Root content')});
         this.page.add(this.group);
         content.append(this.page);
         toolbar.set_content(content);
@@ -145,7 +146,7 @@ export const SyncSelectionDialog = GObject.registerClass({
     _load() {
         try {
             if (!this.rootPath)
-                throw new Error('Choose a local source folder first.');
+                throw new Error(t('Choose a local source folder first.'));
             this._entries = readRootEntries(this.rootPath);
             this._render();
         } catch (e) {
@@ -163,7 +164,7 @@ export const SyncSelectionDialog = GObject.registerClass({
             });
             const row = new Adw.ActionRow({
                 title: entry.name,
-                subtitle: entry.isDir ? 'Folder' : formatBytes(entry.size),
+                subtitle: entry.isDir ? t('Folder') : formatBytes(entry.size),
             });
             row.add_prefix(new Gtk.Image({
                 icon_name: entry.isDir
@@ -181,7 +182,7 @@ export const SyncSelectionDialog = GObject.registerClass({
         for (const {row} of rows)
             this.group.add(row);
         if (rows.length === 0)
-            this._showError('This source folder is empty.');
+            this._showError(t('This source folder is empty.'));
         this._filterRows();
     }
 
@@ -209,7 +210,7 @@ export const SyncSelectionDialog = GObject.registerClass({
             .filter(entry => entry.check.active)
             .map(entry => entry.entry.name);
         if (this._entries.length === 0 || active.length === 0) {
-            this._showError('Select at least one folder or file.');
+            this._showError(t('Select at least one folder or file.'));
             return;
         }
         const all = active.length === this._entries.length;
