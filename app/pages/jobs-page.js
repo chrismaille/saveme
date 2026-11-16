@@ -4,6 +4,7 @@ import Adw from 'gi://Adw?version=1';
 import Gio from 'gi://Gio';
 import {JOB_TYPES, descriptorDisplay, jobSources, localPathFor} from '../../src/jobs.js';
 import {triggerLabel} from '../../src/domain/schedule.js';
+import {t} from '../../src/i18n.js';
 import {RecoverDialog} from '../recover-dialog.js';
 import {
     backupRootDisplay,
@@ -266,7 +267,8 @@ export class JobsPage {
         if (display === 'checking') {            const listed = Number(progress?.listed || 0);
             return listed > 0
                 ? `Checking · ${listed.toLocaleString()} files`
-                : 'Checking · preparing backup';
+                : `Checking · preparing ${job.type === JOB_TYPES.BACKUP
+                    ? 'backup' : 'sync'}`;
         }
         if (display === 'running' && progress) {
             return `${Math.round(progress.percent || 0)}% · ` +
@@ -376,7 +378,7 @@ export class JobsPage {
         scroll.set_child(clamp);
 
         const state = job.state || {};
-        const statusGroup = new Adw.PreferencesGroup({title: 'Status'});
+        const statusGroup = new Adw.PreferencesGroup({title: t('Status')});
         const statusRow = new Adw.ActionRow({
             title: job.name || job.id,
             subtitle: job.draft ? 'Draft · continue setup'
@@ -454,72 +456,62 @@ export class JobsPage {
         statusGroup.add(progressBox);
         page.add(statusGroup);
 
-        const paths = new Adw.PreferencesGroup({title: 'Source and destination'});
+        const sourceGroup = new Adw.PreferencesGroup({title: t('Source')});
         const sources = jobSources(job);
         for (const [index, source] of sources.entries()) {
             const sourceRow = new Adw.ActionRow({
-                title: sources.length > 1 ? `Source ${index + 1}` : 'Source',
+                title: sources.length > 1 ? `${t('Source')} ${index + 1}` : t('Source'),
                 subtitle: descriptorDisplay(source, this.window.volumes),
             });
-            const sourceOpen = iconLabelButton('Open', 'folder-open-symbolic', {
+            const sourceOpen = iconLabelButton(t('Open'), 'folder-open-symbolic', {
                 cssClasses: ['flat'],
             });
             sourceOpen.connect('clicked', () => this.window.openSource(job, source));
             sourceRow.add_suffix(sourceOpen);
-            paths.add(sourceRow);
+            sourceGroup.add(sourceRow);
         }
+        page.add(sourceGroup);
+
+        const destinationGroup = new Adw.PreferencesGroup({title: t('Destination')});
         const destinationRow = new Adw.ActionRow({
-            title: 'Destination base',
+            title: t('Destination base'),
             subtitle: this._destinationLabel(job),
         });
-        const destinationOpen = iconLabelButton('Open', 'folder-open-symbolic', {
+        const destinationOpen = iconLabelButton(t('Open'), 'folder-open-symbolic', {
             cssClasses: ['flat'],
         });
         destinationOpen.connect('clicked', () => this.window.openDestination(job));
         destinationRow.add_suffix(destinationOpen);
-        paths.add(destinationRow);
+        this._addRemoteWebButton(destinationRow, job, job.destination.path || '');
+        destinationGroup.add(destinationRow);
         if (job.type === JOB_TYPES.BACKUP) {
             const backupRow = new Adw.ActionRow({
-                title: 'Backup folder',
+                title: t('Backup folder'),
                 subtitle: backupRootDisplay(job),
             });
-            const backupOpen = iconLabelButton('Open', 'folder-open-symbolic', {
+            const backupOpen = iconLabelButton(t('Open'), 'folder-open-symbolic', {
                 cssClasses: ['flat'],
             });
             backupOpen.connect('clicked', () => this.window.openBackupRoot(job));
             backupRow.add_suffix(backupOpen);
-            paths.add(backupRow);
+            this._addRemoteWebButton(backupRow, job, this._jobFolderPath(job));
+            destinationGroup.add(backupRow);
         } else if (job.destinationLayout !== 'direct') {
             const syncRow = new Adw.ActionRow({
-                title: 'Sync folder',
+                title: t('Sync folder'),
                 subtitle: `${backupRootDisplay(job)}/current`,
             });
-            const syncOpen = iconLabelButton('Open', 'folder-open-symbolic', {
+            const syncOpen = iconLabelButton(t('Open'), 'folder-open-symbolic', {
                 cssClasses: ['flat'],
             });
             syncOpen.connect('clicked', () => this.window.openBackupRoot(job));
             syncRow.add_suffix(syncOpen);
-            paths.add(syncRow);
+            this._addRemoteWebButton(syncRow, job, this._jobFolderPath(job));
+            destinationGroup.add(syncRow);
         }
-        page.add(paths);
+        page.add(destinationGroup);
 
-        const stats = new Adw.PreferencesGroup({title: 'Statistics'});
-        const statsRows = {
-            files: this._statRow('Files'),
-            data: this._statRow('Data'),
-            speed: this._statRow('Speed / ETA'),
-            machineCpu: this._statRow('Machine CPU'),
-            machineMemory: this._statRow('Machine memory'),
-            deletes: this._statRow('Deletes / errors'),
-            free: this._statRow('Destination free'),
-            last: this._statRow('Last backup'),
-            message: this._statRow('Message'),
-        };
-        for (const row of Object.values(statsRows))
-            stats.add(row);
-        page.add(stats);
-
-        const actions = new Adw.PreferencesGroup({title: 'Actions'});
+        const actions = new Adw.PreferencesGroup({title: t('Actions')});
         const flow = new Gtk.FlowBox({
             selection_mode: Gtk.SelectionMode.NONE,
             max_children_per_line: 4,
@@ -535,43 +527,59 @@ export class JobsPage {
             return button;
         };
         if (job.draft) {
-            addAction('Continue setup', 'document-edit-symbolic', ['suggested-action'],
+            addAction(t('Continue setup'), 'document-edit-symbolic', ['suggested-action'],
                 () => this.window.editJob(job));
         }
-        const dryRunButton = addAction('Dry run', 'system-run-symbolic', [], () => {
+        const dryRunButton = addAction(t('Dry run'), 'system-run-symbolic', [], () => {
             this.window.client.runJob(job.id, true)
-                .then(() => this.window.toast('Dry run started. Check Logs.'))
+                .then(() => this.window.toast(t('Dry run started. Check Logs.')))
                 .catch(e => this.window.toast(e.message));
         });
         if (job.draft)
             dryRunButton.visible = false;
         if (!job.draft)
-            addAction('Edit', 'document-edit-symbolic', [], () => this.window.editJob(job));
-        addAction('Logs', 'text-x-generic-symbolic', [], () => this.window.openLogs(job.id));
+            addAction(t('Edit'), 'document-edit-symbolic', [], () => this.window.editJob(job));
+        addAction(t('Logs'), 'text-x-generic-symbolic', [], () => this.window.openLogs(job.id));
         if (job.type === JOB_TYPES.BACKUP && !job.draft) {
-            addAction('Versions / restore', 'document-revert-symbolic', [],
+            addAction(t('Versions / restore'), 'document-revert-symbolic', [],
                 () => this.window.openVersions(job));
         }
-        addAction('Delete', 'edit-delete-symbolic', ['destructive-action'],
+        addAction(t('Delete'), 'edit-delete-symbolic', ['destructive-action'],
             () => this._confirmDeleteJob(job));
         actions.add(flow);
         page.add(actions);
 
-        const configuration = new Adw.PreferencesGroup({title: 'Configuration'});
-        configuration.add(this._statRow('Schedule', triggerLabel(job.trigger)));
-        configuration.add(this._statRow('Delete guard',
+        const configuration = new Adw.PreferencesGroup({title: t('Configuration')});
+        configuration.add(this._statRow(t('Schedule'), triggerLabel(job.trigger)));
+        configuration.add(this._statRow(t('Delete guard'),
             `${job.options.maxDeletePercent}% (minimum ${job.options.maxDeleteMinimum})`));
         if (job.type === JOB_TYPES.BACKUP) {
-            configuration.add(this._statRow('Retention',
+            configuration.add(this._statRow(t('Retention'),
                 job.backup.keepForever || job.backup.retentionDays === 0
-                    ? 'keep versions forever'
-                    : `${job.backup.retentionDays} days`));
+                    ? t('keep versions forever')
+                    : `${job.backup.retentionDays} ${t('days')}`));
         }
         if (job.filters.exclude?.length) {
-            configuration.add(this._statRow('Excludes',
+            configuration.add(this._statRow(t('Excludes'),
                 job.filters.exclude.join(', ')));
         }
         page.add(configuration);
+
+        const stats = new Adw.PreferencesGroup({title: t('Statistics')});
+        const statsRows = {
+            files: this._statRow(t('Files')),
+            data: this._statRow(t('Data')),
+            speed: this._statRow(t('Speed / ETA')),
+            machineCpu: this._statRow(t('Machine CPU')),
+            machineMemory: this._statRow(t('Machine memory')),
+            deletes: this._statRow(t('Deletes / errors')),
+            free: this._statRow(t('Destination free')),
+            last: this._statRow(t('Last backup')),
+            message: this._statRow(t('Message')),
+        };
+        for (const row of Object.values(statsRows))
+            stats.add(row);
+        page.add(stats);
 
         this.detail = {
             jobId: job.id,
@@ -600,6 +608,62 @@ export class JobsPage {
         }
         const path = descriptorDisplay(destination, this.window.volumes) || '-';
         return `${service} · ${path} (base)`;
+    }
+
+    _jobFolderPath(job) {
+        const suffix = job.type === JOB_TYPES.BACKUP
+            ? `SaveMe/${job.id}`
+            : `SaveMe/${job.id}/current`;
+        const base = String(job.destination?.path || '').replace(/^\/+|\/+$/g, '');
+        return base ? `${base}/${suffix}` : suffix;
+    }
+
+    _remoteWebUrl(job, relativePath = '') {
+        const destination = job.destination;
+        if (destination?.kind !== 'remote')
+            return null;
+        const remote = (this.window.snapshot?.remotes || [])
+            .find(item => item.name === destination.remote);
+        const type = remote?.type;
+        const path = String(relativePath || '').replace(/^\/+|\/+$/g, '');
+        const encoded = path.split('/').filter(Boolean)
+            .map(part => encodeURIComponent(part)).join('/');
+        if (type === 'dropbox')
+            return `https://www.dropbox.com/home/${encoded}`;
+        if (type === 'drive') {
+            return 'https://drive.google.com/drive/search?q=' +
+                encodeURIComponent(path || 'SaveMe');
+        }
+        if (type === 'onedrive') {
+            const business = remote?.options?.drive_type === 'business';
+            return business
+                ? 'https://www.microsoft365.com/search/overview?q=' +
+                    encodeURIComponent(path || 'SaveMe')
+                : 'https://onedrive.live.com/?qt=search&query=' +
+                    encodeURIComponent(path || 'SaveMe');
+        }
+        return null;
+    }
+
+    _addRemoteWebButton(row, job, relativePath) {
+        if (job.destination?.kind !== 'remote')
+            return;
+        const url = this._remoteWebUrl(job, relativePath);
+        if (!url)
+            return;
+        const remote = (this.window.snapshot?.remotes || [])
+            .find(item => item.name === job.destination.remote);
+        const button = iconButton('web-browser-symbolic',
+            `Open in ${remoteTypeLabel(remote?.type || 'cloud')}`,
+            {cssClasses: ['flat'], pixelSize: 18});
+        button.connect('clicked', () => {
+            try {
+                Gio.AppInfo.launch_default_for_uri(url, null);
+            } catch (e) {
+                this.window.toast(e.message);
+            }
+        });
+        row.add_suffix(button);
     }
 
     _play(job) {
@@ -711,7 +775,7 @@ export class JobsPage {
             const listed = Number(progress.listed || 0);
             this.detail.headlineEta.set_text(listed > 0
                 ? `${listed.toLocaleString()} files checked`
-                : 'Preparing backup…');
+                : `Preparing ${job.type === JOB_TYPES.BACKUP ? 'backup' : 'sync'}…`);
             this.detail.progress.visible = true;
             this.detail.progress.pulse();
             const currentPath = progress.currentPath || progress.currentFile;

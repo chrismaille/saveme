@@ -92,6 +92,10 @@ export class SaveMeDaemonClient {
         this._call('RunJob', new GLib.Variant('(sbb)', [jobId, false, false]));
     }
 
+    playJob(jobId) {
+        this._call('PlayJob', new GLib.Variant('(s)', [jobId]));
+    }
+
     cancelJob(jobId) {
         this._call('CancelJob', new GLib.Variant('(s)', [jobId]));
     }

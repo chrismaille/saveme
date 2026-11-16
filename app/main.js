@@ -177,7 +177,8 @@ const SaveMeApplication = GObject.registerClass({
                 selected: [],
             });
             selector.close();
-            for (const view of ['jobs', 'accounts', 'logs', 'settings', 'debug'])
+            for (const view of ['jobs', 'accounts', 'settings', 'diagnostics',
+                'logs', 'debug', 'about'])
                 this._window.showView(view);
         } catch (e) {
             this._failSmoke(`cannot show views: ${e.message}`);

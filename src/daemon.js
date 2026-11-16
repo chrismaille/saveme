@@ -88,6 +88,7 @@ export const SaveMeDaemonApplication = GObject.registerClass({
 
     vfunc_startup() {
         super.vfunc_startup();
+        GLib.set_application_name('SaveMe');
         ensureDir(stateDir(), 0o700);
         this._logger = new Logger({
             name: 'daemon',

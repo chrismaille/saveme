@@ -109,8 +109,8 @@ if grep -qiE 'Gjs-CRITICAL|JS ERROR|Extension .*Error' "$BASE/shell.log"; then
     exit 1
 fi
 
-if ! grep -q 'hello' "$BASE/dst/a.txt" 2>/dev/null; then
-    echo "Daemon did not sync the E2E file" >&2
+if ! grep -Rqs 'hello' "$BASE/dst/SaveMe" 2>/dev/null; then
+    echo "Daemon did not sync the E2E file into SaveMe" >&2
     tail -n 60 "$BASE/daemon.log" >&2
     exit 1
 fi

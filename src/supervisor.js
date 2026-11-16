@@ -12,6 +12,7 @@ import {
 import {cancelledStatus, failureStatus, idleStatus} from './domain/job-state-machine.js';
 import {RetryPolicy} from './domain/retry-policy.js';
 import {Scheduler} from './application/scheduler.js';
+import {t} from './i18n.js';
 
 export class RunPool {
     constructor(limit = 1) {
@@ -278,6 +279,8 @@ export class JobSupervisor {
     }
 
     _notify(status, message) {
+        if (this.job.type !== JOB_TYPES.BACKUP)
+            return;
         if (status === 'idle' || status === 'disabled')
             return;
         const key = `${status}:${message}`;
@@ -285,14 +288,14 @@ export class JobSupervisor {
             return;
         this._lastNotifyKey = key;
         const titles = {
-            'error': 'SaveMe: job failed',
-            'waiting-source': 'SaveMe: source unavailable',
-            'waiting-destination': 'SaveMe: destination unavailable',
-            'waiting-idle': 'SaveMe: waiting for the computer to be idle',
-            'needs-auth': 'SaveMe: authentication required',
-            'delete-guard': 'SaveMe: deletion blocked',
-            'paused': 'SaveMe: job paused',
-            'success': 'SaveMe: backup completed',
+            'error': t('Backup failed'),
+            'waiting-source': 'Backup source unavailable',
+            'waiting-destination': 'Backup destination unavailable',
+            'waiting-idle': 'Backup waiting for the computer to be idle',
+            'needs-auth': 'Backup needs authentication',
+            'delete-guard': 'Backup deletion blocked',
+            'paused': 'Backup paused',
+            'success': t('Backup completed successfully'),
         };
         this.onNotify?.({
             job: this.job,
@@ -344,9 +347,12 @@ export class JobSupervisor {
             this._setIdleStatus();
             if (run.kind === 'backup' && this.job.options?.notifyOnComplete !== false) {
                 const stats = run.stats || {};
-                this._notify('success',
-                    `${this.job.name || this.job.id}: ${stats.transfers || 0} file(s), ` +
-                    `${humanBytes(stats.bytes || 0)}`);
+                const files = Number(stats.transfers || 0);
+                const bytes = Number(stats.bytes || 0);
+                const detail = files === 0 && bytes === 0
+                    ? t('No files were changed.')
+                    : `${files.toLocaleString()} ${t('files')} · ${humanBytes(bytes)}`;
+                this._notify('success', `${this.job.name || this.job.id} · ${detail}`);
             }
             return;
         }

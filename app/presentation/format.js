@@ -1,3 +1,5 @@
+import {t} from '../../src/i18n.js';
+
 export const STATUS_LABELS = {
     'idle': 'Idle',
     'running': 'Running',
@@ -68,7 +70,7 @@ export function backupRootDisplay(job) {
 }
 
 export function statusLabel(status) {
-    return STATUS_LABELS[status] || status || 'Idle';
+    return t(STATUS_LABELS[status] || status || 'Idle');
 }
 
 export function displayStatus(status, phase = null) {
@@ -156,7 +158,7 @@ export function statusIconName(status) {
 }
 
 export function typeLabel(type) {
-    return type === 'backup' ? 'Backup' : 'Sync';
+    return type === 'backup' ? t('Backup') : t('Sync');
 }
 
 export function remoteTypeLabel(type) {

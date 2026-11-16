@@ -2,8 +2,8 @@ import GLib from 'gi://GLib';
 import system from 'system';
 import {removeRecursive} from '../src/util.js';
 import utilSuite from './unit/util.test.js';
-import jobsSuite from './unit/jobs.test.js';
-import queueSuite from './unit/queue.test.js';
+import i18nSuite from './unit/i18n.test.js';
+import jobsSuite from './unit/jobs.test.js';import queueSuite from './unit/queue.test.js';
 import configSuite from './unit/config.test.js';
 import objectSuite from './unit/domain/object.test.js';
 import timeSuite from './unit/domain/time.test.js';
@@ -52,6 +52,9 @@ import appLogSuite from './unit/app/app-log.test.js';
 import appSoakSuite from './unit/app/soak.test.js';
 import runnerSuite from './integration/runner.test.js';
 import watcherSuite from './integration/watcher.test.js';
+import {setLanguage} from '../src/i18n.js';
+
+setLanguage('en');
 
 const base = GLib.dir_make_tmp('saveme-tests-XXXXXX');
 GLib.setenv('XDG_CONFIG_HOME', `${base}/config`, true);
@@ -61,6 +64,7 @@ GLib.setenv('XDG_RUNTIME_DIR', `${base}/run`, true);
 
 const suites = [
     utilSuite,
+    i18nSuite,
     jobsSuite,
     queueSuite,
     configSuite,

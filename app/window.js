@@ -4,6 +4,7 @@ import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
 import {JobEditor} from './job-editor.js';
 import {AccountDialog} from './account-dialog.js';
+import {t} from '../src/i18n.js';
 import {RestoreDialog} from './restore-dialog.js';
 import {LogDialog} from './log-dialog.js';
 import {RemoteBrowserDialog} from './remote-browser.js';
@@ -16,6 +17,8 @@ import {AccountsPage} from './pages/accounts-page.js';
 import {LogsPage} from './pages/logs-page.js';
 import {SettingsPage} from './pages/settings-page.js';
 import {DebugPage} from './pages/debug-page.js';
+import {DiagnosticsPage} from './diagnostics-page.js';
+import {AboutPage} from './pages/about-page.js';
 
 const APP_DIR = GLib.path_get_dirname(GLib.filename_from_uri(import.meta.url)[0]);
 const ROOT_DIR = GLib.build_filenamev([APP_DIR, '..']);
@@ -74,14 +77,14 @@ export const SaveMeWindow = GObject.registerClass({
 
         const newJob = new Gtk.Button({
             icon_name: 'list-add-symbolic',
-            tooltip_text: 'New job',
+            tooltip_text: t('New job'),
             css_classes: ['flat'],
         });
         newJob.connect('clicked', () => this.newJob());
         header.pack_end(newJob);
         const refresh = new Gtk.Button({
             icon_name: 'view-refresh-symbolic',
-            tooltip_text: 'Refresh',
+            tooltip_text: t('Refresh'),
             css_classes: ['flat'],
         });
         refresh.connect('clicked', () => this.refresh());
@@ -92,16 +95,19 @@ export const SaveMeWindow = GObject.registerClass({
         this.logsPage = new LogsPage(this);
         this.settingsPage = new SettingsPage(this);
         this.debugPage = new DebugPage(this);
-        const jobsPage = this.stack.add_titled(this.jobsPage.widget, 'jobs', 'Jobs');
+        this.diagnosticsPage = new DiagnosticsPage(this, this.logsPage, this.debugPage);
+        this.aboutPage = new AboutPage(this);
+        const jobsPage = this.stack.add_titled(this.jobsPage.widget, 'jobs', t('Jobs'));
         jobsPage.set_icon_name('view-list-symbolic');
-        const accountsPage = this.stack.add_titled(this.accountsPage.widget, 'accounts', 'Accounts');
+        const accountsPage = this.stack.add_titled(this.accountsPage.widget, 'accounts', t('Accounts'));
         accountsPage.set_icon_name('system-users-symbolic');
-        const logsPage = this.stack.add_titled(this.logsPage.widget, 'logs', 'Logs');
-        logsPage.set_icon_name('text-x-generic-symbolic');
-        const settingsPage = this.stack.add_titled(this.settingsPage.widget, 'settings', 'Settings');
+        const settingsPage = this.stack.add_titled(this.settingsPage.widget, 'settings', t('Settings'));
         settingsPage.set_icon_name('emblem-system-symbolic');
-        const debugPage = this.stack.add_titled(this.debugPage.widget, 'debug', 'Debug');
-        debugPage.set_icon_name('utilities-terminal-symbolic');
+        const diagnosticsPage = this.stack.add_titled(this.diagnosticsPage.widget,
+            'diagnostics', t('Logs & Debug'));
+        diagnosticsPage.set_icon_name('utilities-terminal-symbolic');
+        const aboutPage = this.stack.add_titled(this.aboutPage.widget, 'about', t('About'));
+        aboutPage.set_icon_name('help-about-symbolic');
 
         const toolbar = new Adw.ToolbarView();
         toolbar.add_top_bar(header);
@@ -137,6 +143,7 @@ export const SaveMeWindow = GObject.registerClass({
         this.logsPage.update(snapshot);
         this.settingsPage.update(snapshot);
         this.debugPage.update(snapshot);
+        this.aboutPage.update(snapshot);
     }
 
     _showDaemonError(error) {
@@ -203,14 +210,22 @@ export const SaveMeWindow = GObject.registerClass({
     }
 
     showView(name, jobId = null) {
-        if (['jobs', 'accounts', 'logs', 'settings', 'debug'].includes(name))
+        if (['jobs', 'accounts', 'settings', 'diagnostics', 'about'].includes(name))
             this.stack.set_visible_child_name(name);
+        if (name === 'logs' || name === 'debug') {
+            this.stack.set_visible_child_name('diagnostics');
+            this.diagnosticsPage.show(name);
+        }
+        if (name === 'diagnostics')
+            this.diagnosticsPage.show();
         if (name === 'logs' && jobId)
             this.logsPage.selectJob(jobId);
         if (name === 'logs')
             this.logsPage.onShown();
         if (name === 'debug')
             this.debugPage.onShown();
+        if (name === 'diagnostics')
+            this.diagnosticsPage.onShown();
     }
 
     newJob() {

@@ -2,10 +2,12 @@ import St from 'gi://St';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {
-    jobDetail,
+    displayStatus,
     progressView,
+    statusDetail,
     statusIconName,
     statusLabel,
+    typeLabel,
 } from '../presentation.js';
 import {ProgressBar} from './progress-bar.js';
 
@@ -29,11 +31,12 @@ export class JobRow {
             style_class: 'saveme-status-icon saveme-status-idle',
         });
         this.name = new St.Label({text: job.name, style_class: 'saveme-job-name', x_expand: true});
-        this.status = new St.Label({text: '', style_class: 'saveme-job-status'});
         this.top.add_child(this.statusIcon);
         this.top.add_child(this.name);
-        this.top.add_child(this.status);
         this.box.add_child(this.top);
+
+        this.meta = new St.Label({text: '', style_class: 'saveme-job-meta'});
+        this.box.add_child(this.meta);
 
         this.detail = new St.Label({text: '', style_class: 'saveme-job-detail'});
         this.box.add_child(this.detail);
@@ -47,26 +50,23 @@ export class JobRow {
         });
         this.box.add_child(this.fileLabel);
 
-        this.progress = new St.Label({text: '', style_class: 'saveme-job-detail'});
+        this.progress = new St.Label({text: '', style_class: 'saveme-job-progress-text'});
         this.box.add_child(this.progress);
 
         this.actions = new St.BoxLayout({vertical: false, style_class: 'saveme-actions'});
-        this.runButton = this._button('media-playback-start-symbolic', _('Run now'), () => {
-            extension.runJob(job.id);
+        this.runButton = this._button('media-playback-start-symbolic', _('Play'), () => {
+            extension.playJob(job.id);
         });
         this.pauseButton = this._button('media-playback-pause-symbolic', _('Pause'), () => {
-            extension.pauseJob(job.id, !this.job.state?.paused);
+            extension.pauseJob(job.id, true);
         });
-        this.cancelButton = this._button('process-stop-symbolic', _('Stop and pause'), () => {
+        this.cancelButton = this._button('media-playback-stop-symbolic', _('Stop'), () => {
             extension.cancelJob(job.id);
         });
-        this.logsButton = this._button('document-open-symbolic', _('Logs'), () => {
-            extension.openLogs(job.id);
-        });
+        this.cancelButton.add_style_class_name('saveme-stop-button');
         this.actions.add_child(this.runButton);
         this.actions.add_child(this.pauseButton);
         this.actions.add_child(this.cancelButton);
-        this.actions.add_child(this.logsButton);
         this.box.add_child(this.actions);
 
         this.update(job);
@@ -95,31 +95,28 @@ export class JobRow {
     update(job) {
         this.job = job;
         const state = job.state || {};
-        const status = state.status || 'idle';
+        const display = displayStatus(state.status, state.progress?.phase);
         this.name.text = job.name || job.id;
-        this.status.text = statusLabel(status);
-        this._setStatusIcon(status);
-        this.detail.text = jobDetail(job, {translate: _});
+        this.meta.text = `${typeLabel(job.type)} · ${statusLabel(display)}`;
+        this.meta.style_class = `saveme-job-meta saveme-status-${display}`;
+        this._setStatusIcon(display);
+        this.detail.text = statusDetail(job, {translate: _});
 
         const progress = progressView(state);
         this.progress.text = progress.text;
-        this.progress.visible = progress.visible;
+        this.progress.visible = progress.visible && Boolean(progress.text);
         this.fileLabel.text = progress.file;
         this.fileLabel.visible = Boolean(progress.file);
         this.progressBar.area.visible = progress.showBar;
         this.progressBar.setPercent(progress.percent);
 
-        const running = status === 'running';
+        const running = ['running', 'checking', 'finalizing', 'queued']
+            .includes(display);
         const paused = Boolean(state.paused);
-        this.runButton.visible = !running && job.enabled;
-        this.pauseButton.visible = job.enabled;
-        const pauseIcon = paused
-            ? 'media-playback-start-symbolic'
-            : 'media-playback-pause-symbolic';
-        if (this.pauseButton.child.icon_name !== pauseIcon)
-            this.pauseButton.child.icon_name = pauseIcon;
-        this.pauseButton.accessible_name = paused ? _('Resume') : _('Pause');
-        this.cancelButton.visible = running;
-        this.logsButton.visible = true;
+        const stopped = Boolean(state.stopped);
+        const enabled = job.enabled !== false;
+        this.runButton.visible = enabled && !running;
+        this.pauseButton.visible = enabled && !paused && !stopped;
+        this.cancelButton.visible = !stopped;
     }
 }

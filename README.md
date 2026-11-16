@@ -39,7 +39,11 @@ The Settings page controls how many jobs may run concurrently.
 Sync jobs can additionally select which root folders/files are included. Selected
 folders bring their descendants, while the exclude patterns still apply inside
 them. Deleting a job keeps destination files by default; the delete dialog can
-also remove that job's `SaveMe/<job-id>` folder.
+also remove that job's `SaveMe/<job-id>` folder. Only backup jobs emit desktop
+notifications; sync status is shown in the app and in the GNOME extension.
+
+The app and daemon are translated for 16 locales. The language follows the
+system locale.
 
 The heavy lifting (cloud APIs, OAuth, retries, checksums, rate limits) is done
 by [rclone](https://rclone.org/). SaveMe owns the UX, scheduling, real-time

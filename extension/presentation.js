@@ -90,8 +90,48 @@ export function statusLabel(status) {
     return STATUS_LABELS[status] || status || 'Idle';
 }
 
+export function displayStatus(status, phase = null) {
+    if (status !== 'running')
+        return status || 'idle';
+    if (phase === 'checking')
+        return 'checking';
+    if (phase === 'cleanup' || phase === 'done')
+        return 'finalizing';
+    return 'running';
+}
+
+export function typeLabel(type) {
+    return type === 'backup' ? 'Backup' : 'Sync';
+}
+
 export function statusIconName(status) {
     return STATUS_ICONS[status] || STATUS_ICONS.idle;
+}
+
+export function statusDetail(job, {nowMs = Date.now(), translate = value => value} = {}) {
+    const state = job.state || {};
+    const status = displayStatus(state.status, state.progress?.phase);
+    if (status === 'checking') {
+        const listed = Number(state.progress?.listed || 0);
+        return listed > 0
+            ? `${translate('Checking')} · ${listed.toLocaleString()} ${translate('files')}`
+            : translate('Preparing…');
+    }
+    if (status === 'running')
+        return translate('Transferring files');
+    if (status === 'finalizing')
+        return translate('Finalizing versions');
+    if (status === 'queued')
+        return translate('Waiting for a free slot');
+    if (state.paused)
+        return translate('Paused');
+    if (state.stopped)
+        return translate('Stopped by user');
+    if (state.message)
+        return state.message;
+    if (state.lastFinishedAt)
+        return `${translate('Last run')} ${formatWhen(state.lastFinishedAt, nowMs, translate)}`;
+    return translate('Never run');
 }
 
 export function jobDetail(job, {nowMs = Date.now(), translate = value => value} = {}) {
@@ -111,10 +151,24 @@ export function jobDetail(job, {nowMs = Date.now(), translate = value => value} 
 export function progressView(state) {
     if (state.status === 'running' && state.progress) {
         const progress = state.progress;
+        const phase = displayStatus(state.status, progress.phase);
+        if (phase === 'checking') {
+            const listed = Number(progress.listed || 0);
+            return {
+                visible: true,
+                percent: 0,
+                text: listed > 0 ? `${listed.toLocaleString()} files checked` : '',
+                file: shortFile(progress.currentFile),
+                showBar: true,
+            };
+        }
         const percent = Number(progress.percent || 0);
         let text = `${percent.toFixed(0)}% · ${formatBytes(progress.bytes)}`;
         if (progress.totalBytes)
             text += ` / ${formatBytes(progress.totalBytes)}`;
+        const speed = Number(progress.speed || 0);
+        if (speed > 0)
+            text += ` · ${formatBytes(speed)}/s`;
         if (progress.eta !== null && progress.eta !== undefined)
             text += ` · ETA ${formatEta(progress.eta)}`;
         return {
