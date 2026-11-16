@@ -100,9 +100,9 @@ make deb
 
 Running the installer again updates an existing installation without touching
 jobs, configuration or state. The installer stops the app and daemon, updates
-the `.deb` and restarts the daemon. The GNOME Shell extension is not installed
-by default; use `--with-extension` when you want it. Use `--dry-run` to see the
-plan.
+the `.deb`, installs/enables the GNOME Shell extension and restarts the daemon.
+Use `--no-extension` (or `--app-only`) to skip the extension. Use `--dry-run`
+to see the plan.
 
 After the GitHub releases are published, the one-liner is:
 

@@ -20,7 +20,7 @@ ACTION="install"
 PURGE=0
 YES=0
 DRY_RUN=0
-WITH_EXTENSION=0
+WITH_EXTENSION=1
 START_DAEMON=1
 FORCE_REMOTE=0
 VERSION=""
@@ -47,9 +47,9 @@ Options:
   --purge              With --uninstall: also remove config, tokens, logs and history
   --yes                Do not prompt for confirmation
   --dry-run            Print the plan without changing anything
-  --with-extension     Install/update the GNOME Shell extension (optional)
+  --with-extension     Install/update the GNOME Shell extension (default)
   --no-extension       Do not install or update the GNOME Shell extension
-  --app-only           Alias for --no-extension (default)
+  --app-only           Alias for --no-extension
   --no-start           Do not start the daemon after installation
   --version VERSION    Install a specific release (e.g. 1.0.0)
   --deb PATH           Use a local .deb
