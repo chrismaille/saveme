@@ -7,31 +7,41 @@ export class AboutPage {
         this.widget = new Adw.PreferencesPage();
         const heroGroup = new Adw.PreferencesGroup();
         const hero = new Gtk.Box({
-            orientation: Gtk.Orientation.VERTICAL,
-            spacing: 8,
+            orientation: Gtk.Orientation.HORIZONTAL,
+            spacing: 18,
             margin_top: 24,
             margin_bottom: 24,
             halign: Gtk.Align.CENTER,
+            valign: Gtk.Align.CENTER,
         });
         hero.append(new Gtk.Image({
             icon_name: 'io.github.chrismaille.SaveMe',
             pixel_size: 96,
         }));
+        const heroText = new Gtk.Box({
+            orientation: Gtk.Orientation.VERTICAL,
+            spacing: 4,
+            valign: Gtk.Align.CENTER,
+        });
         const title = new Gtk.Label({
             label: 'SaveMe',
+            xalign: 0,
             css_classes: ['title-1'],
         });
         const subtitle = new Gtk.Label({
             label: t('Sync and backup for GNOME'),
+            xalign: 0,
             css_classes: ['dim-label'],
         });
         this.versionLabel = new Gtk.Label({
             label: '',
+            xalign: 0,
             css_classes: ['dim-label'],
         });
-        hero.append(title);
-        hero.append(subtitle);
-        hero.append(this.versionLabel);
+        heroText.append(title);
+        heroText.append(subtitle);
+        heroText.append(this.versionLabel);
+        hero.append(heroText);
         heroGroup.add(hero);
         this.widget.add(heroGroup);
 
@@ -44,7 +54,7 @@ export class AboutPage {
 
         const linksGroup = new Adw.PreferencesGroup({
             title: t('Links'),
-            description: 'Project links will appear here in a future release.',
+            description: t('Project links will appear here in a future release.'),
         });
         linksGroup.add(new Adw.ActionRow({
             title: 'GitHub',

@@ -2,6 +2,7 @@ import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
 import {LogDialog} from '../log-dialog.js';
+import {t} from '../../src/i18n.js';
 import {formatBytes, formatWhen} from '../presentation/format.js';
 
 export class SettingsPage {
@@ -13,10 +14,10 @@ export class SettingsPage {
         this.blockMaxJobsUpdate = false;
         this.maxJobsDirty = false;
         this.policyDirty = false;
-        const daemonGroup = new Adw.PreferencesGroup({title: 'Daemon'});
-        this.statusRow = new Adw.ActionRow({title: 'Status', subtitle: 'Unknown'});
-        this.rcloneRow = new Adw.ActionRow({title: 'rclone', subtitle: 'Unknown'});
-        this.pauseAllRow = new Adw.SwitchRow({title: 'Pause all jobs'});
+        const daemonGroup = new Adw.PreferencesGroup({title: t('Daemon')});
+        this.statusRow = new Adw.ActionRow({title: t('Status'), subtitle: t('Unknown')});
+        this.rcloneRow = new Adw.ActionRow({title: 'rclone', subtitle: t('Unknown')});
+        this.pauseAllRow = new Adw.SwitchRow({title: t('Pause all jobs')});
         this.pauseAllRow.connect('notify::active', () => {
             if (this.blockPauseUpdate)
                 return;
@@ -24,8 +25,8 @@ export class SettingsPage {
                 .catch(e => this.window.toast(e.message));
         });
         this.maxJobsRow = new Adw.SpinRow({
-            title: 'Concurrent jobs',
-            subtitle: 'jobs running at the same time',
+            title: t('Concurrent jobs'),
+            subtitle: t('jobs running at the same time'),
             digits: 0,
             adjustment: new Gtk.Adjustment({
                 lower: 1,
@@ -35,7 +36,7 @@ export class SettingsPage {
             }),
         });
         const applyMaxJobs = new Gtk.Button({
-            label: 'Apply',
+            label: t('Apply'),
             valign: Gtk.Align.CENTER,
             css_classes: ['flat'],
         });
@@ -46,22 +47,22 @@ export class SettingsPage {
                 this.maxJobsDirty = true;
         });
         this.doctorRow = new Adw.ActionRow({
-            title: 'Diagnostics',
-            subtitle: 'Check rclone, configuration and volumes.',
+            title: t('Diagnostics'),
+            subtitle: t('Check rclone, configuration and volumes.'),
         });
         const doctorButton = new Gtk.Button({
-            label: 'Run doctor',
+            label: t('Run doctor'),
             valign: Gtk.Align.CENTER,
             css_classes: ['flat'],
         });
         doctorButton.connect('clicked', () => this._runDoctor());
         this.doctorRow.add_suffix(doctorButton);
         this.logsRow = new Adw.ActionRow({
-            title: 'Log files',
-            subtitle: 'Open the log folder.',
+            title: t('Log files'),
+            subtitle: t('Open the log folder.'),
         });
         const logsButton = new Gtk.Button({
-            label: 'Open folder',
+            label: t('Open folder'),
             valign: Gtk.Align.CENTER,
             css_classes: ['flat'],
         });
@@ -76,25 +77,25 @@ export class SettingsPage {
         this.widget.add(daemonGroup);
 
         const performanceGroup = new Adw.PreferencesGroup({
-            title: 'Performance',
-            description: 'Sampled from this app process and written to the application log.',
+            title: t('Performance'),
+            description: t('Sampled from this app process and written to the application log.'),
         });
-        this.memoryRow = new Adw.ActionRow({title: 'App memory', subtitle: 'Waiting for sample'});
-        this.cpuRow = new Adw.ActionRow({title: 'App CPU', subtitle: 'Waiting for sample'});
+        this.memoryRow = new Adw.ActionRow({title: t('App memory'), subtitle: t('Waiting for sample')});
+        this.cpuRow = new Adw.ActionRow({title: t('App CPU'), subtitle: t('Waiting for sample')});
         this.daemonMemoryRow = new Adw.ActionRow({
-            title: 'Daemon memory',
-            subtitle: 'Waiting for daemon sample',
+            title: t('Daemon memory'),
+            subtitle: t('Waiting for daemon sample'),
         });
         this.machineCpuRow = new Adw.ActionRow({
-            title: 'Machine CPU',
-            subtitle: 'Waiting for sample',
+            title: t('Machine CPU'),
+            subtitle: t('Waiting for sample'),
         });
         this.machineMemoryRow = new Adw.ActionRow({
-            title: 'Machine memory',
-            subtitle: 'Waiting for sample',
+            title: t('Machine memory'),
+            subtitle: t('Waiting for sample'),
         });
-        this.perfStatusRow = new Adw.ActionRow({title: 'App budget', subtitle: 'Waiting for sample'});
-        this.perfSamplesRow = new Adw.ActionRow({title: 'App samples', subtitle: '-'});
+        this.perfStatusRow = new Adw.ActionRow({title: t('App budget'), subtitle: t('Waiting for sample')});
+        this.perfSamplesRow = new Adw.ActionRow({title: t('App samples'), subtitle: '-'});
         performanceGroup.add(this.memoryRow);
         performanceGroup.add(this.cpuRow);
         performanceGroup.add(this.daemonMemoryRow);
@@ -105,12 +106,12 @@ export class SettingsPage {
         this.widget.add(performanceGroup);
 
         const policyGroup = new Adw.PreferencesGroup({
-            title: 'Storage policy',
-            description: 'Logs are sanitized and cleaned automatically; local syncs respect free space.',
+            title: t('Storage policy'),
+            description: t('Logs are sanitized and cleaned automatically; local syncs respect free space.'),
         });
         this.retentionRow = new Adw.SpinRow({
-            title: 'Keep logs for',
-            subtitle: 'days',
+            title: t('Keep logs for'),
+            subtitle: t('days'),
             digits: 0,
             adjustment: new Gtk.Adjustment({
                 lower: 1,
@@ -120,7 +121,7 @@ export class SettingsPage {
             }),
         });
         this.maxSizeRow = new Adw.SpinRow({
-            title: 'Maximum total log size',
+            title: t('Maximum total log size'),
             subtitle: 'MiB',
             digits: 0,
             adjustment: new Gtk.Adjustment({
@@ -137,7 +138,7 @@ export class SettingsPage {
             });
         }
         this.diskSafetyRow = new Adw.SpinRow({
-            title: 'Disk safety margin',
+            title: t('Disk safety margin'),
             subtitle: '%',
             digits: 0,
             adjustment: new Gtk.Adjustment({
@@ -148,7 +149,7 @@ export class SettingsPage {
             }),
         });
         this.minFreeRow = new Adw.SpinRow({
-            title: 'Minimum free space',
+            title: t('Minimum free space'),
             subtitle: 'MiB',
             digits: 0,
             adjustment: new Gtk.Adjustment({
@@ -165,11 +166,11 @@ export class SettingsPage {
             });
         }
         this.savePolicyRow = new Adw.ActionRow({
-            title: 'Apply storage policy',
-            subtitle: 'Save retention, log size and disk safety limits to the daemon.',
+            title: t('Apply storage policy'),
+            subtitle: t('Save retention, log size and disk safety limits to the daemon.'),
         });
         const savePolicyButton = new Gtk.Button({
-            label: 'Save',
+            label: t('Save'),
             valign: Gtk.Align.CENTER,
             css_classes: ['flat'],
         });
@@ -182,29 +183,31 @@ export class SettingsPage {
         policyGroup.add(this.savePolicyRow);
         this.widget.add(policyGroup);
 
-        const aboutGroup = new Adw.PreferencesGroup({title: 'About'});
-        this.versionRow = new Adw.ActionRow({title: 'Version'});
+        const aboutGroup = new Adw.PreferencesGroup({title: t('About')});
+        this.versionRow = new Adw.ActionRow({title: t('Version')});
         aboutGroup.add(this.versionRow);
         this.widget.add(aboutGroup);
     }
 
     update(snapshot) {
         const daemon = snapshot.daemon || {};
-        this.statusRow.set_subtitle(
-            `Running · PID ${daemon.pid ?? '?'} · started ${formatWhen(daemon.startedAt)}`);
+        this.statusRow.set_subtitle(t('Running · PID {pid} · started {when}', {
+            pid: daemon.pid ?? '?',
+            when: formatWhen(daemon.startedAt),
+        }));
         this.rcloneRow.set_subtitle(
-            `${daemon.rclone?.version || 'unknown'} · ${daemon.rclone?.path || '-'}`);
+            `${daemon.rclone?.version || t('unknown')} · ${daemon.rclone?.path || '-'}`);
         const process = daemon.process;
         this.daemonMemoryRow.set_subtitle(process
-            ? `${formatBytes(process.rssBytes)} · peak ${formatBytes(process.peakRssBytes)}`
-            : 'Waiting for daemon sample');
+            ? `${formatBytes(process.rssBytes)} · ${t('peak')} ${formatBytes(process.peakRssBytes)}`
+            : t('Waiting for daemon sample'));
         const system = snapshot.system;
         this.machineCpuRow.set_subtitle(system
             ? `${Number(system.cpuPercent).toFixed(1)}%`
-            : 'Waiting for sample');
+            : t('Waiting for sample'));
         this.machineMemoryRow.set_subtitle(system?.memory
             ? `${formatBytes(system.memory.usedBytes)} / ${formatBytes(system.memory.totalBytes)}`
-            : 'Waiting for sample');
+            : t('Waiting for sample'));
         this.blockPauseUpdate = true;
         this.pauseAllRow.active = Boolean(snapshot.pausedAll);
         this.blockPauseUpdate = false;
@@ -232,20 +235,20 @@ export class SettingsPage {
 
     updatePerformance(metrics) {
         if (!metrics) {
-            this.memoryRow.set_subtitle('Waiting for sample');
-            this.cpuRow.set_subtitle('Waiting for sample');
-            this.perfStatusRow.set_subtitle('Waiting for sample');
+            this.memoryRow.set_subtitle(t('Waiting for sample'));
+            this.cpuRow.set_subtitle(t('Waiting for sample'));
+            this.perfStatusRow.set_subtitle(t('Waiting for sample'));
             this.perfSamplesRow.set_subtitle('-');
             return;
         }
         this.memoryRow.set_subtitle(
-            `${formatBytes(metrics.rssBytes)} · peak ${formatBytes(metrics.peakRssBytes)}`);
+            `${formatBytes(metrics.rssBytes)} · ${t('peak')} ${formatBytes(metrics.peakRssBytes)}`);
         this.cpuRow.set_subtitle(`${metrics.cpuPercent.toFixed(1)}%`);
         this.perfStatusRow.set_subtitle(metrics.budgetExceeded
-            ? 'Budget exceeded — check the application log'
-            : 'Within budget');
+            ? t('Budget exceeded — check the application log')
+            : t('Within budget'));
         this.perfSamplesRow.set_subtitle(
-            `${metrics.samples} · last sample ${formatWhen(metrics.sampledAt)}`);
+            `${metrics.samples} · ${t('last sample')} ${formatWhen(metrics.sampledAt)}`);
     }
 
     async _saveConcurrency() {
@@ -254,7 +257,7 @@ export class SettingsPage {
                 maxConcurrentJobs: Math.round(this.maxJobsRow.value),
             });
             this.maxJobsDirty = false;
-            this.window.toast('Concurrency updated.');
+            this.window.toast(t('Concurrency updated.'));
         } catch (e) {
             this.window.toast(e.message);
         }
@@ -269,7 +272,7 @@ export class SettingsPage {
                 minFreeSpaceMb: Math.round(this.minFreeRow.value),
             });
             this.policyDirty = false;
-            this.window.toast('Storage policy saved.');
+            this.window.toast(t('Storage policy saved.'));
         } catch (e) {
             this.window.toast(e.message);
         }
@@ -278,7 +281,7 @@ export class SettingsPage {
     async _runDoctor() {
         try {
             const data = await this.window.client.doctor();
-            new LogDialog(this.window, 'Doctor', JSON.stringify(data, null, 2)).present();
+            new LogDialog(this.window, t('Doctor'), JSON.stringify(data, null, 2)).present();
         } catch (e) {
             this.window.toast(e.message);
         }

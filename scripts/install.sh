@@ -530,6 +530,9 @@ do_install() {
         if [ "$WITH_EXTENSION" -eq 1 ] && command -v gnome-extensions >/dev/null 2>&1; then
             gnome-extensions info "$UUID" 2>/dev/null || true
         fi
+        if [ "$WITH_EXTENSION" -eq 0 ]; then
+            say "GNOME extension: not installed (use --with-extension to add it)."
+        fi
         say ""
         say "Open the app with: saveme-settings"
         say "Installation log: $LOG_FILE"

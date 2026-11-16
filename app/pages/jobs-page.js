@@ -205,7 +205,9 @@ export class JobsPage {
         });
         const sourceCount = jobSources(job).length;
         const sourcesBadge = new Gtk.Label({
-            label: `${sourceCount} source${sourceCount === 1 ? '' : 's'}`,
+            label: sourceCount === 1
+                ? `1 ${t('source')}`
+                : `${sourceCount} ${t('sources')}`,
             css_classes: ['saveme-badge', 'saveme-badge-sources'],
         });
         meta.append(typeBadge);
@@ -260,27 +262,28 @@ export class JobsPage {
 
     _sidebarSubtitle(job) {
         if (job.draft)
-            return 'Draft · continue setup';
+            return t('Draft · continue setup');
         const state = job.state || {};
         const progress = state.progress;
         const display = displayStatus(state.status, progress?.phase);
-        if (display === 'checking') {            const listed = Number(progress?.listed || 0);
+        if (display === 'checking') {
+            const listed = Number(progress?.listed || 0);
             return listed > 0
-                ? `Checking · ${listed.toLocaleString()} files`
-                : `Checking · preparing ${job.type === JOB_TYPES.BACKUP
-                    ? 'backup' : 'sync'}`;
+                ? `${t('Checking')} · ${listed.toLocaleString()} ${t('files')}`
+                : `${t('Checking')} · ${t(job.type === JOB_TYPES.BACKUP
+                    ? 'Preparing backup' : 'Preparing sync')}`;
         }
         if (display === 'running' && progress) {
             return `${Math.round(progress.percent || 0)}% · ` +
                 `${formatBytes(progress.bytes)} / ${formatBytes(progress.totalBytes)}`;
         }
         if (display === 'finalizing')
-            return 'Finalizing · cleaning versions';
+            return `${t('Finalizing')} · ${t('cleaning versions')}`;
         if (display === 'queued')
-            return 'Queued · waiting for a free slot';
+            return `${t('Queued')} · ${t('waiting for a free slot')}`;
         if (state.lastFinishedAt)
-            return `Last backup ${formatDateTime(state.lastFinishedAt)}`;
-        return 'Never backed up';
+            return `${t('Last backup')} ${formatDateTime(state.lastFinishedAt)}`;
+        return t('Never backed up');
     }
 
     _updateSidebarProgress(entry, job) {
@@ -321,7 +324,9 @@ export class JobsPage {
             job.state?.progress?.phase || null);
         const sourceCount = jobSources(job).length;
         entry.typeBadge.set_text(typeLabel(job.type));
-        entry.sourcesBadge.set_text(`${sourceCount} source${sourceCount === 1 ? '' : 's'}`);
+        entry.sourcesBadge.set_text(sourceCount === 1
+            ? `1 ${t('source')}`
+            : `${sourceCount} ${t('sources')}`);
         entry.sourcesBadge.visible = sourceCount > 1;
         entry.subtitle.set_text(this._sidebarSubtitle(job));
         entry.paths.set_text(this._sidebarPaths(job));
@@ -598,16 +603,16 @@ export class JobsPage {
 
     _destinationLabel(job) {
         const destination = job.destination;
-        let service = 'Local folder';
+        let service = t('Local folder');
         if (destination?.kind === 'remote') {
             const remote = (this.window.snapshot?.remotes || [])
                 .find(item => item.name === destination.remote);
             service = remote
                 ? remoteTypeLabel(remote.type)
-                : 'Cloud';
+                : t('Cloud');
         }
         const path = descriptorDisplay(destination, this.window.volumes) || '-';
-        return `${service} · ${path} (base)`;
+        return `${service} · ${path} (${t('base')})`;
     }
 
     _jobFolderPath(job) {
@@ -774,8 +779,9 @@ export class JobsPage {
         if (display === 'checking' && progress) {
             const listed = Number(progress.listed || 0);
             this.detail.headlineEta.set_text(listed > 0
-                ? `${listed.toLocaleString()} files checked`
-                : `Preparing ${job.type === JOB_TYPES.BACKUP ? 'backup' : 'sync'}…`);
+                ? `${listed.toLocaleString()} ${t('files checked')}`
+                : `${t(job.type === JOB_TYPES.BACKUP
+                    ? 'Preparing backup' : 'Preparing sync')}…`);
             this.detail.progress.visible = true;
             this.detail.progress.pulse();
             const currentPath = progress.currentPath || progress.currentFile;
@@ -808,11 +814,11 @@ export class JobsPage {
             }
         } else {
             this.detail.headlineEta.set_text(state.status === 'queued'
-                ? 'Waiting for a free job slot'
+                ? t('Waiting for a free job slot')
                 : state.status === 'running'
-                    ? 'Starting…'
+                    ? t('Starting…')
                     : state.lastFinishedAt
-                        ? `Last backup ${formatWhen(state.lastFinishedAt)}`
+                        ? `${t('Last backup')} ${formatWhen(state.lastFinishedAt)}`
                         : '');
             this.detail.progress.visible = false;
             this.detail.progress.set_fraction(0);
@@ -820,7 +826,7 @@ export class JobsPage {
         }
 
         this.detail.stats.files.set_subtitle(display === 'checking' && progress
-            ? `${Number(progress.listed || 0).toLocaleString()} listed`
+            ? `${Number(progress.listed || 0).toLocaleString()} ${t('listed')}`
             : progress
                 ? `${progress.files || 0} / ${progress.totalFiles || 0}`
                 : last
@@ -847,8 +853,8 @@ export class JobsPage {
         const finished = state.lastFinishedAt || state.lastRunAt;
         this.detail.stats.last.set_subtitle(finished
             ? `${formatDateTime(finished)} · ` +
-                `${RESULT_LABELS[state.lastResult] || state.lastResult || '-'}`
-            : 'never');
+                `${t(RESULT_LABELS[state.lastResult] || state.lastResult || '-')}`
+            : t('never'));
         this.detail.stats.message.set_subtitle(state.message || '');
         this.detail.stats.message.visible = Boolean(state.message);
 

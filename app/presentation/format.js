@@ -46,12 +46,12 @@ export function formatWhen(iso, nowMs = Date.now()) {
         return '';
     const diff = nowMs - date.getTime();
     if (diff < 60_000)
-        return 'just now';
+        return t('just now');
     if (diff < 3_600_000)
-        return `${Math.floor(diff / 60_000)} min ago`;
+        return `${Math.floor(diff / 60_000)} ${t('min ago')}`;
     if (diff < 86_400_000)
-        return `${Math.floor(diff / 3_600_000)} h ago`;
-    return `${Math.floor(diff / 86_400_000)} d ago`;
+        return `${Math.floor(diff / 3_600_000)} ${t('h ago')}`;
+    return `${Math.floor(diff / 86_400_000)} ${t('d ago')}`;
 }
 
 export function truncate(text, max = 60) {

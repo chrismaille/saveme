@@ -1,5 +1,6 @@
 import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
+import {t} from '../../src/i18n.js';
 import {remoteTypeLabel} from '../presentation/format.js';
 
 export class AccountsPage {
@@ -25,16 +26,16 @@ export class AccountsPage {
         if (this.group)
             this.widget.remove(this.group);
         this.group = new Adw.PreferencesGroup({
-            title: 'Accounts',
-            description: 'Cloud accounts used by sync and backup jobs.',
+            title: t('Accounts'),
+            description: t('Cloud accounts used by sync and backup jobs.'),
         });
         if (remotes.length === 0) {
             const row = new Adw.ActionRow({
-                title: 'No accounts configured',
-                subtitle: 'Add Google Drive, OneDrive or Dropbox.',
+                title: t('No accounts configured'),
+                subtitle: t('Add Google Drive, OneDrive or Dropbox.'),
             });
             const button = new Gtk.Button({
-                label: 'Add account',
+                label: t('Add account'),
                 valign: Gtk.Align.CENTER,
                 css_classes: ['suggested-action'],
             });
@@ -52,23 +53,25 @@ export class AccountsPage {
                     pixel_size: 16,
                 }));
                 const reauth = new Gtk.Button({
-                    label: 'Reconnect',
+                    label: t('Reconnect'),
                     valign: Gtk.Align.CENTER,
                     css_classes: ['flat'],
                 });
                 reauth.connect('clicked', () => this.window.addAccount(remote));
                 const remove = new Gtk.Button({
-                    label: 'Delete',
+                    label: t('Delete'),
                     valign: Gtk.Align.CENTER,
                     css_classes: ['flat', 'destructive-action'],
                 });
                 remove.connect('clicked', () => {
-                    this.window.confirm('Delete account?',
-                        `Delete ${remote.name}? Jobs using it must be removed or edited first.`,
+                    this.window.confirm(t('Delete account?'),
+                        `${t('Delete')} ${remote.name}? ` +
+                        t('Jobs using it must be removed or edited first.'),
                         true, () => {
                             this.window.client.deleteRemote(remote.name)
-                                .then(() => this.window.toast('Account deleted.'))
-                                .catch(e => this._showError('Cannot delete account', e.message));
+                                .then(() => this.window.toast(t('Account deleted.')))
+                                .catch(e => this._showError(
+                                    t('Cannot delete account'), e.message));
                         });
                 });
                 row.add_suffix(reauth);
@@ -76,11 +79,11 @@ export class AccountsPage {
                 this.group.add(row);
             }
             const addRow = new Adw.ActionRow({
-                title: 'Add account',
-                subtitle: 'Connect another cloud account.',
+                title: t('Add account'),
+                subtitle: t('Connect another cloud account.'),
             });
             const addButton = new Gtk.Button({
-                label: 'Add',
+                label: t('Add'),
                 valign: Gtk.Align.CENTER,
                 css_classes: ['flat'],
             });
