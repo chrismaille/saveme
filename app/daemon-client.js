@@ -135,8 +135,9 @@ export class DaemonClient {
     }
 
     async inspectBackup(path) {
+        // Cloud listings and manifest reads can be slow on OneDrive.
         const reply = await this._call('InspectBackup',
-            new GLib.Variant('(s)', [path]), 60_000);
+            new GLib.Variant('(s)', [path]), 180_000);
         return JSON.parse(reply.deepUnpack()[0]);
     }
 

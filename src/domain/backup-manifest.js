@@ -35,7 +35,7 @@ export function parseBackupManifest(text) {
         throw new Error('Unsupported backup manifest.');
     }
     const job = normalizeJobFields(mergeDeep(jobDefaults(), data.job));
-    if (!job.id || job.type !== 'backup')
-        throw new Error('Backup manifest does not describe a backup job.');
+    if (!job.id || !['backup', 'sync'].includes(job.type))
+        throw new Error('Manifest does not describe a backup or sync job.');
     return job;
 }

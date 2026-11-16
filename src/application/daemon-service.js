@@ -2,6 +2,7 @@ import {
     backupCurrentFor,
     backupContainerFor,
     backupRootFor,
+    destinationFromBackupContainer,
     isValidVersionName,
     joinRclonePath,
     versionsRootFor,
@@ -11,11 +12,33 @@ import {
     parseBackupManifest,
     serializeBackupManifest,
 } from '../domain/backup-manifest.js';
-import {JOB_TYPES, jobRemoteNames, localPathFor, remotePathFor} from '../domain/job.js';
+import {
+    JOB_TYPES,
+    jobRemoteNames,
+    jobSources,
+    localPathFor,
+    remotePathFor,
+} from '../domain/job.js';
 import {exitCodeMessage, isSuccessExit} from '../domain/rclone-log.js';
 import {parseVersionTimestamp} from '../domain/time.js';
 
 export const MAX_BROWSER_ENTRIES = 2000;
+
+function isMissingPathError(error) {
+    return /directory not found|object not found|not found|does not exist|cannot find|cannot read/i
+        .test(String(error?.message || error || ''));
+}
+
+function descriptorPath(descriptor) {
+    if (!descriptor)
+        return '';
+    if (descriptor.kind === 'remote') {
+        return descriptor.remote
+            ? `${descriptor.remote}:${descriptor.path || ''}`
+            : descriptor.path || '';
+    }
+    return descriptor.path || descriptor.volumeUuid || '';
+}
 
 function rcloneErrorMessage(result, fallback) {
     const text = String(result.stderr || result.stdout || '').trim();
@@ -243,13 +266,19 @@ export class DaemonService {
             saved = this.config.updateJob(payload.id, payload);
         else
             saved = this.config.addJob(payload);
-        if (saved.type === JOB_TYPES.BACKUP) {
+        const destination = saved.destination || {};
+        const hasDestination = Boolean(
+            destination.path || destination.remote || destination.volumeUuid);
+        const storesManifest = saved.type === JOB_TYPES.BACKUP ||
+            (saved.type === JOB_TYPES.SYNC && saved.destinationLayout !== 'direct' &&
+                hasDestination);
+        if (storesManifest) {
             try {
                 if (saved.draft) {
-                    // Drafts may be incomplete and must not create the backup
+                    // Drafts may be incomplete and must not create the job
                     // container or a manifest yet.
                 } else if (!existing || wasDraft) {
-                    this._createBackupContainer(saved);
+                    this._createJobContainer(saved);
                 } else {
                     this._writeManifest(saved);
                 }
@@ -283,53 +312,133 @@ export class DaemonService {
     importJob(payloadJson) {
         const payload = JSON.parse(payloadJson);
         delete payload.state;
-        if (!payload.id || payload.type !== JOB_TYPES.BACKUP)
-            throw new Error('Only backup jobs can be recovered.');
+        if (!payload.id || ![JOB_TYPES.BACKUP, JOB_TYPES.SYNC].includes(payload.type))
+            throw new Error('Only sync and backup jobs can be recovered.');
+        if (payload.type === JOB_TYPES.SYNC && payload.destinationLayout === 'direct')
+            throw new Error('Legacy direct sync jobs cannot be recovered automatically.');
         // A recovered job points at paths from another installation. Keep it
         // stopped until the user confirms or edits the sources.
         payload.enabled = false;
         payload.recovered = true;
+        payload.destinationLayout = 'saveMe';
         payload.trigger = {...payload.trigger, mode: 'manual'};
         const existing = this.config.getJob(payload.id);
         const saved = existing
             ? this.config.updateJob(payload.id, payload)
             : this.config.addJob(payload);
+        this._writeManifest(saved);
         this.manager.addJob(saved);
         this._snapshot(true);
         return JSON.stringify(saved);
+    }
+
+    _pathExists(path) {
+        try {
+            return Boolean(this.transfer.exists(path));
+        } catch (e) {
+            this.logger?.warn(`Cannot check recovery path ${path}: ${e.message}`);
+            return null;
+        }
+    }
+
+    _inspectSources(job) {
+        return jobSources(job).map(source => {
+            const path = source.kind === 'local'
+                ? localPathFor(source, this.volumes)
+                : remotePathFor(source);
+            if (source.kind !== 'local') {
+                return {
+                    kind: 'remote',
+                    path: path || descriptorPath(source),
+                    exists: null,
+                    remote: true,
+                };
+            }
+            return {
+                kind: 'local',
+                path: path || descriptorPath(source),
+                exists: path ? this._pathExists(path) : null,
+                remote: false,
+            };
+        });
     }
 
     inspectBackup(path) {
         const root = String(path || '').replace(/\/+$/, '');
         if (!root)
             throw new Error('Backup folder is required.');
+        const destination = destinationFromBackupContainer(root);
         const jobs = [];
         for (const name of this.transfer.listDirs(root)) {
             const backupPath = joinRclonePath(root, name);
             const manifestPath = joinRclonePath(backupPath, BACKUP_MANIFEST_FILE);
+            let job = null;
+            let manifestError = null;
             try {
-                const job = parseBackupManifest(this.transfer.readText(manifestPath));
-                jobs.push({id: name, backupPath, job});
+                job = parseBackupManifest(this.transfer.readText(manifestPath));
             } catch (e) {
-                jobs.push({id: name, backupPath, error: e.message});
+                manifestError = e;
             }
+            if (job) {
+                const idMismatch = job.id !== name;
+                // The folder name is the canonical id: it is the path that
+                // owns current/ and versions/.
+                job.id = name;
+                jobs.push({
+                    id: name,
+                    backupPath,
+                    job,
+                    type: job.type,
+                    idMismatch,
+                    sources: this._inspectSources(job),
+                });
+                continue;
+            }
+            const missingManifest = isMissingPathError(manifestError);
+            if (!missingManifest) {
+                this.logger?.warn(
+                    `Cannot read backup manifest ${manifestPath}: ${manifestError?.message}`);
+                jobs.push({
+                    id: name,
+                    backupPath,
+                    reason: 'unreadable',
+                    error: 'Cannot read manifest.',
+                });
+                continue;
+            }
+            let dirs = [];
+            try {
+                dirs = this.transfer.listDirs(backupPath);
+            } catch (_) {
+                // Best effort: the folder may be unreadable.
+            }
+            const hasVersions = dirs.includes('versions');
+            jobs.push({
+                id: name,
+                backupPath,
+                legacy: true,
+                type: hasVersions ? JOB_TYPES.BACKUP : JOB_TYPES.SYNC,
+                reason: 'missing-manifest',
+                error: 'Folder has no manifest.',
+            });
         }
-        return JSON.stringify({path: root, jobs});
+        return JSON.stringify({path: root, destination, jobs});
     }
 
-    _createBackupContainer(job) {
+    _createJobContainer(job) {
         const destination = this._resolveJobDestination(job);
         const container = backupContainerFor(destination);
         const root = backupRootFor(job, destination);
-        // SaveMe may already exist when several backup jobs share one base
-        // folder. Each job owns SaveMe/<job-id>, so only that root matters.
+        // SaveMe may already exist when several jobs share one base folder.
+        // Each job owns SaveMe/<job-id>, so only that root matters.
         const adopting = this.transfer.exists(root);
         try {
             if (!adopting)
                 this.transfer.mkdir(container);
             this.transfer.mkdir(root);
             this.transfer.mkdir(`${root}/current`);
-            this.transfer.mkdir(`${root}/versions`);
+            if (job.type === JOB_TYPES.BACKUP)
+                this.transfer.mkdir(`${root}/versions`);
             this._writeManifest(job, {strict: true});
         } catch (e) {
             // Remove only this job's partial folder; never purge the shared

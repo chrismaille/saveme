@@ -374,19 +374,229 @@ export default suite('application/daemon-service', [
             job,
         });
         ctx.transfer.dirs.set('/dst/SaveMe', ['job_1', 'broken']);
-        ctx.transfer.files.set('/dst/SaveMe/job_1/manifest.json', manifest);
+        ctx.transfer.writeText('/dst/SaveMe/job_1/manifest.json', manifest);
+        ctx.transfer.paths.add('/src');
         const inspected = JSON.parse(ctx.service.inspectBackup('/dst/SaveMe'));
         assertEqual(inspected.jobs.length, 2);
+        assertEqual(inspected.destination.path, '/dst');
         assertEqual(inspected.jobs[0].job.id, 'job_1');
-        assert(/Cannot read/.test(inspected.jobs[1].error));
+        assertEqual(inspected.jobs[0].sources[0].exists, true);
+        assertEqual(inspected.jobs[1].legacy, true);
+        assertEqual(inspected.jobs[1].reason, 'missing-manifest');
         assertThrows(() => ctx.service.inspectBackup(''), /Backup folder is required/);
         const imported = JSON.parse(ctx.service.importJob(JSON.stringify(job)));
         assertEqual(imported.id, 'job_1');
+        assertEqual(imported.enabled, false);
         assertEqual(ctx.manager.calls.at(-1)[0], 'addJob');
         const importedAgain = JSON.parse(ctx.service.importJob(JSON.stringify(job)));
         assertEqual(importedAgain.id, 'job_1');
-        assertThrows(() => ctx.service.importJob(JSON.stringify({id: 'x', type: 'sync'})),
-            /Only backup/);
+        assertThrows(() => ctx.service.importJob(JSON.stringify({id: 'x', type: 'other'})),
+            /Only sync and backup/);
+    }),
+    test('runJob and playJob log asynchronous failures', async () => {
+        const ctx = makeService();
+        ctx.config.jobs = [backupJob()];
+        ctx.manager.addSupervisor('job_1');
+        let warnings = 0;
+        let errors = 0;
+        ctx.service.logger.warn = () => {
+            warnings++;
+        };
+        ctx.service.logger.error = () => {
+            errors++;
+        };
+        ctx.manager.runJob = async () => null;
+        ctx.service.runJob('job_1');
+        await Promise.resolve();
+        ctx.manager.playJob = async () => {
+            throw new Error('boom');
+        };
+        ctx.service.playJob('job_1');
+        await Promise.resolve();
+        await Promise.resolve();
+        assertEqual(warnings, 1);
+        assertEqual(errors, 1);
+    }),
+    test('saveJob skips manifests for direct sync destinations', () => {
+        const ctx = makeService();
+        ctx.service.saveJob(JSON.stringify({
+            id: 'direct_1',
+            name: 'Direct',
+            type: 'sync',
+            source: {kind: 'local', path: '/src'},
+            destination: {kind: 'local', path: '/dst'},
+            destinationLayout: 'direct',
+        }));
+        assert(!ctx.transfer.paths.has('/dst/SaveMe/direct_1'));
+    }),
+    test('saveJob updates an existing sync manifest', () => {
+        const ctx = makeService();
+        const job = {
+            id: 'sync_1',
+            name: 'Sync',
+            type: 'sync',
+            source: {kind: 'local', path: '/src'},
+            destination: {kind: 'local', path: '/dst'},
+            destinationLayout: 'saveMe',
+        };
+        ctx.service.saveJob(JSON.stringify(job));
+        job.name = 'Updated';
+        ctx.service.saveJob(JSON.stringify(job));
+        assert(ctx.transfer.files.get('/dst/SaveMe/sync_1/manifest.json')
+            .includes('Updated'));
+    }),
+    test('saveJob cleans partial containers when manifest writes fail', () => {
+        const ctx = makeService();
+        ctx.transfer.writeText = () => {
+            throw new Error('write failed');
+        };
+        ctx.transfer.runCapture = () => {
+            throw new Error('purge failed');
+        };
+        assertThrows(() => ctx.service.saveJob(JSON.stringify({
+            id: 'job_bad',
+            name: 'Bad',
+            type: 'backup',
+            source: {kind: 'local', path: '/src'},
+            destination: {kind: 'local', path: '/dst'},
+        })), /write failed/);
+        assertEqual(ctx.config.getJob('job_bad'), null);
+    }),
+    test('inspectBackup survives unreadable legacy folders', () => {
+        const ctx = makeService();
+        ctx.transfer.listDirs = path => {
+            if (path === '/dst/SaveMe')
+                return ['job_missing'];
+            throw new Error('listing failed');
+        };
+        const inspected = JSON.parse(ctx.service.inspectBackup('/dst/SaveMe'));
+        assertEqual(inspected.jobs[0].reason, 'missing-manifest');
+        assertEqual(inspected.jobs[0].type, 'sync');
+    }),
+    test('inspectBackup falls back for sources without a resolved path', () => {
+        const ctx = makeService();
+        const job = {
+            ...backupJob(),
+            sources: [
+                {kind: 'local'},
+                {kind: 'remote', remote: '', path: '/docs'},
+            ],
+        };
+        ctx.transfer.dirs.set('/dst/SaveMe', ['job_1']);
+        ctx.transfer.writeText('/dst/SaveMe/job_1/manifest.json',
+            JSON.stringify({version: 1, job}));
+        const inspected = JSON.parse(ctx.service.inspectBackup('/dst/SaveMe'));
+        assertEqual(inspected.jobs[0].sources[0].path, '');
+        assertEqual(inspected.jobs[0].sources[0].exists, null);
+        assertEqual(inspected.jobs[0].sources[1].path, ':/docs');
+        assertEqual(inspected.jobs[0].sources[1].remote, true);
+    }),
+    test('deleteJob handles missing, running and purge failures', () => {
+        const ctx = makeService();
+        assertThrows(() => ctx.service.deleteJob('missing', true), /Job not found/);
+        ctx.config.jobs = [backupJob()];
+        ctx.manager.addSupervisor('job_1');
+        ctx.manager.supervisors.get('job_1').running = true;
+        assertThrows(() => ctx.service.deleteJob('job_1', true),
+            /Stop the job before deleting/);
+        ctx.manager.supervisors.get('job_1').running = false;
+        ctx.transfer.captureHandler = () => ({
+            exitCode: 1,
+            stdout: '',
+            stderr: '{"level":"error","msg":"purge failed"}',
+        });
+        assertThrows(() => ctx.service.deleteJob('job_1', true), /purge failed/);
+    }),
+    test('new sync jobs create a SaveMe container and manifest', () => {
+        const ctx = makeService();
+        const saved = JSON.parse(ctx.service.saveJob(JSON.stringify({
+            id: 'sync_1',
+            name: 'Sync',
+            type: 'sync',
+            source: {kind: 'local', path: '/src'},
+            destination: {kind: 'local', path: '/dst'},
+            destinationLayout: 'saveMe',
+            trigger: {mode: 'realtime'},
+        })));
+        assertEqual(saved.id, 'sync_1');
+        assert(ctx.transfer.paths.has('/dst/SaveMe/sync_1'));
+        assert(ctx.transfer.paths.has('/dst/SaveMe/sync_1/current'));
+        assert(!ctx.transfer.paths.has('/dst/SaveMe/sync_1/versions'));
+        assert(ctx.transfer.files.has('/dst/SaveMe/sync_1/manifest.json'));
+    }),
+    test('inspectBackup reports source status and tolerates bad manifests', () => {
+        const ctx = makeService();
+        const job = {
+            ...backupJob(),
+            id: 'old_id',
+            sources: [
+                {kind: 'local', path: '/src'},
+                {kind: 'local', path: '/missing'},
+                {kind: 'remote', remote: 'drive', path: '/docs'},
+            ],
+        };
+        ctx.transfer.dirs.set('/dst/SaveMe',
+            ['job_1', 'job_unreadable', 'job_legacy_backup']);
+        ctx.transfer.writeText('/dst/SaveMe/job_1/manifest.json',
+            JSON.stringify({version: 1, job}));
+        ctx.transfer.writeText('/dst/SaveMe/job_unreadable/manifest.json', 'not json');
+        ctx.transfer.dirs.set('/dst/SaveMe/job_legacy_backup', ['current', 'versions']);
+        ctx.transfer.paths.add('/src');
+        const inspected = JSON.parse(ctx.service.inspectBackup('/dst/SaveMe'));
+        const recovered = inspected.jobs.find(entry => entry.id === 'job_1');
+        assertEqual(recovered.job.id, 'job_1');
+        assertEqual(recovered.idMismatch, true);
+        assertEqual(recovered.sources[0].exists, true);
+        assertEqual(recovered.sources[1].exists, false);
+        assertEqual(recovered.sources[2].exists, null);
+        assertEqual(recovered.sources[2].remote, true);
+        const unreadable = inspected.jobs.find(entry => entry.id === 'job_unreadable');
+        assertEqual(unreadable.reason, 'unreadable');
+        const legacy = inspected.jobs.find(entry => entry.id === 'job_legacy_backup');
+        assertEqual(legacy.reason, 'missing-manifest');
+        assertEqual(legacy.type, 'backup');
+    }),
+    test('inspectBackup reports unknown source checks without failing', () => {
+        const ctx = makeService();
+        const job = {...backupJob(), sources: [{kind: 'local', path: '/src'}]};
+        ctx.transfer.dirs.set('/dst/SaveMe', ['job_1']);
+        ctx.transfer.writeText('/dst/SaveMe/job_1/manifest.json',
+            JSON.stringify({version: 1, job}));
+        ctx.transfer.exists = () => {
+            throw new Error('network down');
+        };
+        const inspected = JSON.parse(ctx.service.inspectBackup('/dst/SaveMe'));
+        assertEqual(inspected.jobs[0].sources[0].exists, null);
+    }),
+    test('importJob rejects legacy direct sync jobs', () => {
+        const ctx = makeService();
+        assertThrows(() => ctx.service.importJob(JSON.stringify({
+            id: 'legacy', type: 'sync', destinationLayout: 'direct',
+        })), /Legacy direct/);
+    }),
+    test('inspect and import sync manifests', () => {
+        const ctx = makeService();
+        const job = {
+            id: 'job_sync',
+            name: 'Sync',
+            type: 'sync',
+            sources: [{kind: 'local', path: '/src'}],
+            destination: {kind: 'local', path: '/dst'},
+            destinationLayout: 'saveMe',
+            trigger: {mode: 'realtime'},
+        };
+        ctx.transfer.dirs.set('/dst/SaveMe', ['job_sync']);
+        ctx.transfer.writeText('/dst/SaveMe/job_sync/manifest.json',
+            JSON.stringify({version: 1, job}));
+        ctx.transfer.paths.add('/src');
+        const inspected = JSON.parse(ctx.service.inspectBackup('/dst/SaveMe'));
+        assertEqual(inspected.jobs[0].job.type, 'sync');
+        assertEqual(inspected.jobs[0].sources[0].exists, true);
+        const imported = JSON.parse(ctx.service.importJob(JSON.stringify(job)));
+        assertEqual(imported.type, 'sync');
+        assertEqual(imported.enabled, false);
+        assertEqual(imported.destinationLayout, 'saveMe');
+        assertEqual(imported.trigger.mode, 'manual');
     }),
     test('runs and logs use the state/read adapter', () => {
         const ctx = makeService();
@@ -529,6 +739,13 @@ export default suite('application/daemon-service', [
         failed.transfer.version = new Error('missing');
         const bad = JSON.parse(failed.service.doctorJson());
         assertEqual(bad.rclone.ok, false);
+    }),
+    test('settings can disable start at login without starting jobs', () => {
+        const ctx = makeService();
+        ctx.config.settings.startAtLogin = true;
+        const settings = JSON.parse(ctx.service.updateSettingsJson(
+            JSON.stringify({startAtLogin: false})));
+        assertEqual(settings.startAtLogin, false);
     }),
     test('log management and settings delegate', async () => {
         const ctx = makeService();

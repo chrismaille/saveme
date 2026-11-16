@@ -47,7 +47,7 @@ export default suite('domain/backup-manifest', [
             version: 2,
             job: {},
         })), /Unsupported backup manifest/);
-        await assertThrows(() => parseBackupManifest(JSON.stringify({
+        const sync = parseBackupManifest(JSON.stringify({
             version: 1,
             job: {
                 id: 'x',
@@ -59,7 +59,8 @@ export default suite('domain/backup-manifest', [
                 options: {},
                 backup: {},
             },
-        })), /does not describe a backup/);
+        }));
+        assertEqual(sync.type, 'sync');
     }),
     test('serializes a legacy job without sources from its source field', () => {
         const text = serializeBackupManifest({

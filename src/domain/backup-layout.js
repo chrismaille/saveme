@@ -68,6 +68,30 @@ export function backupContainerFor(dest) {
     return `${String(dest).replace(/\/+$/, '')}/SaveMe`;
 }
 
+export function destinationFromBackupContainer(container) {
+    const raw = String(container || '').replace(/\/+$/, '');
+    if (!raw)
+        return null;
+    let base;
+    if (raw.endsWith('/SaveMe'))
+        base = raw.slice(0, -'/SaveMe'.length);
+    else if (raw.endsWith(':SaveMe')) {
+        const remote = raw.slice(0, -'SaveMe'.length);
+        return {kind: 'remote', remote: remote.slice(0, -1), path: ''};
+    } else {
+        return null;
+    }
+    if (/^[^/]+:/.test(base)) {
+        const colon = base.indexOf(':');
+        return {
+            kind: 'remote',
+            remote: base.slice(0, colon),
+            path: base.slice(colon + 1),
+        };
+    }
+    return {kind: 'local', path: base || '/'};
+}
+
 export function sourceFolderName(descriptor, index = 0) {
     const raw = descriptor?.path || '';
     const base = rcloneBasename(raw);

@@ -1,6 +1,7 @@
 import {
     backupCurrentFor,
     backupRootFor,
+    destinationFromBackupContainer,
     joinRclonePath,
     rcloneBasename,
     sourceFolderName,
@@ -39,6 +40,17 @@ export default suite('domain/backup-layout', [
     }),
     test('rejects a remote destination without a colon', () => {
         assertThrows(() => backupRootFor(remoteJob(), 'Backups'), /Invalid remote destination/);
+    }),
+    test('derives the destination base from a SaveMe container', () => {
+        assertEqual(JSON.stringify(destinationFromBackupContainer('/tmp/dest/SaveMe')),
+            JSON.stringify({kind: 'local', path: '/tmp/dest'}));
+        assertEqual(JSON.stringify(destinationFromBackupContainer('/SaveMe')),
+            JSON.stringify({kind: 'local', path: '/'}));
+        assertEqual(JSON.stringify(destinationFromBackupContainer('drive:Backups/SaveMe')),
+            JSON.stringify({kind: 'remote', remote: 'drive', path: 'Backups'}));
+        assertEqual(JSON.stringify(destinationFromBackupContainer('drive:SaveMe')),
+            JSON.stringify({kind: 'remote', remote: 'drive', path: ''}));
+        assertEqual(destinationFromBackupContainer('/tmp/not-saveme'), null);
     }),
     test('names source folders safely and disambiguates duplicates', () => {
         assertEqual(sourceFolderName({kind: 'local', path: '/home/me/Photos'}), 'Photos');
