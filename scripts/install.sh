@@ -413,29 +413,6 @@ start_daemon() {
     fi
 }
 
-repair_document_portal() {
-    [ "$DRY_RUN" -eq 0 ] || return 0
-    command -v systemctl >/dev/null 2>&1 || return 0
-    runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-    [ -d "$runtime_dir/doc" ] || return 0
-    systemctl --user is-active xdg-document-portal.service >/dev/null 2>&1 ||
-        return 0
-    [ -d "$runtime_dir/doc/by-app" ] && return 0
-    say "Flatpak document portal mount is missing; restarting it."
-    systemctl --user restart xdg-document-portal.service >/dev/null 2>&1 || true
-    i=0
-    while [ "$i" -lt 20 ]; do
-        if [ -d "$runtime_dir/doc/by-app" ]; then
-            say "Flatpak document portal restored."
-            return 0
-        fi
-        i=$((i + 1))
-        sleep 0.1
-    done
-    say "Flatpak document portal is still unavailable. Try:"
-    say "  systemctl --user restart xdg-document-portal.service"
-}
-
 install_extension() {
     [ "$WITH_EXTENSION" -eq 1 ] || return 0
     if [ ! -f "$EXT" ]; then
@@ -545,7 +522,6 @@ do_install() {
     if [ "$START_DAEMON" -eq 1 ]; then
         start_daemon
     fi
-    repair_document_portal
 
     if [ "$DRY_RUN" -eq 0 ]; then
         say ""
