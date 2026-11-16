@@ -201,6 +201,7 @@ export default class SaveMeExtension extends Extension {
         });
         spin.set_from(0);
         spin.set_to(360);
+        this._panelIcon.set_pivot_point(0.5, 0.5);
         this._panelIcon.add_transition('saveme-panel-spin', spin);
         this._panelSpin = spin;
     }

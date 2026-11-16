@@ -118,6 +118,7 @@ export class JobRow {
         });
         spin.set_from(0);
         spin.set_to(360);
+        this.statusIcon.set_pivot_point(0.5, 0.5);
         this.statusIcon.add_transition('saveme-status-spin', spin);
         this._statusSpin = spin;
     }
