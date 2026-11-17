@@ -872,6 +872,10 @@ export const JobEditor = GObject.registerClass({
                     this._updateContentSummary();
                 }
                 this._renderSources();
+                if (localPathFor(descriptor, this.volumes)) {
+                    this._showStep(3);
+                    this._selectSyncContent();
+                }
             });
         });
         this.sourcesGroup.add(row);

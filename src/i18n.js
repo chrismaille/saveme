@@ -620,6 +620,7 @@ const CATALOGS = {
         'files checked': 'archivos comprobados',
 
         'No permission to access OneDrive. Reconnect the account in Accounts.': 'Sin permiso para acceder a OneDrive. Vuelve a conectar la cuenta en Cuentas.',
+        'more than a day': 'más de un día',
     },
     fr: {
         'Jobs': 'Tâches', 'Accounts': 'Comptes', 'Settings': 'Paramètres',
@@ -676,6 +677,7 @@ const CATALOGS = {
         'files checked': 'fichiers vérifiés',
 
         'No permission to access OneDrive. Reconnect the account in Accounts.': 'Accès à OneDrive refusé. Reconnectez le compte dans Comptes.',
+        'more than a day': 'plus d’un jour',
     },
     de: {
         'Jobs': 'Aufgaben', 'Accounts': 'Konten', 'Settings': 'Einstellungen',
@@ -733,6 +735,7 @@ const CATALOGS = {
         'files checked': 'Dateien geprüft',
 
         'No permission to access OneDrive. Reconnect the account in Accounts.': 'Kein Zugriff auf OneDrive. Verbinde das Konto unter Konten erneut.',
+        'more than a day': 'mehr als ein Tag',
     },
     it: {
         'Jobs': 'Attività', 'Accounts': 'Account', 'Settings': 'Impostazioni',
@@ -790,6 +793,7 @@ const CATALOGS = {
         'files checked': 'file controllati',
 
         'No permission to access OneDrive. Reconnect the account in Accounts.': 'Nessun permesso per accedere a OneDrive. Riconnetti l’account in Account.',
+        'more than a day': 'più di un giorno',
     },
     nl: {
         'Jobs': 'Taken', 'Accounts': 'Accounts', 'Settings': 'Instellingen',
@@ -847,6 +851,7 @@ const CATALOGS = {
         'files checked': 'bestanden gecontroleerd',
 
         'No permission to access OneDrive. Reconnect the account in Accounts.': 'Geen toegang tot OneDrive. Verbind het account opnieuw in Accounts.',
+        'more than a day': 'meer dan een dag',
     },
     pl: {
         'Jobs': 'Zadania', 'Accounts': 'Konta', 'Settings': 'Ustawienia',
@@ -904,6 +909,7 @@ const CATALOGS = {
         'files checked': 'sprawdzonych plików',
 
         'No permission to access OneDrive. Reconnect the account in Accounts.': 'Brak dostępu do OneDrive. Połącz konto ponownie w Kontach.',
+        'more than a day': 'ponad dzień',
     },
     ru: {
         'Jobs': 'Задачи', 'Accounts': 'Аккаунты', 'Settings': 'Настройки',
@@ -961,6 +967,7 @@ const CATALOGS = {
         'files checked': 'файлов проверено',
 
         'No permission to access OneDrive. Reconnect the account in Accounts.': 'Нет доступа к OneDrive. Подключите учётную запись заново в разделе Учётные записи.',
+        'more than a day': 'больше суток',
     },
     tr: {
         'Jobs': 'İşler', 'Accounts': 'Hesaplar', 'Settings': 'Ayarlar',
@@ -1017,6 +1024,7 @@ const CATALOGS = {
         'files checked': 'dosya kontrol edildi',
 
         'No permission to access OneDrive. Reconnect the account in Accounts.': 'OneDrive erişim izni yok. Hesabı Hesaplar bölümünde yeniden bağlayın.',
+        'more than a day': 'bir günden fazla',
     },
     sv: {
         'Jobs': 'Jobb', 'Accounts': 'Konton', 'Settings': 'Inställningar',
@@ -1073,6 +1081,7 @@ const CATALOGS = {
         'files checked': 'filer kontrollerade',
 
         'No permission to access OneDrive. Reconnect the account in Accounts.': 'Ingen åtkomst till OneDrive. Anslut kontot igen under Konton.',
+        'more than a day': 'mer än en dag',
     },
     da: {
         'Jobs': 'Job', 'Accounts': 'Konti', 'Settings': 'Indstillinger',
@@ -1129,6 +1138,7 @@ const CATALOGS = {
         'files checked': 'filer kontrolleret',
 
         'No permission to access OneDrive. Reconnect the account in Accounts.': 'Ingen adgang til OneDrive. Genopret kontoen under Konti.',
+        'more than a day': 'mere end en dag',
     },
     nb: {
         'Jobs': 'Jobber', 'Accounts': 'Kontoer', 'Settings': 'Innstillinger',
@@ -1185,6 +1195,7 @@ const CATALOGS = {
         'files checked': 'filer kontrollert',
 
         'No permission to access OneDrive. Reconnect the account in Accounts.': 'Ingen tilgang til OneDrive. Koble til kontoen på nytt under Kontoer.',
+        'more than a day': 'mer enn én dag',
     },
     fi: {
         'Jobs': 'Työt', 'Accounts': 'Tilit', 'Settings': 'Asetukset',
@@ -1242,6 +1253,7 @@ const CATALOGS = {
         'files checked': 'tiedostoa tarkistettu',
 
         'No permission to access OneDrive. Reconnect the account in Accounts.': 'Ei käyttöoikeutta OneDriveen. Yhdistä tili uudelleen Tilit-osiossa.',
+        'more than a day': 'yli vuorokausi',
     },
     cs: {
         'Jobs': 'Úlohy', 'Accounts': 'Účty', 'Settings': 'Nastavení',
@@ -1298,6 +1310,7 @@ const CATALOGS = {
         'files checked': 'zkontrolovaných souborů',
 
         'No permission to access OneDrive. Reconnect the account in Accounts.': 'Žádný přístup k OneDrive. Znovu připojte účet v části Účty.',
+        'more than a day': 'více než den',
     },
     uk: {
         'Jobs': 'Завдання', 'Accounts': 'Облікові записи',
@@ -1356,6 +1369,7 @@ const CATALOGS = {
         'files checked': 'файлів перевірено',
 
         'No permission to access OneDrive. Reconnect the account in Accounts.': 'Немає доступу до OneDrive. Підключіть обліковий запис знову в розділі Облікові записи.',
+        'more than a day': 'більше доби',
     },
 };
 
