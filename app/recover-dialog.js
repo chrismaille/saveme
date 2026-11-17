@@ -3,7 +3,6 @@ import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
 import {RemoteBrowserDialog} from './remote-browser.js';
 import {RecoveryImportDialog} from './recovery-import-dialog.js';
-import {RecoverySyncDialog} from './recovery-sync-dialog.js';
 import {t} from '../src/i18n.js';
 
 
@@ -188,32 +187,47 @@ export const RecoverDialog = GObject.registerClass({
             const row = new Adw.ActionRow({
                 title: entry.id,
                 subtitle: entry.legacy
-                    ? t('Folder without manifest. Recreate this job manually.')
-                    : t('Cannot read this folder.'),
+                    ? entry.type === 'sync'
+                        ? t('Sync job without manifest. It cannot be recovered ' +
+                            'automatically. The files are in the current folder.')
+                        : t('Backup without manifest. It cannot be recovered ' +
+                            'automatically. The files are in the current folder.')
+                    : t('Cannot read this folder. Open the current folder to inspect ' +
+                        'the files.'),
             });
-            if (entry.legacy && entry.type === 'sync' && result.destination) {
-                const recreate = new Gtk.Button({
-                    label: t('Recreate sync job'),
+            if (entry.backupPath) {
+                const open = new Gtk.Button({
+                    label: t('Open current folder'),
                     valign: Gtk.Align.CENTER,
                 });
-                recreate.connect('clicked', () => this._recreateLegacy(entry, result));
-                row.add_suffix(recreate);
-            } else {
-                row.add_suffix(new Gtk.Label({
-                    label: entry.legacy ? t('No manifest') : t('Unreadable'),
-                    css_classes: ['dim-label'],
-                }));
+                open.connect('clicked', () => this._openCurrent(entry));
+                row.add_suffix(open);
             }
             this.resultsGroup.add(row);
         }
     }
 
-    _recreateLegacy(entry, result) {
-        if (!result.destination) {
-            this.statusRow.set_subtitle(t('The selected folder does not look like a SaveMe base.'));
+    _openCurrent(entry) {
+        const current = `${String(entry.backupPath).replace(/\/+$/, '')}/current`;
+        const remote = /^([^:]+):(.*)$/.exec(current);
+        const remoteNames = (this.parentWindow.snapshot?.remotes || [])
+            .map(item => item.name);
+        if (remote && remoteNames.includes(remote[1])) {
+            new RemoteBrowserDialog(this.parentWindow, {
+                mode: 'browse',
+                remote: remote[1],
+                path: remote[2],
+                transientFor: this,
+            }).present();
             return;
         }
-        new RecoverySyncDialog(this.parentWindow, this, entry, result).present();
+        try {
+            this.parentWindow.launcher.openPath(current);
+        } catch (e) {
+            this.statusRow.set_subtitle(t('Cannot open folder: {message}', {
+                message: e.message,
+            }));
+        }
     }
 
     _confirmImport(entry, result) {

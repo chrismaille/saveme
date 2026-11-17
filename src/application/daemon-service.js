@@ -363,6 +363,60 @@ export class DaemonService {
         });
     }
 
+    remoteWebUrl(remoteName, path) {
+        const name = String(remoteName || '');
+        const relative = String(path || '').replace(/^\/+|\/+$/g, '');
+        if (!name)
+            throw new Error('Remote is required.');
+        const config = this.transfer.configDump()[name];
+        if (!config)
+            throw new Error(`Remote not found: ${name}`);
+        const encoded = relative.split('/').filter(Boolean)
+            .map(part => encodeURIComponent(part)).join('/');
+        if (config.type === 'dropbox')
+            return `https://www.dropbox.com/home/${encoded}`;
+        if (config.type === 'drive') {
+            return 'https://drive.google.com/drive/search?q=' +
+                encodeURIComponent(relative || 'SaveMe');
+        }
+        if (config.type !== 'onedrive')
+            throw new Error(`Web links are not supported for ${config.type || 'this remote'}.`);
+        const fallback = config.drive_type === 'business'
+            ? 'https://www.microsoft365.com/'
+            : 'https://onedrive.live.com/';
+        if (!relative)
+            return fallback;
+        const slash = relative.lastIndexOf('/');
+        const parent = slash >= 0 ? relative.slice(0, slash) : '';
+        const itemName = slash >= 0 ? relative.slice(slash + 1) : relative;
+        const remoteParent = parent ? `${name}:${parent}` : `${name}:`;
+        try {
+            const result = this.transfer.runCapture([
+                'lsjson', remoteParent, '--dirs-only', '--metadata',
+            ]);
+            if (!isSuccessExit(result.exitCode))
+                return fallback;
+            const entries = JSON.parse(result.stdout || '[]');
+            const entry = entries.find(item => item.Name === itemName);
+            const rawId = entry?.Metadata?.id || entry?.ID || '';
+            const itemId = rawId.includes('#') ? rawId.slice(rawId.indexOf('#') + 1) : rawId;
+            const driveId = rawId.includes('#')
+                ? rawId.slice(0, rawId.indexOf('#'))
+                : config.drive_id || '';
+            if (!itemId)
+                return fallback;
+            if (config.drive_type === 'business' || config.drive_type === 'documentLibrary') {
+                return `https://www.microsoft365.com/?id=${encodeURIComponent(itemId)}` +
+                    (driveId ? `&cid=${encodeURIComponent(driveId)}` : '');
+            }
+            return `https://onedrive.live.com/?id=${encodeURIComponent(itemId)}` +
+                (driveId ? `&cid=${encodeURIComponent(driveId)}` : '');
+        } catch (e) {
+            this.logger?.warn(`Cannot resolve web URL for ${name}:${relative}: ${e.message}`);
+            return fallback;
+        }
+    }
+
     inspectBackup(path) {
         const root = String(path || '').replace(/\/+$/, '');
         if (!root)

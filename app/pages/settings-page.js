@@ -25,8 +25,8 @@ export class SettingsPage {
                 .catch(e => this.window.toast(e.message));
         });
         this.startAtLoginRow = new Adw.SwitchRow({
-            title: t('Start jobs at login'),
-            subtitle: t('Start enabled jobs automatically when the daemon starts.'),
+            title: t('Start automatically at login'),
+            subtitle: t('Start enabled jobs when SaveMe starts at login.'),
         });
         this.blockStartAtLoginUpdate = false;
         this.startAtLoginRow.connect('notify::active', () => {

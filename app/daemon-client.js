@@ -141,6 +141,12 @@ export class DaemonClient {
         return JSON.parse(reply.deepUnpack()[0]);
     }
 
+    async remoteWebUrl(remote, path) {
+        const reply = await this._call('RemoteWebUrl',
+            new GLib.Variant('(ss)', [remote, path]), 60_000);
+        return reply.deepUnpack()[0];
+    }
+
     async deleteJob(jobId, deleteData = false) {
         await this._call('DeleteJob',
             new GLib.Variant('(sb)', [jobId, Boolean(deleteData)]), 180_000);

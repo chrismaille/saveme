@@ -75,6 +75,7 @@ class FakeTransfer {
         this.paths = new Set();
         this.files = new Map();
         this.dirs = new Map();
+        this.config = {};
     }
     getVersion() { if (this.version instanceof Error) throw this.version; return this.version; }
     checkVersion() { return true; }
@@ -96,6 +97,7 @@ class FakeTransfer {
         if (this.captureHandler) return this.captureHandler(args);
         return {exitCode: 0, stdout: '', stderr: ''};
     }
+    configDump() { return this.config; }
     configDelete(name) { this.deleted.push(name); return {exitCode: 0, stderr: ''}; }
 }
 
@@ -567,6 +569,73 @@ export default suite('application/daemon-service', [
         };
         const inspected = JSON.parse(ctx.service.inspectBackup('/dst/SaveMe'));
         assertEqual(inspected.jobs[0].sources[0].exists, null);
+    }),
+    test('remoteWebUrl resolves OneDrive item IDs and provider paths', () => {
+        const ctx = makeService();
+        ctx.transfer.config = {
+            onedrive: {type: 'onedrive', drive_id: 'drive1', drive_type: 'personal'},
+            dropbox: {type: 'dropbox'},
+            drive: {type: 'drive'},
+        };
+        ctx.transfer.captureHandler = args => {
+            assertEqual(args[0], 'lsjson');
+            return {
+                exitCode: 0,
+                stdout: JSON.stringify([{
+                    Name: 'current',
+                    ID: 'drive1#item1',
+                    Metadata: {id: 'drive1#item1'},
+                }]),
+                stderr: '',
+            };
+        };
+        assertEqual(ctx.service.remoteWebUrl('onedrive', 'Ubuntu/SaveMe/job/current'),
+            'https://onedrive.live.com/?id=item1&cid=drive1');
+        assertEqual(ctx.service.remoteWebUrl('dropbox', 'SaveMe/job/current'),
+            'https://www.dropbox.com/home/SaveMe/job/current');
+        assertEqual(ctx.service.remoteWebUrl('drive', 'SaveMe/job/current'),
+            'https://drive.google.com/drive/search?q=SaveMe%2Fjob%2Fcurrent');
+        assertThrows(() => ctx.service.remoteWebUrl('', 'x'), /Remote is required/);
+        assertThrows(() => ctx.service.remoteWebUrl('missing', 'x'), /Remote not found/);
+        assertEqual(ctx.service.remoteWebUrl('onedrive', ''), 'https://onedrive.live.com/');
+        assertEqual(ctx.service.remoteWebUrl('dropbox', ''), 'https://www.dropbox.com/home/');
+        assertEqual(ctx.service.remoteWebUrl('drive', ''),
+            'https://drive.google.com/drive/search?q=SaveMe');
+
+        ctx.transfer.config.onedrive.drive_type = 'business';
+        assertEqual(ctx.service.remoteWebUrl('onedrive', 'Ubuntu/SaveMe/job/current'),
+            'https://www.microsoft365.com/?id=item1&cid=drive1');
+        ctx.transfer.config.onedrive.drive_type = 'personal';
+
+        ctx.transfer.captureHandler = () => ({
+            exitCode: 0,
+            stdout: JSON.stringify([{
+                Name: 'current',
+                Metadata: {id: 'item2'},
+            }]),
+            stderr: '',
+        });
+        assertEqual(ctx.service.remoteWebUrl('onedrive', 'current'),
+            'https://onedrive.live.com/?id=item2&cid=drive1');
+
+        ctx.transfer.captureHandler = () => ({
+            exitCode: 0,
+            stdout: JSON.stringify([{Name: 'other'}]),
+            stderr: '',
+        });
+        assertEqual(ctx.service.remoteWebUrl('onedrive', 'Ubuntu/SaveMe/job/current'),
+            'https://onedrive.live.com/');
+
+        ctx.transfer.captureHandler = () => ({exitCode: 0, stdout: 'not json', stderr: ''});
+        assertEqual(ctx.service.remoteWebUrl('onedrive', 'Ubuntu/SaveMe/job/current'),
+            'https://onedrive.live.com/');
+
+        ctx.transfer.captureHandler = () => ({exitCode: 1, stdout: '', stderr: 'boom'});
+        assertEqual(ctx.service.remoteWebUrl('onedrive', 'Ubuntu/SaveMe/job/current'),
+            'https://onedrive.live.com/');
+
+        ctx.transfer.config.s3 = {type: 's3'};
+        assertThrows(() => ctx.service.remoteWebUrl('s3', 'x'), /not supported/);
     }),
     test('importJob rejects legacy direct sync jobs', () => {
         const ctx = makeService();

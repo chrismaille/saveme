@@ -639,33 +639,38 @@ export class JobsPage {
             return 'https://drive.google.com/drive/search?q=' +
                 encodeURIComponent(path || 'SaveMe');
         }
-        if (type === 'onedrive') {
-            const business = remote?.options?.drive_type === 'business';
-            return business
-                ? 'https://www.microsoft365.com/search/overview?q=' +
-                    encodeURIComponent(path || 'SaveMe')
-                : 'https://onedrive.live.com/?qt=search&query=' +
-                    encodeURIComponent(path || 'SaveMe');
-        }
+        // OneDrive needs the item ID from the remote metadata; the daemon
+        // resolves it on demand.
         return null;
     }
 
     _addRemoteWebButton(row, job, relativePath) {
         if (job.destination?.kind !== 'remote')
             return;
-        const url = this._remoteWebUrl(job, relativePath);
-        if (!url)
-            return;
         const remote = (this.window.snapshot?.remotes || [])
             .find(item => item.name === job.destination.remote);
+        const type = remote?.type;
+        if (!['dropbox', 'drive', 'onedrive'].includes(type))
+            return;
         const button = iconButton('web-browser-symbolic',
-            `Open in ${remoteTypeLabel(remote?.type || 'cloud')}`,
+            `Open in ${remoteTypeLabel(type || 'cloud')}`,
             {cssClasses: ['flat'], pixelSize: 18});
-        button.connect('clicked', () => {
+        button.connect('clicked', async () => {
+            button.sensitive = false;
             try {
+                let url = this._remoteWebUrl(job, relativePath);
+                if (!url && type === 'onedrive')
+                    url = await this.window.client.remoteWebUrl(
+                        job.destination.remote, relativePath);
+                if (!url)
+                    throw new Error(t('No web link is available for this folder.'));
                 Gio.AppInfo.launch_default_for_uri(url, null);
             } catch (e) {
-                this.window.toast(e.message);
+                this.window.toast(t('Cannot open cloud folder: {message}', {
+                    message: cleanError(e.message),
+                }));
+            } finally {
+                button.sensitive = true;
             }
         });
         row.add_suffix(button);

@@ -44,6 +44,10 @@ export class DaemonApi {
         return this.service.inspectBackup(path);
     }
 
+    RemoteWebUrl(remote, path) {
+        return this.service.remoteWebUrl(remote, path);
+    }
+
     DeleteJob(jobId, deleteData) {
         this.service.deleteJob(jobId, Boolean(deleteData));
     }

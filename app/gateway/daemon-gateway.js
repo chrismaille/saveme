@@ -61,6 +61,10 @@ export class DaemonGateway {
         return this.client.inspectBackup(path);
     }
 
+    remoteWebUrl(remote, path) {
+        return this.client.remoteWebUrl(remote, path);
+    }
+
     deleteJob(jobId, deleteData = false) {
         return this.client.deleteJob(jobId, deleteData);
     }
