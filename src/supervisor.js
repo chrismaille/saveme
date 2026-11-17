@@ -313,6 +313,12 @@ export class JobSupervisor {
         if (!run || this._stopped)
             return;
         this.onRunFinished?.(run);
+        // A dry run is diagnostic only: it must not change the job card,
+        // schedule, notifications or last real backup result.
+        if (run.dryRun) {
+            this._setIdleStatus();
+            return;
+        }
         if (isCancelledRun(run.result)) {
             const availability = this._paused || this.state.pausedAll || !this.job.enabled
                 ? {sourceAvailable: true}

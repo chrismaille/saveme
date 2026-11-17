@@ -50,7 +50,7 @@ export const SyncSelectionDialog = GObject.registerClass({
         super({
             transient_for: transientFor || parentWindow,
             modal: true,
-            title: t('Select sync content'),
+            title: t('Select content'),
             default_width: 640,
             default_height: 640,
         });

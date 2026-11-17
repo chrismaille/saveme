@@ -72,11 +72,13 @@ export function shortFile(path, max = 42) {
     return name.length <= max ? name : `${name.slice(0, max - 1)}…`;
 }
 
-export function formatEta(value) {
+export function formatEta(value, translate = value => value) {
     const total = Number(value);
     if (!Number.isFinite(total) || total < 0)
         return '-';
     const seconds = Math.round(total);
+    if (seconds > 86_400)
+        return translate('more than a day');
     if (seconds < 60)
         return `${seconds}s`;
     const minutes = Math.floor(seconds / 60);
@@ -172,7 +174,7 @@ export function progressView(state, {translate = value => value} = {}) {
         if (speed > 0)
             text += ` · ${formatBytes(speed)}/s`;
         if (progress.eta !== null && progress.eta !== undefined)
-            text += ` · ETA ${formatEta(progress.eta)}`;
+            text += ` · ETA ${formatEta(progress.eta, translate)}`;
         return {
             visible: true,
             percent,

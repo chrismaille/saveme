@@ -109,6 +109,10 @@ export class StateStore {
         ensureDir(runsDir(run.jobId), 0o700);
         const runPath = GLib.build_filenamev([runsDir(run.jobId), `${run.id}.json`]);
         atomicWriteJson(runPath, run, 0o600);
+        // A dry run is a diagnostic: keep its run record, but do not change
+        // the job's last real backup/statistics.
+        if (run.dryRun)
+            return;
         const patch = {
             lastRunId: run.id,
             lastResult: run.result,

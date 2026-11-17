@@ -33,7 +33,8 @@ export function filterRules(job, {includeSelection = true} = {}) {
         else
             rules.push(`- ${value}`);
     }
-    const includes = includeSelection && job.type === 'sync'
+    const includes = includeSelection &&
+        ['sync', 'backup'].includes(job.type)
         ? normalizeIncludes(job.filters?.include)
         : [];
     if (includes.length > 0) {

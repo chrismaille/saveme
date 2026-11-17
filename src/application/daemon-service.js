@@ -363,6 +363,21 @@ export class DaemonService {
         });
     }
 
+    jobSize(jobId) {
+        const job = this.config.getJob(jobId);
+        if (!job)
+            throw new Error(`Job not found: ${jobId}`);
+        const destination = this._resolveJobDestination(job);
+        const root = job.destinationLayout === 'direct'
+            ? destination
+            : backupRootFor(job, destination);
+        const size = this.transfer.size(root, {fastList: true});
+        return JSON.stringify({
+            bytes: Number(size.bytes || 0),
+            count: Number(size.count || 0),
+        });
+    }
+
     remoteWebUrl(remoteName, path) {
         const name = String(remoteName || '');
         const relative = String(path || '').replace(/^\/+|\/+$/g, '');

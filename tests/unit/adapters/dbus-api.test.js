@@ -33,6 +33,7 @@ export default suite('adapters/dbus/api', [
         assertEqual(api.InspectBackup('/SaveMe'), 'inspectBackup-result');
         assertEqual(api.RemoteWebUrl('onedrive', 'SaveMe/job'),
             'remoteWebUrl-result');
+        assertEqual(api.JobSize('job'), 'jobSize-result');
         api.DeleteJob('job', true);
         assertEqual(api.GetRun('job', 'run'), 'getRun-result');
         assertEqual(api.GetRunLog('job', 'run'), 'getRunLog-result');

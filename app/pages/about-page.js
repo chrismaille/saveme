@@ -47,9 +47,7 @@ export class AboutPage {
 
         const aboutGroup = new Adw.PreferencesGroup({title: t('About')});
         this.versionRow = new Adw.ActionRow({title: t('Version'), subtitle: '-'});
-        this.rcloneRow = new Adw.ActionRow({title: 'rclone', subtitle: '-'});
         aboutGroup.add(this.versionRow);
-        aboutGroup.add(this.rcloneRow);
         this.widget.add(aboutGroup);
 
         const linksGroup = new Adw.PreferencesGroup({
@@ -73,9 +71,5 @@ export class AboutPage {
         const version = snapshot.version || '-';
         this.versionLabel.set_text(version);
         this.versionRow.set_subtitle(version);
-        const rclone = snapshot.daemon?.rclone;
-        this.rcloneRow.set_subtitle(rclone
-            ? `${rclone.version || 'unknown'} · ${rclone.path || '-'}`
-            : 'unavailable');
     }
 }

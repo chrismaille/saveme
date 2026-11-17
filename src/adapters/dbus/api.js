@@ -48,6 +48,10 @@ export class DaemonApi {
         return this.service.remoteWebUrl(remote, path);
     }
 
+    JobSize(jobId) {
+        return this.service.jobSize(jobId);
+    }
+
     DeleteJob(jobId, deleteData) {
         this.service.deleteJob(jobId, Boolean(deleteData));
     }

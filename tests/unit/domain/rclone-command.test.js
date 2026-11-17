@@ -50,7 +50,7 @@ export default suite('domain/rclone-command', [
     test('filterRules handles missing filters', () => {
         assertEqual(filterRules({}).length, DEFAULT_EXCLUDES.length);
     }),
-    test('sync include selection is ordered after excludes', () => {
+    test('include selection is ordered after excludes', () => {
         const rules = filterRules({
             type: 'sync',
             filters: {
@@ -71,7 +71,7 @@ export default suite('domain/rclone-command', [
             type: 'backup',
             filters: {include: ['docs']},
             options: {},
-        }).includes('+ /docs'), false);
+        }).includes('+ /docs'), true);
     }),
     test('commonJobArgs includes copy and optional flags', () => {
         assertEqual(JSON.stringify(commonJobArgs(job(), '/tmp/filter')), JSON.stringify([

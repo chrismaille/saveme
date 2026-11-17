@@ -570,6 +570,24 @@ export default suite('application/daemon-service', [
         const inspected = JSON.parse(ctx.service.inspectBackup('/dst/SaveMe'));
         assertEqual(inspected.jobs[0].sources[0].exists, null);
     }),
+    test('jobSize reports the destination folder size', () => {
+        const ctx = makeService();
+        ctx.config.jobs = [backupJob()];
+        ctx.transfer.sizes.set('/dst/SaveMe/job_1', {bytes: 2048, count: 3});
+        const size = JSON.parse(ctx.service.jobSize('job_1'));
+        assertEqual(size.bytes, 2048);
+        assertEqual(size.count, 3);
+        ctx.config.jobs = [{
+            ...backupJob(),
+            type: 'sync',
+            destinationLayout: 'direct',
+        }];
+        ctx.transfer.sizes.set('/dst', {});
+        const direct = JSON.parse(ctx.service.jobSize('job_1'));
+        assertEqual(direct.bytes, 0);
+        assertEqual(direct.count, 0);
+        assertThrows(() => ctx.service.jobSize('missing'), /Job not found/);
+    }),
     test('remoteWebUrl resolves OneDrive item IDs and provider paths', () => {
         const ctx = makeService();
         ctx.transfer.config = {
@@ -618,6 +636,26 @@ export default suite('application/daemon-service', [
         assertEqual(ctx.service.remoteWebUrl('onedrive', 'current'),
             'https://onedrive.live.com/?id=item2&cid=drive1');
 
+        ctx.transfer.captureHandler = () => ({
+            exitCode: 0,
+            stdout: JSON.stringify([{Name: 'current', ID: 'drive1#item3'}]),
+            stderr: '',
+        });
+        assertEqual(ctx.service.remoteWebUrl('onedrive', 'Ubuntu/SaveMe/job/current'),
+            'https://onedrive.live.com/?id=item3&cid=drive1');
+        ctx.transfer.config.onedrive.drive_id = '';
+        ctx.transfer.captureHandler = () => ({
+            exitCode: 0,
+            stdout: JSON.stringify([{Name: 'current', Metadata: {id: 'item4'}}]),
+            stderr: '',
+        });
+        assertEqual(ctx.service.remoteWebUrl('onedrive', 'Ubuntu/SaveMe/job/current'),
+            'https://onedrive.live.com/?id=item4');
+        ctx.transfer.config.onedrive.drive_type = 'business';
+        assertEqual(ctx.service.remoteWebUrl('onedrive', 'Ubuntu/SaveMe/job/current'),
+            'https://www.microsoft365.com/?id=item4');
+        ctx.transfer.config.onedrive.drive_type = 'personal';
+        ctx.transfer.config.onedrive.drive_id = 'drive1';
         ctx.transfer.captureHandler = () => ({
             exitCode: 0,
             stdout: JSON.stringify([{Name: 'other'}]),

@@ -2,11 +2,25 @@ import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
 import {t} from '../../src/i18n.js';
 import {remoteTypeLabel} from '../presentation/format.js';
+import {iconButton} from '../widgets/common.js';
 
 export class AccountsPage {
     constructor(window) {
         this.window = window;
-        this.widget = new Adw.PreferencesPage();
+        this.widget = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL});
+        this.addButton = new Gtk.Button({
+            label: t('Add account'),
+            icon_name: 'list-add-symbolic',
+            margin_top: 8,
+            margin_bottom: 8,
+            margin_start: 12,
+            margin_end: 12,
+            css_classes: ['suggested-action'],
+        });
+        this.addButton.connect('clicked', () => this.window.addAccount(null));
+        this.page = new Adw.PreferencesPage({vexpand: true});
+        this.widget.append(this.addButton);
+        this.widget.append(this.page);
         this.group = null;
         this.key = null;
     }
@@ -24,7 +38,7 @@ export class AccountsPage {
 
     _rebuild(remotes) {
         if (this.group)
-            this.widget.remove(this.group);
+            this.page.remove(this.group);
         this.group = new Adw.PreferencesGroup({
             title: t('Accounts'),
             description: t('Cloud accounts used by sync and backup jobs.'),
@@ -34,13 +48,6 @@ export class AccountsPage {
                 title: t('No accounts configured'),
                 subtitle: t('Add Google Drive, OneDrive or Dropbox.'),
             });
-            const button = new Gtk.Button({
-                label: t('Add account'),
-                valign: Gtk.Align.CENTER,
-                css_classes: ['suggested-action'],
-            });
-            button.connect('clicked', () => this.window.addAccount(null));
-            row.add_suffix(button);
             this.group.add(row);
         } else {
             for (const remote of remotes) {
@@ -52,16 +59,12 @@ export class AccountsPage {
                     icon_name: 'folder-remote-symbolic',
                     pixel_size: 16,
                 }));
-                const reauth = new Gtk.Button({
-                    label: t('Reconnect'),
-                    valign: Gtk.Align.CENTER,
-                    css_classes: ['flat'],
+                const reauth = iconButton('view-refresh-symbolic', t('Reconnect'), {
+                    cssClasses: ['flat'],
                 });
                 reauth.connect('clicked', () => this.window.addAccount(remote));
-                const remove = new Gtk.Button({
-                    label: t('Delete'),
-                    valign: Gtk.Align.CENTER,
-                    css_classes: ['flat', 'destructive-action'],
+                const remove = iconButton('edit-delete-symbolic', t('Delete'), {
+                    cssClasses: ['flat', 'destructive-action'],
                 });
                 remove.connect('clicked', () => {
                     this.window.confirm(t('Delete account?'),
@@ -78,20 +81,8 @@ export class AccountsPage {
                 row.add_suffix(remove);
                 this.group.add(row);
             }
-            const addRow = new Adw.ActionRow({
-                title: t('Add account'),
-                subtitle: t('Connect another cloud account.'),
-            });
-            const addButton = new Gtk.Button({
-                label: t('Add'),
-                valign: Gtk.Align.CENTER,
-                css_classes: ['flat'],
-            });
-            addButton.connect('clicked', () => this.window.addAccount(null));
-            addRow.add_suffix(addButton);
-            this.group.add(addRow);
         }
-        this.widget.add(this.group);
+        this.page.add(this.group);
     }
 
     _showError(title, message) {

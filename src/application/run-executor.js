@@ -59,6 +59,7 @@ export class RunExecutor {
                 status: 'running',
                 message: '',
                 progress: null,
+                dryRun: Boolean(dryRun),
             });
         } catch (e) {
             logger.warn(`Cannot update state: ${e.message}`);
@@ -125,6 +126,11 @@ export class RunExecutor {
             technicalMessage: run.technicalMessage,
         });
         ctx.logger.close();
+        try {
+            this.state?.setJobState(ctx.job.id, {dryRun: false, progress: null});
+        } catch (_) {
+            // Best effort.
+        }
         for (const path of ctx.tempFiles) {
             try {
                 this.files.removeIfExists(path);
@@ -236,6 +242,7 @@ export class RunExecutor {
         if (ctx.progressMapper)
             progress = ctx.progressMapper(progress) || progress;
         progress = this.smoothProgress(ctx, progress);
+        progress.dryRun = Boolean(ctx.dryRun);
         ctx.progress = progress;
         try {
             this.state?.updateProgress(ctx.job.id, progress);
@@ -293,6 +300,7 @@ export class RunExecutor {
             runId: ctx.runId,
             phase: 'running',
             percent: 0,
+            dryRun: Boolean(ctx.dryRun),
             ...(ctx.progress || {}),
             ...patch,
         };

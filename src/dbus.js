@@ -45,6 +45,10 @@ export const DAEMON_INTERFACE = `
       <arg type="s" direction="in"/>
       <arg type="s" direction="out"/>
     </method>
+    <method name="JobSize">
+      <arg type="s" direction="in"/>
+      <arg type="s" direction="out"/>
+    </method>
     <method name="DeleteJob">
       <arg type="s" direction="in"/>
       <arg type="b" direction="in"/>

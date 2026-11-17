@@ -14,9 +14,7 @@ import {sleep} from '../src/util.js';
 import {SystemLauncher} from './gateway/system-launcher.js';
 import {JobsPage} from './pages/jobs-page.js';
 import {AccountsPage} from './pages/accounts-page.js';
-import {LogsPage} from './pages/logs-page.js';
 import {SettingsPage} from './pages/settings-page.js';
-import {DebugPage} from './pages/debug-page.js';
 import {DiagnosticsPage} from './diagnostics-page.js';
 import {AboutPage} from './pages/about-page.js';
 
@@ -46,11 +44,11 @@ export const SaveMeWindow = GObject.registerClass({
         this._monitorUnsubscribe = null;
         this._buildUI();
         this._monitorUnsubscribe = this.monitor?.onSample(metrics => {
-            this.settingsPage.updatePerformance(metrics);
-            this.debugPage.updatePerformance(metrics);
+            this.jobsPage.updatePerformance(metrics);
+            this.diagnosticsPage.updatePerformance(metrics);
         }) || null;
-        this.settingsPage.updatePerformance(this.monitor?.snapshot());
-        this.debugPage.updatePerformance(this.monitor?.snapshot());
+        this.jobsPage.updatePerformance(this.monitor?.snapshot());
+        this.diagnosticsPage.updatePerformance(this.monitor?.snapshot());
 
         this._unsubscribe = this.client.onSnapshot(json => {
             try {
@@ -95,10 +93,8 @@ export const SaveMeWindow = GObject.registerClass({
 
         this.jobsPage = new JobsPage(this);
         this.accountsPage = new AccountsPage(this);
-        this.logsPage = new LogsPage(this);
         this.settingsPage = new SettingsPage(this);
-        this.debugPage = new DebugPage(this);
-        this.diagnosticsPage = new DiagnosticsPage(this, this.logsPage, this.debugPage);
+        this.diagnosticsPage = new DiagnosticsPage(this);
         this.aboutPage = new AboutPage(this);
         const jobsPage = this.stack.add_titled(this.jobsPage.widget, 'jobs', t('Jobs'));
         jobsPage.set_icon_name('view-list-symbolic');
@@ -107,7 +103,7 @@ export const SaveMeWindow = GObject.registerClass({
         const settingsPage = this.stack.add_titled(this.settingsPage.widget, 'settings', t('Settings'));
         settingsPage.set_icon_name('emblem-system-symbolic');
         const diagnosticsPage = this.stack.add_titled(this.diagnosticsPage.widget,
-            'diagnostics', t('Logs & Debug'));
+            'diagnostics', t('Diagnostics'));
         diagnosticsPage.set_icon_name('utilities-terminal-symbolic');
         const aboutPage = this.stack.add_titled(this.aboutPage.widget, 'about', t('About'));
         aboutPage.set_icon_name('help-about-symbolic');
@@ -143,9 +139,8 @@ export const SaveMeWindow = GObject.registerClass({
             this.set_content(this.toastOverlay);
         this.jobsPage.update(snapshot);
         this.accountsPage.update(snapshot);
-        this.logsPage.update(snapshot);
         this.settingsPage.update(snapshot);
-        this.debugPage.update(snapshot);
+        this.diagnosticsPage.update(snapshot);
         this.aboutPage.update(snapshot);
     }
 
@@ -212,21 +207,11 @@ export const SaveMeWindow = GObject.registerClass({
         this.toastOverlay.add_toast(new Adw.Toast({title: message}));
     }
 
-    showView(name, jobId = null) {
+    showView(name) {
+        if (name === 'logs' || name === 'debug')
+            name = 'diagnostics';
         if (['jobs', 'accounts', 'settings', 'diagnostics', 'about'].includes(name))
             this.stack.set_visible_child_name(name);
-        if (name === 'logs' || name === 'debug') {
-            this.stack.set_visible_child_name('diagnostics');
-            this.diagnosticsPage.show(name);
-        }
-        if (name === 'diagnostics')
-            this.diagnosticsPage.show();
-        if (name === 'logs' && jobId)
-            this.logsPage.selectJob(jobId);
-        if (name === 'logs')
-            this.logsPage.onShown();
-        if (name === 'debug')
-            this.debugPage.onShown();
         if (name === 'diagnostics')
             this.diagnosticsPage.onShown();
     }
@@ -241,10 +226,6 @@ export const SaveMeWindow = GObject.registerClass({
 
     addAccount(existing = null) {
         new AccountDialog(this, existing).present();
-    }
-
-    openLogs(jobId = null) {
-        this.showView('logs', jobId);
     }
 
     openAppLog() {

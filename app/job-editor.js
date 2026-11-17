@@ -30,7 +30,8 @@ const TRIGGER_OPTIONS = [
     {mode: TRIGGER_MODES.MANUAL, label: t('Manual')},
 ];
 const STEP_TITLES = [
-    t('General'), t('Sources'), t('Destination'), t('Schedule'), t('Safety'),
+    t('Type'), t('Name'), t('Source'), t('Content'), t('Filters'),
+    t('Destination'), t('Schedule'), t('Safety'),
 ];
 
 export const JobEditor = GObject.registerClass({
@@ -105,11 +106,14 @@ export const JobEditor = GObject.registerClass({
         toolbar.add_top_bar(header);
 
         this.stack = new Adw.ViewStack();
-        this.stack.add_titled(this._buildGeneralPage(), 'general', STEP_TITLES[0]);
-        this.stack.add_titled(this._buildSourcesPage(), 'sources', STEP_TITLES[1]);
-        this.stack.add_titled(this._buildDestinationPage(), 'destination', STEP_TITLES[2]);
-        this.stack.add_titled(this._buildSchedulePage(), 'schedule', STEP_TITLES[3]);
-        this.stack.add_titled(this._buildSafetyPage(), 'safety', STEP_TITLES[4]);
+        this.stack.add_titled(this._buildTypePage(), 'type', STEP_TITLES[0]);
+        this.stack.add_titled(this._buildNamePage(), 'name', STEP_TITLES[1]);
+        this.stack.add_titled(this._buildSourcePage(), 'source', STEP_TITLES[2]);
+        this.stack.add_titled(this._buildContentPage(), 'content', STEP_TITLES[3]);
+        this.stack.add_titled(this._buildFiltersPage(), 'filters', STEP_TITLES[4]);
+        this.stack.add_titled(this._buildDestinationPage(), 'destination', STEP_TITLES[5]);
+        this.stack.add_titled(this._buildSchedulePage(), 'schedule', STEP_TITLES[6]);
+        this.stack.add_titled(this._buildSafetyPage(), 'safety', STEP_TITLES[7]);
         toolbar.set_content(this.stack);
         this.set_content(toolbar);
         this._updateVisibility();
@@ -128,68 +132,109 @@ export const JobEditor = GObject.registerClass({
         return new Adw.PreferencesPage();
     }
 
-    _buildGeneralPage() {
+    _buildTypePage() {
         const page = this._page();
         const group = new Adw.PreferencesGroup({
-            title: t('General'),
-            description: this.isNew
-                ? t('Name the job and choose whether it mirrors or keeps versions.')
-                : t('The job type cannot be changed after creation.'),
-        });
-        this.nameRow = new Adw.EntryRow({
-            title: t('Name'),
-            text: this.job.name || '',
+            title: t('Job type'),
+            description: t('Choose how SaveMe should treat this folder.'),
         });
         this.typeRow = new Adw.ComboRow({
             title: t('Type'),
             model: Gtk.StringList.new([t('Sync'), t('Backup')]),
             selected: this.job.type === JOB_TYPES.BACKUP ? 1 : 0,
         });
-        this.typeRow.sensitive = this.isNew;
         this.typeRow.connect('notify::selected', () => this._updateVisibility());
-        group.add(this.nameRow);
-        group.add(this.typeRow);
+        const flow = new Gtk.FlowBox({
+            selection_mode: Gtk.SelectionMode.NONE,
+            max_children_per_line: 2,
+            column_spacing: 12,
+            row_spacing: 12,
+            homogeneous: true,
+            margin_top: 8,
+            margin_bottom: 8,
+        });
+        const addCard = (type, title, description, icon) => {
+            const content = new Gtk.Box({
+                orientation: Gtk.Orientation.VERTICAL,
+                spacing: 8,
+                margin_top: 16,
+                margin_bottom: 16,
+                margin_start: 16,
+                margin_end: 16,
+            });
+            content.append(new Gtk.Image({icon_name: icon, pixel_size: 48}));
+            content.append(new Gtk.Label({
+                label: title,
+                xalign: 0,
+                css_classes: ['title-3'],
+            }));
+            content.append(new Gtk.Label({
+                label: description,
+                xalign: 0,
+                wrap: true,
+                css_classes: ['dim-label'],
+            }));
+            const button = new Gtk.Button({
+                height_request: 190,
+                hexpand: true,
+                css_classes: ['card'],
+                child: content,
+            });
+            button.sensitive = this.isNew;
+            button.connect('clicked', () => {
+                this.typeRow.selected = type === JOB_TYPES.BACKUP ? 1 : 0;
+                this._updateVisibility();
+                this._showStep(1);
+            });
+            flow.append(button);
+        };
+        addCard(JOB_TYPES.SYNC, t('Sync'),
+            t('Mirror the selected content. Changes and deletions are reflected ' +
+                'in the destination.'), 'emblem-synchronizing-symbolic');
+        addCard(JOB_TYPES.BACKUP, t('Backup'),
+            t('Keep previous versions of changed or deleted files according to ' +
+                'the retention policy.'), 'document-save-symbolic');
+        group.add(flow);
         page.add(group);
         return page;
     }
 
-    _buildSourcesPage() {
+    _buildNamePage() {
+        const page = this._page();
+        const group = new Adw.PreferencesGroup({
+            title: t('Name'),
+            description: t('Give this job a name you will recognize later.'),
+        });
+        this.nameRow = new Adw.EntryRow({
+            title: t('Name'),
+            text: this.job.name || '',
+        });
+        group.add(this.nameRow);
+        page.add(group);
+        return page;
+    }
+
+    _buildSourcePage() {
         const page = this._page();
         this.sourcesGroup = new Adw.PreferencesGroup({
-            title: t('Sources'),
-            description: t('Backup can combine multiple local folders. Sync uses one source.'),
+            title: t('Source'),
+            description: t('Choose the base folder or cloud path this job reads from.'),
         });
         this.sourceRows = [];
-        this.addSourceRow = new Adw.ActionRow({
-            title: t('Add another source'),
-            subtitle: t('Combine another folder in this backup.'),
-        });
-        const add = new Gtk.Button({
-            label: t('Add'),
-            valign: Gtk.Align.CENTER,
-            css_classes: ['flat'],
-        });
-        add.connect('clicked', () => this._addSource());
-        this.addSourceRow.add_suffix(add);
-        this.addSourceAttached = false;
         this._renderSources();
         page.add(this.sourcesGroup);
+        return page;
+    }
 
-        const filters = new Adw.PreferencesGroup({title: t('Filters')});
-        this.filtersRow = new Adw.EntryRow({
-            title: t('Exclude patterns (comma-separated)'),
-            text: (this.job.filters.exclude || []).join(', '),
-        });
-        filters.add(this.filtersRow);
-        page.add(filters);
-
+    _buildContentPage() {
+        const page = this._page();
         this.contentGroup = new Adw.PreferencesGroup({
-            title: t('Content selection'),
+            title: t('Content'),
             description: t('Choose root folders/files to include. Selected folders ' +
-                'include their descendants; the exclude filters above still apply.'),
+                'include their descendants.'),
         });
         this.contentRow = new Adw.ActionRow({
-            title: t('Content to sync'),
+            title: t('Content'),
             subtitle: t('All source content'),
         });
         this.contentButton = new Gtk.Button({
@@ -202,6 +247,21 @@ export const JobEditor = GObject.registerClass({
         this.contentGroup.add(this.contentRow);
         page.add(this.contentGroup);
         this._updateContentSummary();
+        return page;
+    }
+
+    _buildFiltersPage() {
+        const page = this._page();
+        const filters = new Adw.PreferencesGroup({
+            title: t('Filters'),
+            description: t('Exclude patterns are applied after the content selection.'),
+        });
+        this.filtersRow = new Adw.EntryRow({
+            title: t('Exclude patterns (comma-separated)'),
+            text: (this.job.filters.exclude || []).join(', '),
+        });
+        filters.add(this.filtersRow);
+        page.add(filters);
         return page;
     }
 
@@ -692,7 +752,8 @@ export const JobEditor = GObject.registerClass({
 
     _showStep(index) {
         this._step = Math.max(0, Math.min(STEP_TITLES.length - 1, index));
-        const names = ['general', 'sources', 'destination', 'schedule', 'safety'];
+        const names = ['type', 'name', 'source', 'content', 'filters',
+            'destination', 'schedule', 'safety'];
         this.stack.set_visible_child_name(names[this._step]);
         const title = this.isDraft ? t('Continue job') : this.isNew ? t('New job') : t('Edit job');
         this.windowTitle.title = `${title} · ` +
@@ -713,26 +774,26 @@ export const JobEditor = GObject.registerClass({
     }
 
     _validateStep(index) {
-        if (index === 0 && !this.nameRow.text.trim()) {
+        if (index === 1 && !this.nameRow.text.trim()) {
             this._showError(t('Give the job a name.'));
             return false;
         }
-        if (index === 1 && !this.sources.some(source => source.path || source.volumeUuid)) {
+        if (index === 2 && !this.sources.some(source => source.path || source.volumeUuid)) {
             this._showError(t('Choose at least one source folder.'));
             return false;
         }
-        if (index === 2 && !this._destinationSelected()) {
+        if (index === 5 && !this._destinationSelected()) {
             this._showError(t('Choose a destination.'));
             return false;
         }
-        if (index === 2) {
+        if (index === 5) {
             const compatibility = this._destinationCompatibilityError();
             if (compatibility) {
                 this._showError(compatibility);
                 return false;
             }
         }
-        if (index === 3) {
+        if (index === 6) {
             if (this.triggerMode === TRIGGER_MODES.INTERVAL && this._intervalMinutes() < 1) {
                 this._showError(t('The interval must be at least one minute.'));
                 return false;
@@ -795,69 +856,38 @@ export const JobEditor = GObject.registerClass({
     _renderSources() {
         for (const row of this.sourceRows)
             this.sourcesGroup.remove(row);
-        if (this.addSourceAttached) {
-            this.sourcesGroup.remove(this.addSourceRow);
-            this.addSourceAttached = false;
-        }
         this.sourceRows = [];
-        const backup = this.typeRow?.selected === 1;
-        for (const [index, source] of this.sources.entries()) {
-            const row = new Adw.ActionRow({
-                title: `${t('Source')} ${index + 1}`,
-                subtitle: descriptorDisplay(source, this.volumes) || t('Not selected'),
+        const source = this.sources[0] || {kind: 'local', path: ''};
+        this.sources[0] = source;
+        const row = new Adw.ActionRow({
+            title: t('Source folder'),
+            subtitle: descriptorDisplay(source, this.volumes) || t('Not selected'),
+        });
+        this._addChooseButton(row, () => {
+            this._chooseSourceDescriptor(0, source, descriptor => {
+                const previous = descriptorKey(this.sources[0]);
+                this.sources[0] = descriptor;
+                if (descriptorKey(descriptor) !== previous) {
+                    this.includes = [];
+                    this._updateContentSummary();
+                }
+                this._renderSources();
             });
-            this._addChooseButton(row, () => {
-                this._chooseSourceDescriptor(index, this.sources[index],
-                    descriptor => {
-                        const previous = descriptorKey(this.sources[index]);
-                        this.sources[index] = descriptor;
-                        if (index === 0 && this.typeRow.selected !== 1 &&
-                            descriptorKey(descriptor) !== previous) {
-                            this.includes = [];
-                            this._updateContentSummary();
-                        }
-                        this._renderSources();
-                    });
+        });
+        this.sourcesGroup.add(row);
+        this.sourceRows.push(row);
+        if (this.sources.length > 1) {
+            const extra = new Adw.ActionRow({
+                title: t('This legacy job has {count} sources.', {count: this.sources.length}),
+                subtitle: t('Only the first source is shown here. The others are preserved.'),
             });
-            if (backup && this.sources.length > 1) {
-                const remove = new Gtk.Button({
-                    icon_name: 'list-remove-symbolic',
-                    tooltip_text: `${t('Remove source')} ${index + 1}`,
-                    valign: Gtk.Align.CENTER,
-                    css_classes: ['flat', 'destructive-action'],
-                });
-                remove.connect('clicked', () => {
-                    this.sources.splice(index, 1);
-                    if (this.sources.length === 0)
-                        this.sources.push({kind: 'local', path: ''});
-                    this._renderSources();
-                });
-                row.add_suffix(remove);
-            }
-            this.sourcesGroup.add(row);
-            this.sourceRows.push(row);
+            this.sourcesGroup.add(extra);
+            this.sourceRows.push(extra);
         }
-        if (backup) {
-            this.sourcesGroup.add(this.addSourceRow);
-            this.addSourceAttached = true;
-        }
-    }
-
-    _addSource() {
-        if (this.typeRow.selected !== 1) {
-            this.parentWindow.toast(t('Multiple sources are only available for backups.'));
-            return;
-        }
-        this.sources.push({kind: 'local', path: ''});
-        this._renderSources();
     }
 
     _updateContentSummary() {
         if (!this.contentRow || !this.contentButton)
-            return;
-        const sync = this.typeRow?.selected !== 1;
-        this.contentGroup.visible = sync;
-        if (!sync)
             return;
         const source = this.sources[0];
         const path = source ? localPathFor(source, this.volumes) : null;
@@ -878,8 +908,6 @@ export const JobEditor = GObject.registerClass({
     }
 
     _selectSyncContent() {
-        if (this.typeRow.selected === 1)
-            return;
         const source = this.sources[0];
         const path = source ? localPathFor(source, this.volumes) : null;
         if (!path) {
@@ -1170,7 +1198,7 @@ export const JobEditor = GObject.registerClass({
             return;
         if (!this.isNew && !this.job.draft)
             return;
-        if (step < 1)
+        if (step < 1 || !this.nameRow?.text.trim())
             return;
         this._draftQueuedStep = Math.max(this._draftQueuedStep || 0, step);
         if (this._draftPromise)
@@ -1210,7 +1238,7 @@ export const JobEditor = GObject.registerClass({
     async _save(run) {
         if (this._saving)
             return;
-        for (let step = 0; step < 4; step++) {
+        for (let step = 0; step < STEP_TITLES.length; step++) {
             if (!this._validateStep(step)) {
                 this._showStep(step);
                 return;

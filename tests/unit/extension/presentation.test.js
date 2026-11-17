@@ -50,6 +50,8 @@ export default suite('extension/presentation', [
         assertEqual(formatEta(42), '42s');
         assertEqual(formatEta(125), '2m 5s');
         assertEqual(formatEta(3720), '1h 2m');
+        assertEqual(formatEta(86_401), 'more than a day');
+        assertEqual(formatEta(86_401, value => `[${value}]`), '[more than a day]');
     }),
     test('shortFile keeps only the basename and truncates long names', () => {
         assertEqual(shortFile(''), '');

@@ -147,6 +147,12 @@ export class DaemonClient {
         return reply.deepUnpack()[0];
     }
 
+    async jobSize(jobId) {
+        const reply = await this._call('JobSize',
+            new GLib.Variant('(s)', [jobId]), 60_000);
+        return JSON.parse(reply.deepUnpack()[0]);
+    }
+
     async deleteJob(jobId, deleteData = false) {
         await this._call('DeleteJob',
             new GLib.Variant('(sb)', [jobId, Boolean(deleteData)]), 180_000);
