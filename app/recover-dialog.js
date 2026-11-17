@@ -2,18 +2,10 @@ import GObject from 'gi://GObject';
 import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
 import {RemoteBrowserDialog} from './remote-browser.js';
-import {RestoreDialog} from './restore-dialog.js';
+import {RecoveryImportDialog} from './recovery-import-dialog.js';
+import {RecoverySyncDialog} from './recovery-sync-dialog.js';
 import {t} from '../src/i18n.js';
 
-function destinationDisplay(descriptor) {
-    if (!descriptor)
-        return '';
-    if (descriptor.kind === 'remote')
-        return descriptor.remote
-            ? `${descriptor.remote}:${descriptor.path || ''}`
-            : descriptor.path || '';
-    return descriptor.path || '';
-}
 
 export const RecoverDialog = GObject.registerClass({
     GTypeName: 'SaveMeRecoverDialog',
@@ -221,141 +213,10 @@ export const RecoverDialog = GObject.registerClass({
             this.statusRow.set_subtitle(t('The selected folder does not look like a SaveMe base.'));
             return;
         }
-        const dialog = new Adw.AlertDialog({
-            heading: t('Recreate sync job?'),
-            body: t('Choose the original source folder. The job is imported disabled ' +
-                'and keeps using this destination.'),
-        });
-        dialog.add_response('cancel', t('Cancel'));
-        dialog.add_response('local', t('Local folder'));
-        dialog.add_response('remote', t('Cloud remote'));
-        dialog.set_response_appearance('local', Adw.ResponseAppearance.SUGGESTED);
-        dialog.connect('response', (_dialog, response) => {
-            if (response === 'local') {
-                const picker = new Gtk.FileDialog({
-                    title: t('Choose source folder'),
-                    modal: true,
-                });
-                picker.select_folder(this, null, (source, pickResult) => {
-                    try {
-                        const path = source.select_folder_finish(pickResult).get_path();
-                        if (path)
-                            this._importLegacySync(entry, result, {
-                                kind: 'local',
-                                path,
-                            });
-                    } catch (_) {
-                        // Dialog dismissed.
-                    }
-                });
-            } else if (response === 'remote') {
-                new RemoteBrowserDialog(this.parentWindow, {
-                    mode: 'pick',
-                    transientFor: this,
-                    onSelect: descriptor => this._importLegacySync(entry, result, descriptor),
-                }).present();
-            }
-        });
-        dialog.present(this);
-    }
-
-    async _importLegacySync(entry, result, source) {
-        try {
-            const saved = await this.client.importJob({
-                id: entry.id,
-                name: entry.id,
-                type: 'sync',
-                source,
-                sources: [source],
-                destination: result.destination,
-                destinationLayout: 'saveMe',
-                trigger: {mode: 'manual'},
-                recovered: true,
-                enabled: false,
-                filters: {exclude: [], include: []},
-            });
-            this.parentWindow.refresh();
-            this.parentWindow.toast(
-                t('Sync job recreated. Review the settings before enabling it.'));
-            this.close();
-            return saved;
-        } catch (e) {
-            const dialog = new Adw.AlertDialog({
-                heading: t('Cannot import backup'),
-                body: e.message,
-            });
-            dialog.add_response('ok', t('OK'));
-            dialog.present(this);
-            return null;
-        }
+        new RecoverySyncDialog(this.parentWindow, this, entry, result).present();
     }
 
     _confirmImport(entry, result) {
-        const job = entry.job;
-        const sources = entry.sources || [];
-        const destination = destinationDisplay(result.destination);
-        const existing = (this.parentWindow.snapshot?.jobs || [])
-            .some(item => item.id === entry.id);
-        const lines = [];
-        if (destination)
-            lines.push(t('Destination base: {path}', {path: destination}));
-        if (sources.length > 0) {
-            lines.push(t('Sources:'));
-            for (const source of sources) {
-                const suffix = source.exists === true
-                    ? t('found')
-                    : source.exists === false
-                        ? t('not found')
-                        : source.remote ? t('remote, not checked') : t('cannot check');
-                const symbol = source.exists === true ? '✓' : source.exists === false ? '✗' : '•';
-                lines.push(`${symbol} ${source.path} (${suffix})`);
-            }
-        }
-        if (sources.some(source => source.exists === false)) {
-            lines.push(t('Missing sources stay configured. The job is imported disabled.'));
-        }
-        if (existing)
-            lines.push(t('A job with this ID already exists and will be replaced.'));
-        const dialog = new Adw.AlertDialog({
-            heading: t('Import job?'),
-            body: lines.join('\n'),
-        });
-        dialog.add_response('cancel', t('Cancel'));
-        dialog.add_response('import', t('Import job'));
-        if (job.type === 'backup')
-            dialog.add_response('restore', t('Import & restore'));
-        dialog.set_response_appearance('import', Adw.ResponseAppearance.SUGGESTED);
-        dialog.connect('response', (_dialog, response) => {
-            if (response === 'import')
-                this._import(entry, result, false);
-            else if (response === 'restore')
-                this._import(entry, result, true);
-        });
-        dialog.present(this);
-    }
-
-    async _import(entry, result, restore) {
-        try {
-            const job = JSON.parse(JSON.stringify(entry.job));
-            job.id = entry.id;
-            if (result.destination)
-                job.destination = result.destination;
-            job.destinationLayout = 'saveMe';
-            const saved = await this.client.importJob(job);
-            this.parentWindow.refresh();
-            if (restore && saved.type === 'backup')
-                new RestoreDialog(this.parentWindow, saved).present();
-            else
-                this.parentWindow.toast(
-                    t('Job imported. Review the sources before enabling it.'));
-            this.close();
-        } catch (e) {
-            const dialog = new Adw.AlertDialog({
-                heading: t('Cannot import backup'),
-                body: e.message,
-            });
-            dialog.add_response('ok', t('OK'));
-            dialog.present(this);
-        }
+        new RecoveryImportDialog(this.parentWindow, this, entry, result).present();
     }
 });
