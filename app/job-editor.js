@@ -16,7 +16,7 @@ import {
     normalizeJob,
     validateJob,
 } from '../src/jobs.js';
-import {INTERVAL_UNITS, WEEKDAYS, isValidTime} from '../src/domain/schedule.js';
+import {INTERVAL_UNITS, WEEKDAYS, isValidTime, triggerLabel} from '../src/domain/schedule.js';
 import {cleanError, remoteTypeLabel} from './presentation/format.js';
 import {t} from '../src/i18n.js';
 
@@ -31,7 +31,7 @@ const TRIGGER_OPTIONS = [
 ];
 const STEP_TITLES = [
     t('Type'), t('Name'), t('Source'), t('Content'), t('Filters'),
-    t('Destination'), t('Schedule'), t('Safety'),
+    t('Destination'), t('Schedule'), t('Safety'), t('Review'),
 ];
 
 export const JobEditor = GObject.registerClass({
@@ -114,6 +114,7 @@ export const JobEditor = GObject.registerClass({
         this.stack.add_titled(this._buildDestinationPage(), 'destination', STEP_TITLES[5]);
         this.stack.add_titled(this._buildSchedulePage(), 'schedule', STEP_TITLES[6]);
         this.stack.add_titled(this._buildSafetyPage(), 'safety', STEP_TITLES[7]);
+        this.stack.add_titled(this._buildReviewPage(), 'review', STEP_TITLES[8]);
         toolbar.set_content(this.stack);
         this.set_content(toolbar);
         this._updateVisibility();
@@ -144,15 +145,14 @@ export const JobEditor = GObject.registerClass({
             selected: this.job.type === JOB_TYPES.BACKUP ? 1 : 0,
         });
         this.typeRow.connect('notify::selected', () => this._updateVisibility());
-        const flow = new Gtk.FlowBox({
-            selection_mode: Gtk.SelectionMode.NONE,
-            max_children_per_line: 2,
-            column_spacing: 12,
-            row_spacing: 12,
+        const cards = new Gtk.Box({
+            orientation: Gtk.Orientation.HORIZONTAL,
+            spacing: 12,
             homogeneous: true,
             margin_top: 8,
             margin_bottom: 8,
         });
+        this.typeButtons = new Map();
         const addCard = (type, title, description, icon) => {
             const content = new Gtk.Box({
                 orientation: Gtk.Orientation.VERTICAL,
@@ -168,25 +168,32 @@ export const JobEditor = GObject.registerClass({
                 xalign: 0,
                 css_classes: ['title-3'],
             }));
-            content.append(new Gtk.Label({
+            const detail = new Gtk.Label({
                 label: description,
                 xalign: 0,
                 wrap: true,
                 css_classes: ['dim-label'],
-            }));
+            });
+            content.append(detail);
             const button = new Gtk.Button({
-                height_request: 190,
+                height_request: 210,
                 hexpand: true,
                 css_classes: ['card'],
                 child: content,
             });
-            button.sensitive = this.isNew;
             button.connect('clicked', () => {
-                this.typeRow.selected = type === JOB_TYPES.BACKUP ? 1 : 0;
+                const selected = type === JOB_TYPES.BACKUP ? 1 : 0;
+                if (!this.isNew && this.typeRow.selected !== selected) {
+                    this.parentWindow.toast(
+                        t('The job type cannot be changed after creation.'));
+                    return;
+                }
+                this.typeRow.selected = selected;
                 this._updateVisibility();
                 this._showStep(1);
             });
-            flow.append(button);
+            cards.append(button);
+            this.typeButtons.set(type, button);
         };
         addCard(JOB_TYPES.SYNC, t('Sync'),
             t('Mirror the selected content. Changes and deletions are reflected ' +
@@ -194,9 +201,25 @@ export const JobEditor = GObject.registerClass({
         addCard(JOB_TYPES.BACKUP, t('Backup'),
             t('Keep previous versions of changed or deleted files according to ' +
                 'the retention policy.'), 'document-save-symbolic');
-        group.add(flow);
+        this._updateTypeSelection();
+        this.typeRow.connect('notify::selected', () => this._updateTypeSelection());
+        group.add(cards);
+
         page.add(group);
         return page;
+    }
+
+    _updateTypeSelection() {
+        if (!this.typeButtons)
+            return;
+        const selected = this.typeRow.selected === 1
+            ? JOB_TYPES.BACKUP : JOB_TYPES.SYNC;
+        for (const [type, button] of this.typeButtons) {
+            if (type === selected)
+                button.add_css_class('suggested-action');
+            else
+                button.remove_css_class('suggested-action');
+        }
     }
 
     _buildNamePage() {
@@ -285,6 +308,7 @@ export const JobEditor = GObject.registerClass({
         const providers = [
             ['local', t('Local folder'), 'drive-harddisk-symbolic'],
             ['dropbox', 'Dropbox', 'folder-remote-symbolic'],
+            ['nextcloud', 'Nextcloud', 'folder-remote-symbolic'],
             ['onedrive', 'OneDrive', 'folder-remote-symbolic'],
             ['drive', 'Google Drive', 'folder-remote-symbolic'],
         ];
@@ -750,10 +774,61 @@ export const JobEditor = GObject.registerClass({
         return page;
     }
 
+    _buildReviewPage() {
+        const page = this._page();
+        const group = new Adw.PreferencesGroup({
+            title: t('Review'),
+            description: t('Review the job settings before saving.'),
+        });
+        this.reviewRows = {};
+        for (const [key, label] of [
+            ['type', t('Type')],
+            ['name', t('Name')],
+            ['source', t('Source')],
+            ['content', t('Content')],
+            ['filters', t('Filters')],
+            ['destination', t('Destination')],
+            ['schedule', t('Schedule')],
+            ['safety', t('Safety')],
+        ]) {
+            this.reviewRows[key] = new Adw.ActionRow({title: label});
+            group.add(this.reviewRows[key]);
+        }
+        page.add(group);
+        return page;
+    }
+
+    _updateReview() {
+        if (!this.reviewRows)
+            return;
+        const job = this._collectJob();
+        const types = {
+            type: job.type === JOB_TYPES.BACKUP ? t('Backup') : t('Sync'),
+            name: job.name || '-',
+            source: descriptorDisplay(job.source, this.volumes) || t('Not selected'),
+            content: job.filters.include.length
+                ? job.filters.include.join(', ')
+                : t('All source content'),
+            filters: job.filters.exclude.length
+                ? job.filters.exclude.join(', ') : t('None'),
+            destination: descriptorDisplay(job.destination, this.volumes) ||
+                t('Not selected'),
+            schedule: triggerLabel(job.trigger),
+            safety: `${job.options.maxDeletePercent}%` +
+                (job.type === JOB_TYPES.BACKUP
+                    ? ` · ${job.backup.keepForever
+                        ? t('keep versions forever')
+                        : `${job.backup.retentionDays} ${t('days')}`}`
+                    : ''),
+        };
+        for (const [key, value] of Object.entries(types))
+            this.reviewRows[key].set_subtitle(String(value));
+    }
+
     _showStep(index) {
         this._step = Math.max(0, Math.min(STEP_TITLES.length - 1, index));
         const names = ['type', 'name', 'source', 'content', 'filters',
-            'destination', 'schedule', 'safety'];
+            'destination', 'schedule', 'safety', 'review'];
         this.stack.set_visible_child_name(names[this._step]);
         const title = this.isDraft ? t('Continue job') : this.isNew ? t('New job') : t('Edit job');
         this.windowTitle.title = `${title} · ` +
@@ -764,6 +839,8 @@ export const JobEditor = GObject.registerClass({
         this.runButton.visible = this._step === STEP_TITLES.length - 1;
         this.cancelButton.label = this._step >= 1 && (this.isNew || this.isDraft)
             ? t('Close') : t('Cancel');
+        if (this._step === STEP_TITLES.length - 1)
+            this._updateReview();
         if (this._ready)
             this._autosaveDraft(this._step);
     }
@@ -883,7 +960,7 @@ export const JobEditor = GObject.registerClass({
         if (this.sources.length > 1) {
             const extra = new Adw.ActionRow({
                 title: t('This legacy job has {count} sources.', {count: this.sources.length}),
-                subtitle: t('Only the first source is shown here. The others are preserved.'),
+                subtitle: t('Only the first source is shown. The others are removed when you save.'),
             });
             this.sourcesGroup.add(extra);
             this.sourceRows.push(extra);
@@ -1151,12 +1228,13 @@ export const JobEditor = GObject.registerClass({
 
     _collectJob() {
         const type = this.typeRow.selected === 1 ? JOB_TYPES.BACKUP : JOB_TYPES.SYNC;
+        const source = this.sources[0] || {kind: 'local', path: ''};
         return normalizeJob({
             ...this.job,
             name: this.nameRow.text.trim(),
             type,
-            source: this.sources[0],
-            sources: this.sources,
+            source,
+            sources: [source],
             destination: this.job.destination,
             trigger: {
                 mode: this.triggerMode,

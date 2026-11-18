@@ -277,9 +277,9 @@ export class ConfigStore {
             createdAt: nowIso(),
             updatedAt: nowIso(),
         };
-        if (!/^[A-Za-z0-9_.-]+$/.test(remote.name))
-            throw new Error('Remote name must contain only letters, numbers, dot, dash or underscore.');
-        if (!['drive', 'onedrive', 'dropbox'].includes(remote.type))
+        if (!remote.name || /[:/\n\r]/.test(remote.name))
+            throw new Error('Remote name cannot contain colon, slash or line breaks.');
+        if (!['drive', 'onedrive', 'dropbox', 'nextcloud'].includes(remote.type))
             throw new Error(`Unsupported remote type: ${remote.type}`);
         if (this.data.remotes.some(item => item.name === remote.name))
             throw new Error(`Remote already exists: ${remote.name}`);

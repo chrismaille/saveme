@@ -11,8 +11,7 @@ export class AccountsPage {
         this.page = new Adw.PreferencesPage({vexpand: true});
         this.widget.append(this.page);
         this.addButton = new Gtk.Button({
-            label: t('Add account'),
-            icon_name: 'list-add-symbolic',
+            label: t('+ Add new account'),
             hexpand: true,
             margin_top: 4,
             margin_bottom: 12,

@@ -166,5 +166,6 @@ export function remoteTypeLabel(type) {
         drive: 'Google Drive',
         onedrive: 'Microsoft OneDrive',
         dropbox: 'Dropbox',
+        nextcloud: 'Nextcloud',
     }[type] || type;
 }

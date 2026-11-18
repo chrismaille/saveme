@@ -6,6 +6,7 @@ export const AUTH_PROVIDERS = {
     drive: 'Google Drive',
     onedrive: 'Microsoft OneDrive',
     dropbox: 'Dropbox',
+    nextcloud: 'Nextcloud',
 };
 
 const URL_RE = /(https?:\/\/[^\s]+)/;
@@ -37,8 +38,8 @@ export class RemoteAuthManager {
         if (!AUTH_PROVIDERS[provider])
             throw new Error(`Unsupported provider: ${provider}`);
         const remoteName = String(name || '').trim();
-        if (!/^[A-Za-z0-9_.-]+$/.test(remoteName))
-            throw new Error('Remote name must contain only letters, numbers, dot, dash or underscore.');
+        if (!remoteName || /[:/\n\r]/.test(remoteName))
+            throw new Error('Remote name cannot contain colon, slash or line breaks.');
         const existing = this.config.getRemote(remoteName);
         if (existing && existing.type !== provider)
             throw new Error(`Remote ${remoteName} already exists with another type.`);

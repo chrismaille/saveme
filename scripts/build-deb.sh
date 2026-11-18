@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-VERSION="${VERSION:-1.0.0~dev28}"
+VERSION="${VERSION:-1.0.0~dev29}"
 ARCH="${ARCH:-$(dpkg --print-architecture)}"
 MAINTAINER="${MAINTAINER:-chrismaille <chrismaille@users.noreply.github.com>}"
 STAGE="$ROOT_DIR/build/deb/saveme_${VERSION}_${ARCH}"
@@ -26,6 +26,7 @@ mkdir -p "$STAGE/DEBIAN" \
     "$STAGE/usr/lib/saveme/bin" \
     "$STAGE/usr/lib/saveme/src" \
     "$STAGE/usr/lib/saveme/app" \
+    "$STAGE/usr/lib/saveme/assets" \
     "$STAGE/usr/lib/systemd/user" \
     "$STAGE/usr/share/dbus-1/services" \
     "$STAGE/usr/share/applications" \
@@ -36,6 +37,7 @@ mkdir -p "$STAGE/DEBIAN" \
 
 cp -a "$ROOT_DIR/src/." "$STAGE/usr/lib/saveme/src/"
 cp -a "$ROOT_DIR/app/." "$STAGE/usr/lib/saveme/app/"
+cp -a "$ROOT_DIR/assets/." "$STAGE/usr/lib/saveme/assets/"
 install -Dm755 "$ROOT_DIR/bin/saveme.js" "$STAGE/usr/lib/saveme/bin/saveme.js"
 install -Dm755 "$ROOT_DIR/bin/saveme-daemon.js" "$STAGE/usr/lib/saveme/bin/saveme-daemon.js"
 install -Dm755 "$RCLONE" "$STAGE/usr/lib/saveme/bin/rclone"

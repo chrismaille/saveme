@@ -156,9 +156,14 @@ export const RestoreDialog = GObject.registerClass({
             title: t('Summary'),
             description: t('Review the restore settings, then start the restore.'),
         });
+        this.jobSummaryRow = new Adw.ActionRow({
+            title: t('Job'),
+            subtitle: this.job.name || this.job.id,
+        });
         this.versionSummaryRow = new Adw.ActionRow({title: t('Version')});
         this.pathSummaryRow = new Adw.ActionRow({title: t('Path')});
         this.targetSummaryRow = new Adw.ActionRow({title: t('Target')});
+        summaryGroup.add(this.jobSummaryRow);
         summaryGroup.add(this.versionSummaryRow);
         summaryGroup.add(this.pathSummaryRow);
         summaryGroup.add(this.targetSummaryRow);

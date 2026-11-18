@@ -24,6 +24,12 @@ class FakeConfig {
         return job;
     }
     removeJob(id) { this.jobs = this.jobs.filter(job => job.id !== id); }
+    addRemote(remote) { this.remotes.push(remote); return remote; }
+    updateRemote(name, patch) {
+        const remote = this.getRemote(name);
+        Object.assign(remote, patch);
+        return remote;
+    }
     removeRemote(name) { this.remotes = this.remotes.filter(remote => remote.name !== name); }
     updateSettings(patch) {
         Object.assign(this.settings, patch);
@@ -98,6 +104,13 @@ class FakeTransfer {
         return {exitCode: 0, stdout: '', stderr: ''};
     }
     configDump() { return this.config; }
+    configCreate(name, type, options) {
+        this.created = {name, type, options};
+        this.paths.add(`${name}:`);
+        if (this.captureHandler)
+            return this.captureHandler(['config', 'create']);
+        return {exitCode: 0, stdout: '', stderr: ''};
+    }
     configDelete(name) { this.deleted.push(name); return {exitCode: 0, stderr: ''}; }
 }
 
@@ -674,6 +687,43 @@ export default suite('application/daemon-service', [
 
         ctx.transfer.config.s3 = {type: 's3'};
         assertThrows(() => ctx.service.remoteWebUrl('s3', 'x'), /not supported/);
+    }),
+    test('createRemote configures a Nextcloud WebDAV remote', async () => {
+        const ctx = makeService();
+        const remote = JSON.parse(ctx.service.createRemote(JSON.stringify({
+            name: 'Meu Nextcloud',
+            type: 'nextcloud',
+            options: {
+                url: 'https://cloud.example.com/remote.php/dav/files/me',
+                user: 'me',
+                pass: 'secret',
+            },
+        })));
+        assertEqual(remote.type, 'nextcloud');
+        assertEqual(ctx.transfer.created.type, 'webdav');
+        assertEqual(ctx.transfer.created.options.url,
+            'https://cloud.example.com/remote.php/dav/files/me');
+        assertEqual(ctx.config.getRemote('Meu Nextcloud').options.user, 'me');
+        await assertThrows(() => ctx.service.createRemote(JSON.stringify({
+            name: 'bad/name', type: 'nextcloud', options: {},
+        })), /Invalid remote name|URL, user and password/);
+        await assertThrows(() => ctx.service.createRemote(JSON.stringify({
+            name: 'nc', type: 's3', options: {},
+        })), /Unsupported remote type/);
+        await assertThrows(() => ctx.service.createRemote(JSON.stringify({
+            name: 'nc', type: 'nextcloud', options: {url: 'https://x'},
+        })), /URL, user and password/);
+        ctx.transfer.captureHandler = () => ({exitCode: 7, stdout: '', stderr: 'boom'});
+        await assertThrows(() => ctx.service.createRemote(JSON.stringify({
+            name: 'nc2', type: 'nextcloud',
+            options: {url: 'https://x', user: 'u', pass: 'p'},
+        })), /boom/);
+        ctx.transfer.captureHandler = null;
+        ctx.service.createRemote(JSON.stringify({
+            name: 'Meu Nextcloud', type: 'nextcloud',
+            options: {url: 'https://changed', user: 'me', pass: 'secret'},
+        }));
+        assertEqual(ctx.config.getRemote('Meu Nextcloud').options.url, 'https://changed');
     }),
     test('importJob rejects legacy direct sync jobs', () => {
         const ctx = makeService();

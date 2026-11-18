@@ -117,6 +117,10 @@ export class DaemonGateway {
         return this.client.deleteRemote(name);
     }
 
+    createRemote(remote) {
+        return this.client.createRemote(remote);
+    }
+
     doctor() {
         return this.client.doctor();
     }

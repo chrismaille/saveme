@@ -100,6 +100,10 @@ export class DaemonApi {
         this.service.deleteRemote(name);
     }
 
+    CreateRemote(payloadJson) {
+        return this.service.createRemote(payloadJson);
+    }
+
     Doctor() {
         return this.service.doctorJson();
     }

@@ -220,6 +220,12 @@ export class DaemonClient {
         await this._call('DeleteRemote', new GLib.Variant('(s)', [name]));
     }
 
+    async createRemote(remote) {
+        const reply = await this._call('CreateRemote',
+            new GLib.Variant('(s)', [JSON.stringify(remote)]), 120_000);
+        return JSON.parse(reply.deepUnpack()[0]);
+    }
+
     async doctor() {
         const reply = await this._call('Doctor', null, 30_000);
         return JSON.parse(reply.deepUnpack()[0]);

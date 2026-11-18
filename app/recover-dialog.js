@@ -1,3 +1,4 @@
+import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
@@ -5,6 +6,14 @@ import {RemoteBrowserDialog} from './remote-browser.js';
 import {RecoveryImportDialog} from './recovery-import-dialog.js';
 import {t} from '../src/i18n.js';
 
+const MODULE_DIR = GLib.path_get_dirname(GLib.filename_from_uri(import.meta.url)[0]);
+const PROVIDERS = [
+    {type: 'local', label: 'Local folder', icon: 'drive-harddisk-symbolic'},
+    {type: 'drive', label: 'Google Drive', logo: 'google-drive.png'},
+    {type: 'onedrive', label: 'Microsoft OneDrive', logo: 'onedrive.png'},
+    {type: 'dropbox', label: 'Dropbox', logo: 'dropbox.png'},
+    {type: 'nextcloud', label: 'Nextcloud', logo: 'nextcloud.png'},
+];
 
 export const RecoverDialog = GObject.registerClass({
     GTypeName: 'SaveMeRecoverDialog',
@@ -13,44 +22,111 @@ export const RecoverDialog = GObject.registerClass({
         super({
             transient_for: parentWindow,
             modal: true,
-            title: t('Recover backup'),
-            default_width: 680,
-            default_height: 600,
+            title: t('Restore'),
+            default_width: 760,
+            default_height: 680,
         });
         this.parentWindow = parentWindow;
         this.client = parentWindow.client;
         this.inspecting = false;
         this._build();
-        this._chooseLocation();
     }
 
     _build() {
         const toolbar = new Adw.ToolbarView();
         const header = new Adw.HeaderBar();
-        header.set_title_widget(new Adw.WindowTitle({title: this.title}));
+        header.set_title_widget(new Adw.WindowTitle({title: t('Restore')}));
         const close = new Gtk.Button({label: t('Close')});
         close.connect('clicked', () => this.close());
         header.pack_start(close);
-        this.chooseButton = new Gtk.Button({label: t('Choose folder')});
-        this.chooseButton.connect('clicked', () => this._chooseLocation());
-        header.pack_end(this.chooseButton);
+        this.backButton = new Gtk.Button({
+            icon_name: 'go-previous-symbolic',
+            tooltip_text: t('Back'),
+            css_classes: ['flat'],
+            visible: false,
+        });
+        this.backButton.connect('clicked', () => this._showProviders());
+        header.pack_start(this.backButton);
         toolbar.add_top_bar(header);
 
-        this.page = new Adw.PreferencesPage();
-        const locationGroup = new Adw.PreferencesGroup({
-            title: t('Backup location'),
-            description: t('Select the SaveMe folder created by a previous installation.'),
+        this.stack = new Gtk.Stack({
+            transition_type: Gtk.StackTransitionType.SLIDE_LEFT_RIGHT,
+            transition_duration: 180,
         });
+        this.stack.add_named(this._buildProviderPage(), 'provider');
+        this.stack.add_named(this._buildResultsPage(), 'results');
+        toolbar.set_content(this.stack);
+        this.set_content(toolbar);
+        this._showProviders();
+    }
+
+    _buildProviderPage() {
+        const page = new Adw.PreferencesPage();
+        const group = new Adw.PreferencesGroup({
+            title: t('Where is the SaveMe folder?'),
+            description: t('Choose the service that contains the SaveMe folder from the ' +
+                'previous installation.'),
+        });
+        const flow = new Gtk.FlowBox({
+            selection_mode: Gtk.SelectionMode.NONE,
+            max_children_per_line: 3,
+            column_spacing: 12,
+            row_spacing: 12,
+            homogeneous: true,
+            margin_top: 8,
+            margin_bottom: 8,
+        });
+        for (const provider of PROVIDERS) {
+            const content = new Gtk.Box({
+                orientation: Gtk.Orientation.VERTICAL,
+                spacing: 10,
+                margin_top: 14,
+                margin_bottom: 14,
+                margin_start: 14,
+                margin_end: 14,
+            });
+            if (provider.logo) {
+                const image = Gtk.Image.new_from_file(
+                    GLib.build_filenamev([MODULE_DIR, '..', 'assets', provider.logo]));
+                image.set_pixel_size(56);
+                content.append(image);
+            } else {
+                content.append(new Gtk.Image({
+                    icon_name: provider.icon,
+                    pixel_size: 56,
+                }));
+            }
+            content.append(new Gtk.Label({
+                label: t(provider.label),
+                xalign: 0.5,
+                justify: Gtk.Justification.CENTER,
+                css_classes: ['title-4'],
+            }));
+            const button = new Gtk.Button({
+                height_request: 140,
+                hexpand: true,
+                css_classes: ['card'],
+                child: content,
+            });
+            button.connect('clicked', () => this._chooseProvider(provider.type));
+            flow.append(button);
+        }
+        group.add(flow);
+        page.add(group);
+        return page;
+    }
+
+    _buildResultsPage() {
+        const page = new Adw.PreferencesPage();
+        const locationGroup = new Adw.PreferencesGroup({title: t('Backup location')});
         this.locationRow = new Adw.ActionRow({
             title: t('Folder'),
             subtitle: t('Not selected'),
         });
         locationGroup.add(this.locationRow);
-        this.page.add(locationGroup);
-
         this.statusRow = new Adw.ActionRow({
             title: t('Status'),
-            subtitle: t('Choose a local or cloud SaveMe folder.'),
+            subtitle: t('Choose a service to continue.'),
         });
         this.spinner = new Adw.Spinner({
             visible: false,
@@ -58,49 +134,38 @@ export const RecoverDialog = GObject.registerClass({
         });
         this.statusRow.add_suffix(this.spinner);
         locationGroup.add(this.statusRow);
-
+        page.add(locationGroup);
         this.resultsGroup = new Adw.PreferencesGroup({title: t('Backups found')});
-        this.page.add(this.resultsGroup);
-        toolbar.set_content(this.page);
-        this.set_content(toolbar);
+        page.add(this.resultsGroup);
+        return page;
     }
 
-    _chooseLocation() {
-        if (this.inspecting)
+    _showProviders() {
+        this.backButton.visible = false;
+        this.inspecting = false;
+        this.stack.set_visible_child_name('provider');
+    }
+
+    _chooseProvider(type) {
+        if (type === 'local') {
+            const dialog = new Gtk.FileDialog({
+                title: t('Choose SaveMe folder'),
+                modal: true,
+            });
+            dialog.select_folder(this, null, (source, result) => {
+                try {
+                    const path = source.select_folder_finish(result).get_path();
+                    if (path)
+                        this._inspect(path);
+                } catch (_) {
+                    // Dialog dismissed.
+                }
+            });
             return;
-        const dialog = new Adw.AlertDialog({
-            heading: t('Where is the SaveMe folder?'),
-            body: t('Choose a local folder or browse a cloud remote.'),
-        });
-        dialog.add_response('cancel', t('Cancel'));
-        dialog.add_response('local', t('Local folder'));
-        dialog.add_response('remote', t('Cloud remote'));
-        dialog.set_response_appearance('local', Adw.ResponseAppearance.SUGGESTED);
-        dialog.connect('response', (_dialog, response) => {
-            if (response === 'local')
-                this._chooseLocal();
-            else if (response === 'remote')
-                this._chooseRemote();
-        });
-        dialog.present(this);
-    }
-
-    _chooseLocal() {
-        const dialog = new Gtk.FileDialog({title: t('Choose SaveMe folder'), modal: true});
-        dialog.select_folder(this, null, (source, result) => {
-            try {
-                const path = source.select_folder_finish(result).get_path();
-                if (path)
-                    this._inspect(path);
-            } catch (_) {
-                // Dialog dismissed.
-            }
-        });
-    }
-
-    _chooseRemote() {
+        }
         new RemoteBrowserDialog(this.parentWindow, {
             mode: 'pick',
+            remoteType: type,
             transientFor: this,
             onSelect: selected => {
                 const path = `${selected.remote}:${selected.path || ''}`;
@@ -119,10 +184,8 @@ export const RecoverDialog = GObject.registerClass({
     }
 
     async _inspect(path) {
-        if (this.inspecting)
-            return;
-        this.inspecting = true;
-        this.chooseButton.sensitive = false;
+        this.backButton.visible = true;
+        this.stack.set_visible_child_name('results');
         this.locationRow.set_subtitle(path);
         this.statusRow.set_subtitle(t('Checking backups…'));
         this.spinner.visible = true;
@@ -135,8 +198,6 @@ export const RecoverDialog = GObject.registerClass({
                 t('Cannot inspect backup: {message}', {message: e.message}));
         } finally {
             this.spinner.visible = false;
-            this.chooseButton.sensitive = true;
-            this.inspecting = false;
         }
     }
 

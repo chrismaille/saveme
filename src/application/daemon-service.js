@@ -648,6 +648,45 @@ export class DaemonService {
         return JSON.stringify(result);
     }
 
+    createRemote(payloadJson) {
+        const payload = JSON.parse(payloadJson);
+        const name = String(payload.name || '').trim();
+        const type = String(payload.type || '').trim();
+        const options = payload.options || {};
+        if (type !== 'nextcloud')
+            throw new Error(`Unsupported remote type: ${type}`);
+        if (!name || /[:/\n\r]/.test(name))
+            throw new Error('Invalid remote name.');
+        const url = String(options.url || '').trim();
+        const user = String(options.user || '').trim();
+        const pass = String(options.pass || '');
+        if (!url || !user || !pass)
+            throw new Error('Nextcloud URL, user and password are required.');
+        const result = this.transfer.configCreate(name, 'webdav', {
+            url,
+            vendor: 'nextcloud',
+            user,
+            pass,
+        });
+        if (!isSuccessExit(result.exitCode)) {
+            throw new Error(rcloneErrorMessage(result,
+                `Cannot create ${name}: ${exitCodeMessage(result.exitCode)}`));
+        }
+        const existing = this.config.getRemote(name);
+        const remote = {
+            name,
+            type,
+            label: `Nextcloud (${name})`,
+            options: {url, user, vendor: 'nextcloud'},
+        };
+        const saved = existing
+            ? this.config.updateRemote(name, remote)
+            : this.config.addRemote(remote);
+        this.secureFile?.(this.transfer.configPath);
+        this._snapshot(true);
+        return JSON.stringify(saved);
+    }
+
     beginRemoteAuth(provider, name, optionsJson) {
         const options = optionsJson ? JSON.parse(optionsJson) : {};
         return this.auth.begin(provider, name, options);

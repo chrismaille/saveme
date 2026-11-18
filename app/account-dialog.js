@@ -5,16 +5,18 @@ import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
 import {t} from '../src/i18n.js';
 
-const PROVIDERS = ['drive', 'onedrive', 'dropbox'];
+const PROVIDERS = ['drive', 'onedrive', 'dropbox', 'nextcloud'];
 const PROVIDER_LABELS = {
     drive: 'Google Drive',
     onedrive: 'Microsoft OneDrive',
     dropbox: 'Dropbox',
+    nextcloud: 'Nextcloud',
 };
 const PROVIDER_LOGOS = {
-    drive: 'google-drive.svg',
-    onedrive: 'onedrive.svg',
-    dropbox: 'dropbox.svg',
+    drive: 'google-drive.png',
+    onedrive: 'onedrive.png',
+    dropbox: 'dropbox.png',
+    nextcloud: 'nextcloud.png',
 };
 const MODULE_DIR = GLib.path_get_dirname(GLib.filename_from_uri(import.meta.url)[0]);
 
@@ -99,6 +101,9 @@ export const AccountDialog = GObject.registerClass({
         });
         this.stack.add_named(this._buildProviderPage(), 'provider');
         this.stack.add_named(this._buildOneDrivePage(), 'onedrive');
+        this.stack.add_named(this._buildNextcloudUrlPage(), 'nextcloudUrl');
+        this.stack.add_named(this._buildNextcloudUserPage(), 'nextcloudUser');
+        this.stack.add_named(this._buildNextcloudPasswordPage(), 'nextcloudPassword');
         this.stack.add_named(this._buildNamePage(), 'name');
         this.stack.add_named(this._buildAuthPage(), 'auth');
         toolbar.set_content(this.stack);
@@ -110,7 +115,7 @@ export const AccountDialog = GObject.registerClass({
         const page = new Adw.PreferencesPage();
         const group = new Adw.PreferencesGroup({
             title: t('Choose a provider'),
-            description: t('SaveMe supports Google Drive, Microsoft OneDrive and Dropbox.'),
+            description: t('SaveMe supports Google Drive, Microsoft OneDrive, Dropbox and Nextcloud.'),
         });
         const flow = new Gtk.FlowBox({
             selection_mode: Gtk.SelectionMode.NONE,
@@ -174,6 +179,55 @@ export const AccountDialog = GObject.registerClass({
         return page;
     }
 
+    _buildNextcloudUrlPage() {
+        const page = new Adw.PreferencesPage();
+        const group = new Adw.PreferencesGroup({
+            title: t('Nextcloud address'),
+            description: t('Enter the WebDAV address of your Nextcloud server, including ' +
+                'the user folder. Example: https://cloud.example.com/remote.php/dav/files/user'),
+        });
+        this.nextcloudUrlRow = new Adw.EntryRow({
+            title: t('Nextcloud URL'),
+            text: this.existing?.options?.url || '',
+        });
+        this.nextcloudUrlRow.connect('notify::text', () => this._updateHeader());
+        group.add(this.nextcloudUrlRow);
+        page.add(group);
+        return page;
+    }
+
+    _buildNextcloudUserPage() {
+        const page = new Adw.PreferencesPage();
+        const group = new Adw.PreferencesGroup({
+            title: t('Nextcloud user'),
+            description: t('Use the Nextcloud user name that owns the files.'),
+        });
+        this.nextcloudUserRow = new Adw.EntryRow({
+            title: t('User'),
+            text: this.existing?.options?.user || '',
+        });
+        this.nextcloudUserRow.connect('notify::text', () => this._updateHeader());
+        group.add(this.nextcloudUserRow);
+        page.add(group);
+        return page;
+    }
+
+    _buildNextcloudPasswordPage() {
+        const page = new Adw.PreferencesPage();
+        const group = new Adw.PreferencesGroup({
+            title: t('Nextcloud password'),
+            description: t('Use an app password if two-factor authentication is enabled. ' +
+                'The password is stored by rclone, not in the app configuration.'),
+        });
+        this.nextcloudPasswordRow = new Adw.PasswordEntryRow({
+            title: t('Password or app password'),
+        });
+        this.nextcloudPasswordRow.connect('notify::text', () => this._updateHeader());
+        group.add(this.nextcloudPasswordRow);
+        page.add(group);
+        return page;
+    }
+
     _buildNamePage() {
         const page = new Adw.PreferencesPage();
         const group = new Adw.PreferencesGroup({
@@ -198,8 +252,7 @@ export const AccountDialog = GObject.registerClass({
         const page = new Adw.PreferencesPage();
         const group = new Adw.PreferencesGroup({
             title: t('Authentication'),
-            description: t('Sign in to your provider in the browser. ' +
-                'This window updates automatically when authorization finishes.'),
+            description: t('Connect the account to continue.'),
         });
         this.statusRow = new Adw.ActionRow({
             title: t('Status'),
@@ -244,13 +297,17 @@ export const AccountDialog = GObject.registerClass({
 
     _steps() {
         if (this.existing) {
-            return this._provider() === 'onedrive'
-                ? ['onedrive', 'auth']
-                : ['auth'];
+            if (this._provider() === 'onedrive')
+                return ['onedrive', 'auth'];
+            if (this._provider() === 'nextcloud')
+                return ['nextcloudUrl', 'nextcloudUser', 'nextcloudPassword', 'auth'];
+            return ['auth'];
         }
         const steps = ['provider'];
         if (this._provider() === 'onedrive')
             steps.push('onedrive');
+        if (this._provider() === 'nextcloud')
+            steps.push('nextcloudUrl', 'nextcloudUser', 'nextcloudPassword');
         steps.push('name', 'auth');
         return steps;
     }
@@ -299,6 +356,12 @@ export const AccountDialog = GObject.registerClass({
             return Boolean(this._provider());
         if (this._currentStep === 'name')
             return Boolean(String(this.nameRow?.text || '').trim());
+        if (this._currentStep === 'nextcloudUrl')
+            return Boolean(String(this.nextcloudUrlRow?.text || '').trim());
+        if (this._currentStep === 'nextcloudUser')
+            return Boolean(String(this.nextcloudUserRow?.text || '').trim());
+        if (this._currentStep === 'nextcloudPassword')
+            return Boolean(String(this.nextcloudPasswordRow?.text || '').trim());
         return true;
     }
 
@@ -309,6 +372,8 @@ export const AccountDialog = GObject.registerClass({
         this._renderProviderSelection();
         this._syncNameDefault();
         this._updateHeader();
+        if (this._currentStep === 'provider')
+            this._showStep(this._steps()[1]);
     }
 
     _renderProviderSelection() {
@@ -333,6 +398,8 @@ export const AccountDialog = GObject.registerClass({
             return t('OneDrive connection');
         if (this._provider() === 'dropbox')
             return t('Dropbox connection');
+        if (this._provider() === 'nextcloud')
+            return t('Nextcloud connection');
         return t('Cloud connection');
     }
 
@@ -366,8 +433,8 @@ export const AccountDialog = GObject.registerClass({
     _logoPath(provider) {
         return GLib.build_filenamev([
             MODULE_DIR,
-            'icons',
-            'providers',
+            '..',
+            'assets',
             PROVIDER_LOGOS[provider],
         ]);
     }
@@ -389,6 +456,10 @@ export const AccountDialog = GObject.registerClass({
     }
 
     async _connect() {
+        if (this._provider() === 'nextcloud') {
+            await this._connectNextcloud();
+            return;
+        }
         const name = this.existing
             ? String(this.existing.name || '').trim()
             : String(this.nameRow.text || '').trim();
@@ -422,6 +493,39 @@ export const AccountDialog = GObject.registerClass({
             this.statusRow.set_subtitle(this._statusLabel('starting'));
         } catch (e) {
             this.connectButton.sensitive = true;
+            this._showError(e.message);
+        }
+    }
+
+    async _connectNextcloud() {
+        const name = this.existing
+            ? String(this.existing.name || '').trim()
+            : String(this.nameRow.text || '').trim();
+        const url = String(this.nextcloudUrlRow?.text || '').trim();
+        const user = String(this.nextcloudUserRow?.text || '').trim();
+        const pass = String(this.nextcloudPasswordRow?.text || '');
+        if (!name || !url || !user || !pass) {
+            this._showError(t('Fill in the Nextcloud URL, user and password.'));
+            return;
+        }
+        this.connectButton.sensitive = false;
+        this.connectButton.label = t('Connect');
+        this.errorLabel.visible = false;
+        this.statusRow.set_subtitle(t('Connecting…'));
+        try {
+            await this.client.createRemote({
+                name,
+                type: 'nextcloud',
+                options: {url, user, pass},
+            });
+            this.done = true;
+            await this.window.refresh();
+            this.window.toast(t('Account connected.'));
+            this.onDone?.();
+            this.close();
+        } catch (e) {
+            this.connectButton.sensitive = true;
+            this.connectButton.label = t('Retry');
             this._showError(e.message);
         }
     }

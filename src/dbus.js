@@ -105,6 +105,10 @@ export const DAEMON_INTERFACE = `
     <method name="DeleteRemote">
       <arg type="s" direction="in"/>
     </method>
+    <method name="CreateRemote">
+      <arg type="s" direction="in"/>
+      <arg type="s" direction="out"/>
+    </method>
     <method name="Doctor">
       <arg type="s" direction="out"/>
     </method>

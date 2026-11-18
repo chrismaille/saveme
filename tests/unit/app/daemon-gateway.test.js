@@ -25,6 +25,7 @@ function fakeClient() {
         'inspectBackup',
         'remoteWebUrl',
         'jobSize',
+        'createRemote',
         'deleteJob',
         'getRun',
         'getRunLog',
@@ -113,6 +114,7 @@ export default suite('app/gateway/daemon-gateway', [
         assertEqual(await gateway.remoteWebUrl('onedrive', 'SaveMe/job'),
             'remoteWebUrl-result');
         assertEqual(await gateway.jobSize('job'), 'jobSize-result');
+        assertEqual(await gateway.createRemote({name: 'nc'}), 'createRemote-result');
         assertEqual(await gateway.beginRemoteAuth('drive', 'me'), 'beginRemoteAuth-result');
         assertEqual(await gateway.beginRemoteAuth('drive', 'me', {scope: 'x'}),
             'beginRemoteAuth-result');
