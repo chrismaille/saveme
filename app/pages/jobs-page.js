@@ -111,13 +111,13 @@ export class JobsPage {
             css_classes: ['saveme-metrics-island'],
         });
         const cpu = this._metricItem('utilities-system-monitor-symbolic',
-            t('CPU do aplicativo'));
+            t('Application CPU'));
         this.cpuMetric = cpu.label;
         const memory = this._metricItem('drive-harddisk-symbolic',
-            t('Memória do aplicativo'));
+            t('Application memory'));
         this.memoryMetric = memory.label;
         const network = this._metricItem('network-transmit-receive-symbolic',
-            t('Velocidade de Transferência'));
+            t('Transfer speed'));
         this.networkMetric = network.label;
         this.metricsBox.append(cpu.box);
         this.metricsBox.append(memory.box);

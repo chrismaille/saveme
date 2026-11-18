@@ -573,6 +573,9 @@ const CATALOGS = {
         'Cannot restart daemon: {message}': 'Não foi possível reiniciar o daemon: {message}',
         'Daemon control': 'Controle do daemon',
         'Restart the background service if it stops responding.': 'Reinicia o serviço em segundo plano se ele parar de responder.',
+        'Application CPU': 'CPU do aplicativo',
+        'Application memory': 'Memória do aplicativo',
+        'Transfer speed': 'Velocidade de Transferência',
     },
     es: {
         'Jobs': 'Tareas', 'Accounts': 'Cuentas', 'Settings': 'Configuración',
