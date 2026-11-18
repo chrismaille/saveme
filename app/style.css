@@ -122,9 +122,3 @@
     font-family: monospace;
     font-size: 0.9em;
 }
-
-.saveme-metrics-island {
-    background-color: @card_bg_color;
-    border-radius: 999px;
-    padding: 5px 10px;
-}

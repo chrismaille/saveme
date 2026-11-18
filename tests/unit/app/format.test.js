@@ -96,7 +96,9 @@ export default suite('app/presentation/format', [
         assertEqual(remoteTypeLabel('drive'), 'Google Drive');
         assertEqual(remoteTypeLabel('onedrive'), 'Microsoft OneDrive');
         assertEqual(remoteTypeLabel('dropbox'), 'Dropbox');
-        assertEqual(remoteTypeLabel('s3'), 's3');
+        assertEqual(remoteTypeLabel('s3'), 'S3 compatible');
+        assertEqual(remoteTypeLabel('pcloud'), 'pCloud');
+        assertEqual(remoteTypeLabel('nextcloud'), 'Nextcloud');
     }),
     test('result classes and text truncation', () => {
         assertEqual(resultClass('error'), 'saveme-status-error');

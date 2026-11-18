@@ -653,21 +653,43 @@ export class DaemonService {
         const name = String(payload.name || '').trim();
         const type = String(payload.type || '').trim();
         const options = payload.options || {};
-        if (type !== 'nextcloud')
+        if (!['nextcloud', 's3'].includes(type))
             throw new Error(`Unsupported remote type: ${type}`);
         if (!name || /[:/\n\r]/.test(name))
             throw new Error('Invalid remote name.');
-        const url = String(options.url || '').trim();
-        const user = String(options.user || '').trim();
-        const pass = String(options.pass || '');
-        if (!url || !user || !pass)
-            throw new Error('Nextcloud URL, user and password are required.');
-        const result = this.transfer.configCreate(name, 'webdav', {
-            url,
-            vendor: 'nextcloud',
-            user,
-            pass,
-        });
+        let providerType;
+        let providerOptions;
+        let remoteLabel;
+        let appOptions;
+        if (type === 'nextcloud') {
+            const url = String(options.url || '').trim();
+            const user = String(options.user || '').trim();
+            const pass = String(options.pass || '');
+            if (!url || !user || !pass)
+                throw new Error('Nextcloud URL, user and password are required.');
+            providerType = 'webdav';
+            providerOptions = {url, vendor: 'nextcloud', user, pass};
+            remoteLabel = `Nextcloud (${name})`;
+            appOptions = {url, user, vendor: 'nextcloud'};
+        } else {
+            const endpoint = String(options.endpoint || '').trim();
+            const region = String(options.region || 'auto').trim();
+            const accessKey = String(options.accessKey || '').trim();
+            const secretKey = String(options.secretKey || '');
+            if (!endpoint || !accessKey || !secretKey)
+                throw new Error('S3 endpoint, access key and secret key are required.');
+            providerType = 's3';
+            providerOptions = {
+                provider: 'Other',
+                endpoint,
+                region,
+                access_key_id: accessKey,
+                secret_access_key: secretKey,
+            };
+            remoteLabel = `S3 (${name})`;
+            appOptions = {provider: 'Other', endpoint, region};
+        }
+        const result = this.transfer.configCreate(name, providerType, providerOptions);
         if (!isSuccessExit(result.exitCode)) {
             throw new Error(rcloneErrorMessage(result,
                 `Cannot create ${name}: ${exitCodeMessage(result.exitCode)}`));
@@ -676,8 +698,8 @@ export class DaemonService {
         const remote = {
             name,
             type,
-            label: `Nextcloud (${name})`,
-            options: {url, user, vendor: 'nextcloud'},
+            label: remoteLabel,
+            options: appOptions,
         };
         const saved = existing
             ? this.config.updateRemote(name, remote)

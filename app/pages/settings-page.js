@@ -127,7 +127,7 @@ export class SettingsPage {
         this.blockStartAtLoginUpdate = false;
         this.blockMaxJobsUpdate = true;
         this.maxJobsRow.value = Math.max(1,
-            Math.min(8, Number(settings.maxConcurrentJobs ?? 1)));
+            Math.min(8, Number(settings.maxConcurrentJobs ?? 2)));
         this.blockMaxJobsUpdate = false;
         this.blockPolicyUpdate = true;
         this.retentionRow.value = Number(settings.logRetentionDays ?? 30);

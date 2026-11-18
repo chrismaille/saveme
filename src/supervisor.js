@@ -762,7 +762,7 @@ export class JobManager {
         this.onChange = onChange;
         this.onRunFinished = onRunFinished;
         this.onNotify = onNotify;
-        this.pool = new RunPool(Number(config.settings.maxConcurrentJobs || 1));
+        this.pool = new RunPool(Number(config.settings.maxConcurrentJobs || 2));
         this.supervisors = new Map();
     }
 

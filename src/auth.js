@@ -7,6 +7,7 @@ export const AUTH_PROVIDERS = {
     onedrive: 'Microsoft OneDrive',
     dropbox: 'Dropbox',
     nextcloud: 'Nextcloud',
+    pcloud: 'pCloud',
 };
 
 const URL_RE = /(https?:\/\/[^\s]+)/;

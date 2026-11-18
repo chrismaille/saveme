@@ -44,6 +44,7 @@ export function jobDefaults(input = {}, {
         options: {
             maxDeletePercent: 10,
             maxDeleteMinimum: 10,
+            deleteGuardEnabled: true,
             bandwidthLimit: '',
             transfers: 4,
             checkers: 8,
@@ -110,6 +111,7 @@ export function normalizeJobFields(job) {
     job.filters.include = normalizeIncludes(job.filters.include);
     job.options.maxDeletePercent = toNumber(job.options.maxDeletePercent, 10);
     job.options.maxDeleteMinimum = toNumber(job.options.maxDeleteMinimum, 10);
+    job.options.deleteGuardEnabled = job.options.deleteGuardEnabled !== false;
     job.options.transfers = toNumber(job.options.transfers, 4);
     job.options.checkers = toNumber(job.options.checkers, 8);
     job.options.notifyOnComplete = job.options.notifyOnComplete !== false;

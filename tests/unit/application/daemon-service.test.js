@@ -708,7 +708,7 @@ export default suite('application/daemon-service', [
             name: 'bad/name', type: 'nextcloud', options: {},
         })), /Invalid remote name|URL, user and password/);
         await assertThrows(() => ctx.service.createRemote(JSON.stringify({
-            name: 'nc', type: 's3', options: {},
+            name: 'nc', type: 'ftp', options: {},
         })), /Unsupported remote type/);
         await assertThrows(() => ctx.service.createRemote(JSON.stringify({
             name: 'nc', type: 'nextcloud', options: {url: 'https://x'},
@@ -724,6 +724,26 @@ export default suite('application/daemon-service', [
             options: {url: 'https://changed', user: 'me', pass: 'secret'},
         }));
         assertEqual(ctx.config.getRemote('Meu Nextcloud').options.url, 'https://changed');
+    }),
+    test('createRemote configures an S3-compatible remote', async () => {
+        const ctx = makeService();
+        const remote = JSON.parse(ctx.service.createRemote(JSON.stringify({
+            name: 'S3 Backup',
+            type: 's3',
+            options: {
+                endpoint: 'https://s3.eu-central-1.amazonaws.com',
+                region: 'eu-central-1',
+                accessKey: 'access',
+                secretKey: 'secret',
+            },
+        })));
+        assertEqual(remote.type, 's3');
+        assertEqual(ctx.transfer.created.type, 's3');
+        assertEqual(ctx.transfer.created.options.endpoint,
+            'https://s3.eu-central-1.amazonaws.com');
+        await assertThrows(() => ctx.service.createRemote(JSON.stringify({
+            name: 'S3 Broken', type: 's3', options: {endpoint: 'x'},
+        })), /S3 endpoint, access key and secret key/);
     }),
     test('importJob rejects legacy direct sync jobs', () => {
         const ctx = makeService();

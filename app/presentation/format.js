@@ -167,5 +167,7 @@ export function remoteTypeLabel(type) {
         onedrive: 'Microsoft OneDrive',
         dropbox: 'Dropbox',
         nextcloud: 'Nextcloud',
+        s3: 'S3 compatible',
+        pcloud: 'pCloud',
     }[type] || type;
 }

@@ -13,6 +13,8 @@ const PROVIDERS = [
     {type: 'onedrive', label: 'Microsoft OneDrive', logo: 'onedrive.png'},
     {type: 'dropbox', label: 'Dropbox', logo: 'dropbox.png'},
     {type: 'nextcloud', label: 'Nextcloud', logo: 'nextcloud.png'},
+    {type: 's3', label: 'S3 compatible', logo: 's3.svg'},
+    {type: 'pcloud', label: 'pCloud', logo: 'pcloud.svg'},
 ];
 
 export const RecoverDialog = GObject.registerClass({

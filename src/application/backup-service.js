@@ -4,6 +4,7 @@ import {
     uniqueSourceFolderNames,
 } from '../domain/backup-layout.js';
 import {exitCodeMessage, isSuccessExit} from '../domain/rclone-log.js';
+import {deleteLimit} from '../domain/delete-guard.js';
 import {
     backupArgs,
     copyArgs,
@@ -11,6 +12,7 @@ import {
     rmdirsArgs,
     withDryRun,
     withFastList,
+    withMaxDelete,
 } from '../domain/rclone-command.js';
 import {planChanges} from './change-planner.js';
 import {resolveJobTargets} from './job-target.js';
@@ -61,6 +63,13 @@ export class BackupService {
             const versionBase = this.executor.versionDir(job, prep.dest, ctx);
             ctx.versionsDir = versionBase;
             const labels = uniqueSourceFolderNames(job);
+            const allowedDeletes = job.options?.deleteGuardEnabled !== false &&
+                Number.isFinite(sourceCount)
+                ? deleteLimit(sourceCount, {
+                    maxDeletePercent: job.options?.maxDeletePercent ?? 10,
+                    maxDeleteMinimum: job.options?.maxDeleteMinimum ?? 10,
+                })
+                : null;
             const multi = prep.sources.length > 1;
             const totalSources = Math.max(1, prep.sources.length);
             let sourceIndex = 0;
@@ -106,6 +115,8 @@ export class BackupService {
                     ? joinRclonePath(versionBase, labels[index])
                     : versionBase;
                 let args = backupArgs(source.path, current, versionDir, filterFile, job);
+                if (allowedDeletes !== null)
+                    args = withMaxDelete(args, allowedDeletes);
                 if (!source.isLocal || !prep.destIsLocal)
                     args = withFastList(args);
                 if (dryRun)

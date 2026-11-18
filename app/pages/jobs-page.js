@@ -109,7 +109,6 @@ export class JobsPage {
             margin_start: 8,
             margin_end: 8,
             halign: Gtk.Align.CENTER,
-            css_classes: ['saveme-metrics-island'],
         });
         const cpu = this._metricItem('utilities-system-monitor-symbolic',
             t('Application CPU'));
@@ -191,10 +190,10 @@ export class JobsPage {
         const metrics = this.appMetrics;
         this.cpuMetric.set_text(metrics
             ? `${Number(metrics.cpuPercent || 0).toFixed(1)}%`
-            : '-');
+            : '0.0%');
         this.memoryMetric.set_text(metrics
             ? formatBytes(metrics.rssBytes)
-            : '-');
+            : '0.0 MiB');
         let speed = 0;
         for (const job of snapshot?.jobs || []) {
             const progress = job.state?.progress;
@@ -205,7 +204,7 @@ export class JobsPage {
             speed += Number(progress.speed || 0);
         }
         this.networkMetric.set_text(
-            speed > 0 ? `${formatBytes(speed)}/s` : '-');
+            speed > 0 ? `${formatBytes(speed)}/s` : '0.0 B/s');
     }
 
     _clearListBox() {
@@ -629,10 +628,10 @@ export class JobsPage {
                 .find(item => item.name === destination.remote)
             : null;
         this._baseRow = new Adw.ActionRow({
-            title: descriptorDisplay(destination, this.window.volumes) || '-',
-            subtitle: destination?.kind === 'remote'
+            title: destination?.kind === 'remote'
                 ? remoteTypeLabel(remote?.type || 'cloud')
-                : t('Local folder'),
+                : t('Local disk'),
+            subtitle: descriptorDisplay(destination, this.window.volumes) || '-',
         });
         const baseOpen = iconLabelButton(t('Open'), 'folder-open-symbolic', {
             cssClasses: ['flat'],
@@ -640,7 +639,7 @@ export class JobsPage {
         baseOpen.connect('clicked', () => this.window.openDestination(job));
         this._baseRow.add_suffix(baseOpen);
         this._addRemoteWebButton(this._baseRow, job, destination?.path || '');
-        const group = new Adw.PreferencesGroup({title: t('Destino')});
+        const group = new Adw.PreferencesGroup({title: t('Pasta SaveMe')});
         group.add(this._baseRow);
         return group;
     }
@@ -651,11 +650,13 @@ export class JobsPage {
         const jobPath = direct
             ? descriptorDisplay(destination, this.window.volumes)
             : `${backupRootDisplay(job)}${job.type === JOB_TYPES.SYNC ? '/current' : ''}`;
+        const service = direct
+            ? t('Legacy direct destination')
+            : job.type === JOB_TYPES.BACKUP
+                ? t('Backup folder') : t('Sync folder');
         const row = new Adw.ActionRow({
-            title: jobPath || '-',
-            subtitle: direct
-                ? t('Legacy direct destination')
-                : t('Folder used by this job'),
+            title: service,
+            subtitle: jobPath || '-',
         });
         const open = iconLabelButton(t('Open'), 'folder-open-symbolic', {
             cssClasses: ['flat'],
@@ -666,7 +667,7 @@ export class JobsPage {
         row.add_suffix(open);
         if (!direct)
             this._addRemoteWebButton(row, job, this._jobFolderPath(job));
-        const group = new Adw.PreferencesGroup({title: t('Local')});
+        const group = new Adw.PreferencesGroup({title: t('Pasta do Job')});
         group.add(row);
         return group;
     }

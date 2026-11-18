@@ -9,6 +9,8 @@ const PROVIDER_LABELS = {
     onedrive: 'Microsoft OneDrive',
     dropbox: 'Dropbox',
     nextcloud: 'Nextcloud',
+    s3: 'S3 compatible',
+    pcloud: 'pCloud',
 };
 
 /**
@@ -182,9 +184,12 @@ export const AccountsDialog = GObject.registerClass({
             dialog.add_response('onedrive', 'Microsoft OneDrive');
             dialog.add_response('dropbox', 'Dropbox');
             dialog.add_response('nextcloud', 'Nextcloud');
+            dialog.add_response('s3', 'S3 compatible');
+            dialog.add_response('pcloud', 'pCloud');
             dialog.set_response_appearance('drive', Adw.ResponseAppearance.SUGGESTED);
             dialog.connect('response', (_dialog, response) => {
-                if (['drive', 'onedrive', 'dropbox', 'nextcloud'].includes(response))
+                if (['drive', 'onedrive', 'dropbox', 'nextcloud', 's3', 'pcloud']
+                    .includes(response))
                     this._openAddDialog(response);
             });
             dialog.present(this);

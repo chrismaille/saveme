@@ -31,7 +31,7 @@ export function defaultConfig() {
         settings: {
             notifications: true,
             startAtLogin: true,
-            maxConcurrentJobs: 1,
+            maxConcurrentJobs: 2,
             pollIntervalMinutes: 5,
             reconcileIntervalHours: 24,
             language: 'system',
@@ -279,7 +279,7 @@ export class ConfigStore {
         };
         if (!remote.name || /[:/\n\r]/.test(remote.name))
             throw new Error('Remote name cannot contain colon, slash or line breaks.');
-        if (!['drive', 'onedrive', 'dropbox', 'nextcloud'].includes(remote.type))
+        if (!['drive', 'onedrive', 'dropbox', 'nextcloud', 's3', 'pcloud'].includes(remote.type))
             throw new Error(`Unsupported remote type: ${remote.type}`);
         if (this.data.remotes.some(item => item.name === remote.name))
             throw new Error(`Remote already exists: ${remote.name}`);
