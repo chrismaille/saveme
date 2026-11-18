@@ -2,12 +2,13 @@ import Pango from 'gi://Pango';
 import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
 import Gio from 'gi://Gio';
-import {JOB_TYPES, descriptorDisplay, jobSources} from '../../src/jobs.js';
+import {JOB_TYPES, descriptorDisplay, jobSources, localPathFor} from '../../src/jobs.js';
 import {triggerLabel} from '../../src/domain/schedule.js';
 import {t} from '../../src/i18n.js';
 import {RecoverDialog} from '../recover-dialog.js';
 import {DryRunDialog} from '../dry-run-dialog.js';
 import {JobLogsDialog} from '../job-logs-dialog.js';
+import {probeFolderSize} from '../size-probe.js';
 import {
     backupRootDisplay,
     cleanError,
@@ -772,8 +773,30 @@ export class JobsPage {
         }
         if (this._sizePending.has(key))
             return;
+        const destination = job.destination;
+        let path;
+        if (destination?.kind === 'local') {
+            const base = localPathFor(destination, this.window.volumes);
+            if (!base) {
+                this.detail.stats.size.set_subtitle('-');
+                return;
+            }
+            path = job.destinationLayout === 'direct'
+                ? base
+                : `${base.replace(/\/+$/, '')}/SaveMe/${job.id}`;
+        } else if (destination?.kind === 'remote') {
+            const base = String(destination.path || '').replace(/^\/+|\/+$/g, '');
+            const root = base ? `${base}/SaveMe/${job.id}` : `SaveMe/${job.id}`;
+            path = job.destinationLayout === 'direct'
+                ? `${destination.remote}:${base}`
+                : `${destination.remote}:${root}`;
+        }
+        if (!path) {
+            this.detail.stats.size.set_subtitle('-');
+            return;
+        }
         this._sizePending.add(key);
-        this.window.client.jobSize(job.id)
+        probeFolderSize(path)
             .then(result => {
                 const text = formatBytes(result.bytes || 0);
                 this._sizeCache.set(key, text);
@@ -811,8 +834,6 @@ export class JobsPage {
             return 'https://drive.google.com/drive/search?q=' +
                 encodeURIComponent(path || 'SaveMe');
         }
-        // OneDrive needs the item ID from the remote metadata; the daemon
-        // resolves it on demand.
         return null;
     }
 
@@ -850,19 +871,19 @@ export class JobsPage {
 
     _play(job) {
         this.window.client.playJob(job.id)
-            .then(() => this.window.toast('Job started.'))
+            .then(() => this.window.toast(t('Job started.')))
             .catch(e => this.window.toast(cleanError(e.message)));
     }
 
     _pause(job) {
         this.window.client.pauseJob(job.id, true)
-            .then(() => this.window.toast('Job paused.'))
+            .then(() => this.window.toast(t('Job paused.')))
             .catch(e => this.window.toast(cleanError(e.message)));
     }
 
     _stop(job) {
         this.window.client.cancelJob(job.id)
-            .then(() => this.window.toast('Job stopped. Press Play to resume.'))
+            .then(() => this.window.toast(t('Job stopped. Press Play to resume.')))
             .catch(e => this.window.toast(cleanError(e.message)));
     }
 
@@ -871,11 +892,11 @@ export class JobsPage {
         const canDeleteData = job.destinationLayout !== 'direct' &&
             Boolean(destination?.path || destination?.remote);
         const dialog = new Adw.AlertDialog({
-            heading: 'Delete job?',
-            body: `Delete “${job.name}”? The job configuration is removed. ` +
+            heading: t('Delete job?'),
+            body: `${t('Delete')} “${job.name}”? ${t('The job configuration is removed.')} ` +
                 (canDeleteData
-                    ? 'The destination folder is kept unless you select the option below.'
-                    : 'The destination files are kept.'),
+                    ? t('The destination folder is kept unless you select the option below.')
+                    : t('The destination files are kept.')),
         });
         let deleteDataCheck = null;
         if (canDeleteData) {
@@ -884,13 +905,13 @@ export class JobsPage {
                 spacing: 6,
             });
             deleteDataCheck = new Gtk.CheckButton({
-                label: 'Also delete this job’s folder in the destination',
+                label: t('Also delete this job’s folder in the destination'),
             });
             box.append(deleteDataCheck);
             dialog.set_extra_child(box);
         }
-        dialog.add_response('cancel', 'Cancel');
-        dialog.add_response('delete', 'Delete');
+        dialog.add_response('cancel', t('Cancel'));
+        dialog.add_response('delete', t('Delete'));
         dialog.set_response_appearance('delete', Adw.ResponseAppearance.DESTRUCTIVE);
         dialog.connect('response', (_dialog, response) => {
             if (response !== 'delete')
@@ -898,15 +919,11 @@ export class JobsPage {
             const deleteData = Boolean(deleteDataCheck?.active);
             this.window.client.deleteJob(job.id, deleteData)
                 .then(() => this.window.toast(deleteData
-                    ? 'Job and destination folder deleted.'
-                    : 'Job deleted.'))
+                    ? t('Job and destination folder deleted.')
+                    : t('Job deleted.')))
                 .catch(e => this.window.toast(cleanError(e.message)));
         });
         dialog.present(this.window);
-    }
-
-    _currentJob() {
-        return this.jobs.find(item => item.id === this.selectedId) || null;
     }
 
     _updateDetails(job) {

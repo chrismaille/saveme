@@ -34,4 +34,31 @@ export class SystemLauncher {
         return this._appInfo.launch_default_for_uri(
             this._file.new_for_path(path).get_uri(), null);
     }
+
+    capture(argv) {
+        return new Promise((resolve, reject) => {
+            let subprocess;
+            try {
+                subprocess = this._subprocess.new(argv,
+                    Gio.SubprocessFlags.STDOUT_PIPE |
+                    Gio.SubprocessFlags.STDERR_PIPE);
+            } catch (e) {
+                reject(e);
+                return;
+            }
+            subprocess.communicate_utf8_async(null, null, (proc, result) => {
+                try {
+                    const [, stdout, stderr] = proc.communicate_utf8_finish(result);
+                    if (!proc.get_successful()) {
+                        reject(new Error(String(stderr || '').trim() ||
+                            'Command failed'));
+                        return;
+                    }
+                    resolve(stdout);
+                } catch (e) {
+                    reject(e);
+                }
+            });
+        });
+    }
 }
