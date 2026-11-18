@@ -108,7 +108,7 @@ export class JobsPage {
             margin_bottom: 8,
             margin_start: 8,
             margin_end: 8,
-            halign: Gtk.Align.START,
+            halign: Gtk.Align.CENTER,
             css_classes: ['saveme-metrics-island'],
         });
         const cpu = this._metricItem('utilities-system-monitor-symbolic',
