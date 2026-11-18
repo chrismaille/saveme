@@ -8,19 +8,29 @@ export class AccountsPage {
     constructor(window) {
         this.window = window;
         this.widget = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL});
+        this.page = new Adw.PreferencesPage({vexpand: true});
+        this.widget.append(this.page);
         this.addButton = new Gtk.Button({
             label: t('Add account'),
             icon_name: 'list-add-symbolic',
-            margin_top: 8,
-            margin_bottom: 8,
-            margin_start: 12,
-            margin_end: 12,
+            hexpand: true,
+            margin_top: 4,
+            margin_bottom: 12,
             css_classes: ['suggested-action'],
         });
         this.addButton.connect('clicked', () => this.window.addAccount(null));
-        this.page = new Adw.PreferencesPage({vexpand: true});
-        this.widget.append(this.addButton);
-        this.widget.append(this.page);
+        const addBox = new Gtk.Box({
+            orientation: Gtk.Orientation.HORIZONTAL,
+            margin_start: 12,
+            margin_end: 12,
+        });
+        addBox.append(new Adw.Clamp({
+            maximum_size: 600,
+            tightening_threshold: 500,
+            hexpand: true,
+            child: this.addButton,
+        }));
+        this.widget.append(addBox);
         this.group = null;
         this.key = null;
     }

@@ -78,7 +78,7 @@ export class JobsPage {
         });
         add.connect('clicked', () => this.window.newJob());
         header.append(add);
-        this.recoverButton = iconLabelButton(t('Recover backup'),
+        this.recoverButton = iconLabelButton(t('Restore'),
             'document-revert-symbolic', {cssClasses: ['flat']});
         this.recoverButton.connect('clicked', () =>
             new RecoverDialog(this.window).present());
@@ -100,21 +100,28 @@ export class JobsPage {
         scrolled.set_child(this.listBox);
         sidebar.append(scrolled);
 
-        sidebar.append(new Gtk.Separator({orientation: Gtk.Orientation.HORIZONTAL}));
         this.metricsBox = new Gtk.Box({
             orientation: Gtk.Orientation.HORIZONTAL,
-            spacing: 12,
-            margin_top: 6,
-            margin_bottom: 6,
-            margin_start: 12,
-            margin_end: 12,
+            spacing: 10,
+            margin_top: 4,
+            margin_bottom: 8,
+            margin_start: 8,
+            margin_end: 8,
+            halign: Gtk.Align.START,
+            css_classes: ['saveme-metrics-island'],
         });
-        this.cpuMetric = this._metricLabel(t('App CPU'));
-        this.memoryMetric = this._metricLabel(t('App memory'));
-        this.networkMetric = this._metricLabel(t('Network transfer'));
-        this.metricsBox.append(this.cpuMetric);
-        this.metricsBox.append(this.memoryMetric);
-        this.metricsBox.append(this.networkMetric);
+        const cpu = this._metricItem('utilities-system-monitor-symbolic',
+            t('CPU do aplicativo'));
+        this.cpuMetric = cpu.label;
+        const memory = this._metricItem('drive-harddisk-symbolic',
+            t('Memória do aplicativo'));
+        this.memoryMetric = memory.label;
+        const network = this._metricItem('network-transmit-receive-symbolic',
+            t('Velocidade de Transferência'));
+        this.networkMetric = network.label;
+        this.metricsBox.append(cpu.box);
+        this.metricsBox.append(memory.box);
+        this.metricsBox.append(network.box);
         sidebar.append(this.metricsBox);
         this.widget.set_start_child(sidebar);
         this.sidebar = sidebar;
@@ -153,7 +160,6 @@ export class JobsPage {
         }
 
         const job = jobs.find(item => item.id === this.selectedId) || null;
-        this._updateRecoverVisibility(job);
         this._updateMetrics(snapshot);
         if (structureChanged || this.detailsJobId !== this.selectedId || !this.detail)
             this._renderDetails();
@@ -166,32 +172,28 @@ export class JobsPage {
         this._updateMetrics(this.window.snapshot);
     }
 
-    _metricLabel(title) {
-        return new Gtk.Label({
-            label: `${title}: -`,
-            xalign: 0,
-            hexpand: true,
-            ellipsize: Pango.EllipsizeMode.END,
-            css_classes: ['dim-label', 'caption'],
+    _metricItem(iconName, tooltip) {
+        const box = new Gtk.Box({orientation: Gtk.Orientation.HORIZONTAL, spacing: 4});
+        box.append(new Gtk.Image({icon_name: iconName, pixel_size: 14}));
+        const label = new Gtk.Label({
+            label: '-',
+            css_classes: ['caption'],
         });
-    }
-
-    _updateRecoverVisibility(job = null) {
-        if (!this.recoverButton)
-            return;
-        this.recoverButton.visible = !job || job.type === JOB_TYPES.BACKUP;
+        box.append(label);
+        box.set_tooltip_text(tooltip);
+        return {box, label};
     }
 
     _updateMetrics(snapshot) {
         if (!this.cpuMetric)
             return;
         const metrics = this.appMetrics;
-        this.cpuMetric.set_text(`${t('App CPU')}: ${metrics
+        this.cpuMetric.set_text(metrics
             ? `${Number(metrics.cpuPercent || 0).toFixed(1)}%`
-            : '-'}`);
-        this.memoryMetric.set_text(`${t('App memory')}: ${metrics
+            : '-');
+        this.memoryMetric.set_text(metrics
             ? formatBytes(metrics.rssBytes)
-            : '-'}`);
+            : '-');
         let speed = 0;
         for (const job of snapshot?.jobs || []) {
             const progress = job.state?.progress;
@@ -202,7 +204,7 @@ export class JobsPage {
             speed += Number(progress.speed || 0);
         }
         this.networkMetric.set_text(
-            `${t('Network transfer')}: ${speed > 0 ? `${formatBytes(speed)}/s` : '-'}`);
+            speed > 0 ? `${formatBytes(speed)}/s` : '-');
     }
 
     _clearListBox() {
@@ -435,7 +437,7 @@ export class JobsPage {
                 cssClasses: ['suggested-action'],
             });
             button.connect('clicked', () => this.window.newJob());
-            const recover = iconLabelButton(t('Recover backup'),
+            const recover = iconLabelButton(t('Restore'),
                 'document-revert-symbolic', {});
             recover.connect('clicked', () => new RecoverDialog(this.window).present());
             const actions = new Gtk.Box({
@@ -447,7 +449,6 @@ export class JobsPage {
             actions.append(recover);
             page.set_child(actions);
             scroll.set_child(page);
-            this._updateRecoverVisibility(null);
             return;
         }
 
@@ -538,8 +539,10 @@ export class JobsPage {
         statusGroup.add(progressBox);
         page.append(statusGroup);
 
-        page.append(this._sourceContentSection(job));
-        page.append(this._destinationSection(job));
+        page.append(this._sourceGroup(job));
+        page.append(this._contentGroup(job));
+        page.append(this._destinationGroup(job));
+        page.append(this._localGroup(job));
         page.append(this._actionsSection(job));
         page.append(this._configurationSection(job));
         const stats = this._statisticsSection(job);
@@ -561,23 +564,10 @@ export class JobsPage {
         this._refreshJobSize(job);
     }
 
-    _columns(left, right) {
-        left.set_hexpand(true);
-        right.set_hexpand(true);
-        const box = new Gtk.Box({
-            orientation: Gtk.Orientation.HORIZONTAL,
-            spacing: 12,
-            homogeneous: true,
-        });
-        box.append(left);
-        box.append(right);
-        return box;
-    }
-
-    _sourceContentSection(job) {
+    _sourceGroup(job) {
         const sources = jobSources(job);
         const source = sources[0] || job.source;
-        const sourceGroup = new Adw.PreferencesGroup({title: t('Origem')});
+        const group = new Adw.PreferencesGroup({title: t('Origem')});
         if (source) {
             const remote = source.kind === 'remote'
                 ? (this.window.snapshot?.remotes || [])
@@ -594,25 +584,28 @@ export class JobsPage {
             });
             open.connect('clicked', () => this.window.openSource(job, source));
             row.add_suffix(open);
-            sourceGroup.add(row);
+            group.add(row);
         }
         if (sources.length > 1) {
-            sourceGroup.add(new Adw.ActionRow({
+            group.add(new Adw.ActionRow({
                 title: t('Legacy job with {count} sources', {count: sources.length}),
                 subtitle: t('This older job still has multiple sources. Edit it to review.'),
             }));
         }
+        return group;
+    }
 
-        const contentGroup = new Adw.PreferencesGroup({title: t('Conteúdo')});
+    _contentGroup(job) {
+        const group = new Adw.PreferencesGroup({title: t('Conteúdo')});
         const includes = job.filters?.include || [];
         if (includes.length === 0) {
-            contentGroup.add(new Adw.ActionRow({
+            group.add(new Adw.ActionRow({
                 title: t('All source content'),
                 subtitle: t('Everything below the source folder.'),
             }));
         } else {
             for (const path of includes) {
-                contentGroup.add(new Adw.ActionRow({
+                group.add(new Adw.ActionRow({
                     title: path,
                     subtitle: t('Selected content'),
                 }));
@@ -620,15 +613,15 @@ export class JobsPage {
         }
         const excludes = job.filters?.exclude || [];
         if (excludes.length > 0) {
-            contentGroup.add(new Adw.ActionRow({
+            group.add(new Adw.ActionRow({
                 title: t('Exclusion filters'),
                 subtitle: excludes.join(', '),
             }));
         }
-        return this._columns(sourceGroup, contentGroup);
+        return group;
     }
 
-    _destinationSection(job) {
+    _destinationGroup(job) {
         const destination = job.destination;
         const remote = destination?.kind === 'remote'
             ? (this.window.snapshot?.remotes || [])
@@ -646,34 +639,35 @@ export class JobsPage {
         baseOpen.connect('clicked', () => this.window.openDestination(job));
         this._baseRow.add_suffix(baseOpen);
         this._addRemoteWebButton(this._baseRow, job, destination?.path || '');
-        const baseGroup = new Adw.PreferencesGroup({title: t('Destino')});
-        baseGroup.add(this._baseRow);
+        const group = new Adw.PreferencesGroup({title: t('Destino')});
+        group.add(this._baseRow);
+        return group;
+    }
 
-        const jobGroup = new Adw.PreferencesGroup({
-            title: job.type === JOB_TYPES.BACKUP
-                ? t('Local do Backup') : t('Local do Sync'),
-        });
+    _localGroup(job) {
+        const destination = job.destination;
         const direct = job.destinationLayout === 'direct';
         const jobPath = direct
             ? descriptorDisplay(destination, this.window.volumes)
             : `${backupRootDisplay(job)}${job.type === JOB_TYPES.SYNC ? '/current' : ''}`;
-        const jobRow = new Adw.ActionRow({
+        const row = new Adw.ActionRow({
             title: jobPath || '-',
             subtitle: direct
                 ? t('Legacy direct destination')
                 : t('Folder used by this job'),
         });
-        const jobOpen = iconLabelButton(t('Open'), 'folder-open-symbolic', {
+        const open = iconLabelButton(t('Open'), 'folder-open-symbolic', {
             cssClasses: ['flat'],
         });
-        jobOpen.connect('clicked', () => direct
+        open.connect('clicked', () => direct
             ? this.window.openDestination(job)
             : this.window.openBackupRoot(job));
-        jobRow.add_suffix(jobOpen);
+        row.add_suffix(open);
         if (!direct)
-            this._addRemoteWebButton(jobRow, job, this._jobFolderPath(job));
-        jobGroup.add(jobRow);
-        return this._columns(baseGroup, jobGroup);
+            this._addRemoteWebButton(row, job, this._jobFolderPath(job));
+        const group = new Adw.PreferencesGroup({title: t('Local')});
+        group.add(row);
+        return group;
     }
 
     _actionsSection(job) {
@@ -704,8 +698,8 @@ export class JobsPage {
             addAction(t('Logs'), 'text-x-generic-symbolic', [],
                 () => new JobLogsDialog(this.window, job).present());
             if (job.type === JOB_TYPES.BACKUP) {
-                addAction(t('Versões / Restaurar'), 'document-revert-symbolic', [],
-                    () => this.window.openVersions(job));
+                addAction(t('Restore'), 'document-revert-symbolic',
+                    ['suggested-action'], () => this.window.openVersions(job));
             }
         }
         addAction(t('Delete'), 'edit-delete-symbolic', ['destructive-action'],
@@ -741,7 +735,9 @@ export class JobsPage {
         row.add_suffix(new Gtk.Label({
             label: value,
             xalign: 1,
-            wrap: true,
+            halign: Gtk.Align.END,
+            valign: Gtk.Align.CENTER,
+            wrap: false,
             css_classes: ['dim-label'],
         }));
         return row;

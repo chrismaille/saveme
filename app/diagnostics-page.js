@@ -51,6 +51,18 @@ export class DiagnosticsPage {
         system.add(this.volumesRow);
         system.add(this.configRow);
         system.add(this.stateRow);
+        const restartRow = new Adw.ActionRow({
+            title: t('Daemon control'),
+            subtitle: t('Restart the background service if it stops responding.'),
+        });
+        const restart = new Gtk.Button({
+            label: t('Restart daemon'),
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat'],
+        });
+        restart.connect('clicked', () => this._restartDaemon());
+        restartRow.add_suffix(restart);
+        system.add(restartRow);
         this.widget.add(system);
 
         const actions = new Adw.PreferencesGroup({title: t('Diagnostics')});
@@ -384,6 +396,21 @@ export class DiagnosticsPage {
             await this._refreshStorage();
         } catch (e) {
             this.window.toast(e.message);
+        }
+    }
+
+    _restartDaemon() {
+        this.window.toast(t('Restarting daemon…'));
+        try {
+            this.window.launcher.spawn(['systemctl', '--user', 'restart',
+                'saveme.service']);
+        } catch (_) {
+            try {
+                this.window.launcher.spawn(['saveme-daemon']);
+            } catch (e) {
+                this.window.toast(t('Cannot restart daemon: {message}',
+                    {message: e.message}));
+            }
         }
     }
 
