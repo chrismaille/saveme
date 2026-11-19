@@ -31,6 +31,11 @@ import {
     setStatusVisual,
 } from '../widgets/common.js';
 
+const PROBLEM_STATUSES = new Set([
+    'error', 'offline', 'no-space', 'needs-auth', 'delete-guard',
+    'waiting-source', 'waiting-destination',
+]);
+
 export class JobsPage {
     constructor(window) {
         this.window = window;
@@ -348,6 +353,8 @@ export class JobsPage {
         const state = job.state || {};
         const progress = state.progress;
         const display = displayStatus(state.status, progress?.phase);
+        if (PROBLEM_STATUSES.has(display) && String(state.message || '').trim())
+            return truncate(state.message, 90);
         if (display === 'checking') {
             const listed = Number(progress?.listed || 0);
             return listed > 0
@@ -533,9 +540,16 @@ export class JobsPage {
             css_classes: ['dim-label'],
             visible: false,
         });
+        const message = new Gtk.Label({
+            xalign: 0,
+            wrap: true,
+            visible: false,
+            css_classes: ['saveme-job-message'],
+        });
         progressBox.append(headline);
         progressBox.append(progress);
         progressBox.append(current);
+        progressBox.append(message);
         statusGroup.add(progressBox);
         page.append(statusGroup);
 
@@ -554,6 +568,7 @@ export class JobsPage {
             dot,
             progress,
             current,
+            message,
             headlineStatus,
             headlineEta,
             destinationRow: this._baseRow,
@@ -951,6 +966,11 @@ export class JobsPage {
                 this.detail.headlineStatus.remove_css_class(cssClass);
         }
         this.detail.headlineStatus.add_css_class(`saveme-job-status-${statusName}`);
+
+        const stateMessage = String(state.message || '').trim();
+        this.detail.message.set_text(stateMessage);
+        this.detail.message.visible = Boolean(stateMessage) &&
+            PROBLEM_STATUSES.has(state.status);
 
         if (display === 'checking' && progress) {
             const listed = Number(progress.listed || 0);

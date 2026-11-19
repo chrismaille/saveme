@@ -53,11 +53,18 @@ const DISK_RE = new RegExp([
 const PERMISSION_RE = /permission denied|operation not permitted|access is denied/i;
 const DELETE_GUARD_RE = /delete guard|delete limit|max.*delete/i;
 const EMPTY_SOURCE_RE = /source is empty/i;
+const SOURCE_DISK_RE = /source disk is unavailable|source volume|volume not mounted.*source/i;
+const DEST_DISK_RE = /destination disk is unavailable|destination volume/i;
+const FATAL_RE = /fatal error received|not attempting retries/i;
 
 export function friendlyErrorMessage(message) {
     const text = String(message ?? '').trim();
     if (!text)
         return t('Operation failed. Check Logs & Debug for technical details.');
+    if (SOURCE_DISK_RE.test(text))
+        return t('The source disk is unavailable. Connect the disk and try again.');
+    if (DEST_DISK_RE.test(text))
+        return t('The destination disk is unavailable. Connect the disk and try again.');
     if (NETWORK_RE.test(text))
         return t('No internet connection. Check your network and try again.');
     if (/onedrive|drive_id|drive_type|microsoft/i.test(text))
@@ -73,14 +80,31 @@ export function friendlyErrorMessage(message) {
     if (PERMISSION_RE.test(text))
         return t('Permission denied. Check the folder permissions.');
     if (DELETE_GUARD_RE.test(text))
-        return t('Deletion blocked by the safety limit. Review the job settings.');
+        return t('Deletion blocked by the safety limit. SaveMe stopped the backup ' +
+            'because it would delete more files than allowed. If the source folder ' +
+            'really changed, restore the backup or disable the deletion protection ' +
+            'for this job.');
     if (EMPTY_SOURCE_RE.test(text))
         return t('The source is empty. The run was stopped to prevent data loss.');
+    if (FATAL_RE.test(text))
+        return t('The operation failed before transferring files. ' +
+            'Check Diagnósticos for details.');
     return text;
 }
 
 export function friendlyError(error) {
     if (!error)
         return friendlyErrorMessage(error);
+    if (error.name === 'SourceChangedError' &&
+        Number.isFinite(Number(error.current)) &&
+        Number.isFinite(Number(error.previous))) {
+        return t('The source folder changed a lot since the last backup ' +
+            '({previous} files → {current} files). SaveMe stopped before deleting ' +
+            'the existing backup. If you recreated the folder, restore the backup ' +
+            'or disable the deletion protection for this job.', {
+            current: Number(error.current).toLocaleString(),
+            previous: Number(error.previous).toLocaleString(),
+        });
+    }
     return friendlyErrorMessage(error.message ?? String(error));
 }

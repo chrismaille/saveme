@@ -12,7 +12,11 @@ import {
     progressFromStats,
 } from '../domain/rclone-log.js';
 import {escapeFilterPath, filterRules} from '../domain/rclone-command.js';
-import {DiskSpaceError, EmptySourceError} from '../domain/errors.js';
+import {
+    DiskSpaceError,
+    EmptySourceError,
+    SourceChangedError,
+} from '../domain/errors.js';
 import {friendlyError as toFriendlyError} from './friendly-errors.js';
 import {DEFAULT_DISK_GUARD, planDiskCheck} from '../domain/disk-space.js';
 
@@ -80,6 +84,7 @@ export class RunExecutor {
             versionsDir: null,
             currentFile: null,
             lastError: null,
+            deleteGuardHit: false,
             exitCode: null,
             onProgress: null,
             progressMapper: null,
@@ -90,9 +95,14 @@ export class RunExecutor {
     endRun(ctx, result, message = '') {
         ctx.rawLog.close();
         const finishedAt = this.clock.nowIso();
-        const technicalMessage = message || ctx.lastError || '';
+        const error = result === 'error' && message instanceof Error
+            ? message
+            : null;
+        const technicalMessage = error
+            ? error.message
+            : (message || ctx.lastError || '');
         const finalMessage = result === 'error'
-            ? toFriendlyError(technicalMessage)
+            ? (error ? toFriendlyError(error) : toFriendlyError(technicalMessage))
             : technicalMessage;
         const run = {
             id: ctx.runId,
@@ -228,6 +238,8 @@ export class RunExecutor {
         ctx.logger[level](String(parsed.msg).trim(), fields);
         if (parsed.object)
             ctx.currentFile = parsed.object;
+        if (/max-delete|maximum delete|delete threshold/i.test(parsed.msg))
+            ctx.deleteGuardHit = true;
         if (level === 'error')
             ctx.lastError = parsed.msg;
     }
@@ -412,12 +424,60 @@ export class RunExecutor {
         return plan;
     }
 
-    checkEmptySource(job, sourceCount, force) {
+    quickSourceCount(prep) {
+        if (!prep.sourceIsLocal || typeof this.files.topLevelEntryCount !== 'function')
+            return null;
+        try {
+            return this.files.topLevelEntryCount(prep.source, {
+                ignore: ['.saveme', '.saveme-versions'],
+            });
+        } catch (_) {
+            return null;
+        }
+    }
+
+    lastSuccessfulSourceCount(job) {
+        const state = this.state?.getJobState?.(job.id) || {};
+        const stateCount = Number(state.lastSourceFileCount || 0);
+        const stateIsSuccessful = !state.lastResult ||
+            state.lastResult === 'success' || state.lastResult === 'noop';
+        if (stateIsSuccessful)
+            return Number.isFinite(stateCount) ? stateCount : 0;
+        let runs;
+        try {
+            runs = this.runRepository?.listRuns?.(job.id, 100) || [];
+        } catch (_) {
+            runs = [];
+        }
+        const previous = runs.find(run => !run.dryRun &&
+            (run.result === 'success' || run.result === 'noop') &&
+            Number.isFinite(Number(run.sourceFileCount)));
+        return previous
+            ? Number(previous.sourceFileCount)
+            : (Number.isFinite(stateCount) ? stateCount : 0);
+    }
+
+    checkEmptySource(job, sourceCount, force, previousCount = null) {
         if (force || !Number.isFinite(sourceCount) || sourceCount > 0)
             return;
-        const lastCount = this.state?.getJobState(job.id).lastSourceFileCount || 0;
+        const lastCount = previousCount ?? this.lastSuccessfulSourceCount(job);
         if (lastCount > 0)
             throw new EmptySourceError(lastCount);
+    }
+
+    checkSourceChange(job, sourceCount, {
+        force = false,
+        enabled = true,
+        previousCount = null,
+    } = {}) {
+        if (force || !enabled || !Number.isFinite(sourceCount) || sourceCount <= 0)
+            return null;
+        const previous = previousCount ?? this.lastSuccessfulSourceCount(job);
+        if (!Number.isFinite(previous) || previous < 100)
+            return null;
+        if (sourceCount >= previous * 0.5)
+            return null;
+        throw new SourceChangedError(sourceCount, previous);
     }
 
     friendlyError(error) {

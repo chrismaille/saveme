@@ -150,6 +150,39 @@ export default suite('application/backup-service', [
         assert(/Source is empty/.test(run.technicalMessage), run.technicalMessage);
         assertEqual(services.transfer.runs.length, 0);
     }),
+    test('aborts before rclone when the recreated source shrank', async () => {
+        const {services, job} = backupContext({count: 4});
+        services.transfer.sizes.set('/src', {count: 4, bytes: 40});
+        services.state.setJobState('job_test', {
+            lastResult: 'success',
+            lastSourceFileCount: 11219,
+        });
+        const run = await services.backup.runFull(job);
+        assertEqual(run.result, 'error');
+        assert(/changed a lot/.test(run.message), run.message);
+        assert(/Source changed/.test(run.technicalMessage), run.technicalMessage);
+        assertEqual(services.transfer.runs.length, 0);
+    }),
+    test('reports the delete guard when rclone stops at max-delete', async () => {
+        const {services, job} = backupContext();
+        services.transfer.sizes.set('/src', {count: 100, bytes: 100});
+        services.transfer.handler = (args, options) => {
+            options.onLine('{"level":"error","msg":"--max-delete threshold reached"}', {
+                level: 'error',
+                msg: '--max-delete threshold reached',
+            });
+            return {
+                exitCode: 7,
+                stats: emptyStats(),
+                lastError: 'Fatal error received - not attempting retries',
+                cancelled: false,
+            };
+        };
+        const run = await services.backup.runFull(job);
+        assertEqual(run.result, 'error');
+        assert(/Deletion blocked/.test(run.message), run.message);
+        assert(/Delete guard/.test(run.technicalMessage), run.technicalMessage);
+    }),
     test('incremental backup copies upserts and moves deletes to versions', async () => {
         const {services, job} = backupContext();
         services.files.addFile('/src/a.txt');

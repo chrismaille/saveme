@@ -136,7 +136,11 @@ export class StateStore {
             patch.consecutiveErrors = 0;
         else if (run.result === 'error' && !run.dryRun)
             patch.consecutiveErrors = this.getJobState(run.jobId).consecutiveErrors + 1;
-        if (Number.isFinite(run.sourceFileCount))
+        // Keep the baseline from the last successful run. A failed or blocked
+        // run may have counted a recreated/empty source and must not erase the
+        // protection for the next attempt.
+        if ((run.result === 'success' || run.result === 'noop') &&
+            Number.isFinite(run.sourceFileCount))
             patch.lastSourceFileCount = run.sourceFileCount;
         if (run.dryRun)
             patch.status = 'idle';

@@ -5,14 +5,38 @@ import {
     remotePathFor,
 } from '../domain/job.js';
 import {sourceFolderName, syncRootFor} from '../domain/backup-layout.js';
-import {SourceUnavailableError} from '../domain/errors.js';
+import {
+    DestinationUnavailableError,
+    SourceUnavailableError,
+} from '../domain/errors.js';
+
+function localTargetPath(descriptor, volumes, role) {
+    if (descriptor?.volumeUuid && typeof volumes?.resolve === 'function') {
+        try {
+            return volumes.resolve(descriptor);
+        } catch (e) {
+            if (e.name !== 'VolumeUnavailableError')
+                throw e;
+            const volume = descriptor.volumeName ||
+                e.descriptor?.volumeName ||
+                descriptor.volumeUuid;
+            const message = role === 'source'
+                ? `Source disk is unavailable: ${volume}`
+                : `Destination disk is unavailable: ${volume}`;
+            if (role === 'source')
+                throw new SourceUnavailableError(message);
+            throw new DestinationUnavailableError(message);
+        }
+    }
+    return localPathFor(descriptor, volumes);
+}
 
 export function resolveJobTargets(job, {files, volumes}) {
     const sources = jobSources(job).map((descriptor, index) => {
-        const path = isLocalDescriptor(descriptor)
-            ? localPathFor(descriptor, volumes)
-            : remotePathFor(descriptor);
         const isLocal = isLocalDescriptor(descriptor);
+        const path = isLocal
+            ? localTargetPath(descriptor, volumes, 'source')
+            : remotePathFor(descriptor);
         if (!path)
             throw new Error('Source and destination are required.');
         if (isLocal) {
@@ -29,7 +53,7 @@ export function resolveJobTargets(job, {files, volumes}) {
         };
     });
     const destBase = isLocalDescriptor(job.destination)
-        ? localPathFor(job.destination, volumes)
+        ? localTargetPath(job.destination, volumes, 'destination')
         : remotePathFor(job.destination);
     if (sources.length === 0 || !destBase)
         throw new Error('Source and destination are required.');

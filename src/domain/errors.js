@@ -20,6 +20,17 @@ export class EmptySourceError extends Error {
     }
 }
 
+export class SourceChangedError extends Error {
+    constructor(current, previous) {
+        super(`Source changed: ${current} file(s) now, ` +
+            `the last successful backup saw ${previous}. ` +
+            'The run was stopped before deleting the existing copy.');
+        this.name = 'SourceChangedError';
+        this.current = current;
+        this.previous = previous;
+    }
+}
+
 export class DeleteGuardError extends Error {
     constructor(deletes, allowed, total, percent) {
         super(`Delete guard: ${deletes} file(s) would be deleted, ` +

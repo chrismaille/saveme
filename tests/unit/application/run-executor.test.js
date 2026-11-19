@@ -2,6 +2,7 @@ import {
     DeleteGuardError,
     DestinationUnavailableError,
     EmptySourceError,
+    SourceChangedError,
     SourceUnavailableError,
 } from '../../../src/domain/errors.js';
 import {emptyStats} from '../../../src/domain/rclone-log.js';
@@ -212,6 +213,77 @@ export default suite('application/run-executor', [
         state.setJobState('job_test', {lastSourceFileCount: 3});
         await assertThrows(() => executor.checkEmptySource({id: 'job_test'}, 0, false),
             /Source is empty/);
+    }),
+    test('uses the last successful run as the source baseline', () => {
+        const {executor, state, runRepository} = context();
+        state.setJobState('job_test', {
+            lastResult: 'error',
+            lastSourceFileCount: 4,
+        });
+        runRepository.recordRun({
+            id: 'run_ok', jobId: 'job_test', result: 'success',
+            sourceFileCount: 11219, dryRun: false,
+        });
+        runRepository.recordRun({
+            id: 'run_bad', jobId: 'job_test', result: 'error',
+            sourceFileCount: 4, dryRun: false,
+        });
+        assertEqual(executor.lastSuccessfulSourceCount({id: 'job_test'}), 11219);
+    }),
+    test('blocks a drastically smaller source only when protection is on', async () => {
+        const {executor, state} = context();
+        state.setJobState('job_test', {
+            lastResult: 'success',
+            lastSourceFileCount: 11219,
+        });
+        await assertThrows(() => executor.checkSourceChange(
+            {id: 'job_test'}, 4), /Source changed/);
+        assertEqual(executor.checkSourceChange(
+            {id: 'job_test'}, 6000), null);
+        assertEqual(executor.checkSourceChange(
+            {id: 'job_test'}, 4, {force: true}), null);
+        assertEqual(executor.checkSourceChange(
+            {id: 'job_test'}, 4, {enabled: false}), null);
+        assertEqual(executor.checkSourceChange(
+            {id: 'job_test'}, 4, {previousCount: 0}), null);
+    }),
+    test('maps a changed source to a readable explanation', () => {
+        const {executor} = context();
+        const message = executor.friendlyError(new SourceChangedError(4, 11219));
+        assert(/changed a lot/.test(message), message);
+        assert(/11219|11[.,]219/.test(message), message);
+        assert(/restore|disable/i.test(message), message);
+        assert(/source disk is unavailable/i.test(executor.friendlyError(
+            new Error('Source disk is unavailable: Dados'))));
+        assert(/destination disk is unavailable/i.test(executor.friendlyError(
+            new Error('Destination disk is unavailable: Backup'))));
+        assert(/Diagnósticos/.test(executor.friendlyError(
+            new Error('Fatal error received - not attempting retries'))));
+    }),
+    test('quick source count and baseline refuse to throw on missing data', () => {
+        const {executor, state, runRepository, files} = context();
+        assertEqual(executor.quickSourceCount({
+            source: 'drive:x', sourceIsLocal: false,
+        }), null);
+        files.topLevelEntryCount = () => {
+            throw new Error('cannot list');
+        };
+        assertEqual(executor.quickSourceCount({
+            source: '/src', sourceIsLocal: true,
+        }), null);
+        state.setJobState('job_test', {
+            lastResult: 'error',
+            lastSourceFileCount: 7,
+        });
+        runRepository.listRuns = () => {
+            throw new Error('cannot list runs');
+        };
+        assertEqual(executor.lastSuccessfulSourceCount({id: 'job_test'}), 7);
+        state.setJobState('job_test', {
+            lastResult: 'error',
+            lastSourceFileCount: 0,
+        });
+        assertEqual(executor.lastSuccessfulSourceCount({id: 'job_test'}), 0);
     }),
     test('friendlyError maps technical errors and falls back', () => {
         const {executor} = context();

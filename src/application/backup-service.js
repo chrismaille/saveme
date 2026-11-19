@@ -42,6 +42,13 @@ export class BackupService {
         try {
             this.executor.updateProgress(ctx, {percent: 0, phase: 'checking'});
             const prep = resolveJobTargets(job, {files: this.files, volumes: this.volumes});
+            const deleteGuardEnabled = job.options?.deleteGuardEnabled !== false;
+            const previousSourceCount = this.executor.lastSuccessfulSourceCount(job);
+            // A missing or empty folder can be rejected without scanning a
+            // large source tree. This is the common case when a disk is not
+            // mounted or the folder was deleted.
+            this.executor.checkEmptySource(job,
+                this.executor.quickSourceCount(prep), force, previousSourceCount);
             const stats = await Promise.all(prep.sources.map(source =>
                 this.executor.sourceStats(job, {
                     source: source.path,
@@ -54,7 +61,15 @@ export class BackupService {
             const sourceBytes = stats.reduce((sum, item) => sum + item.bytes, 0);
             if (Number.isFinite(sourceCount))
                 ctx.sourceFileCount = sourceCount;
-            this.executor.checkEmptySource(job, sourceCount, force);
+            this.executor.checkEmptySource(job, sourceCount, force, previousSourceCount);
+            // Stop before rclone scans the (possibly huge) destination when
+            // the source looks like a fresh folder. The full run would only
+            // reach the same conclusion after downloading the remote listing.
+            this.executor.checkSourceChange(job, sourceCount, {
+                force,
+                enabled: deleteGuardEnabled,
+                previousCount: previousSourceCount,
+            });
             if (!dryRun)
                 this.executor.checkDiskSpace(job, prep, sourceBytes);
 
@@ -63,7 +78,7 @@ export class BackupService {
             const versionBase = this.executor.versionDir(job, prep.dest, ctx);
             ctx.versionsDir = versionBase;
             const labels = uniqueSourceFolderNames(job);
-            const allowedDeletes = job.options?.deleteGuardEnabled !== false &&
+            const allowedDeletes = deleteGuardEnabled &&
                 Number.isFinite(sourceCount)
                 ? deleteLimit(sourceCount, {
                     maxDeletePercent: job.options?.maxDeletePercent ?? 10,
@@ -129,9 +144,14 @@ export class BackupService {
                 completedFiles += Number(result.stats?.transfers || 0);
                 if (result.cancelled)
                     return this.executor.endRun(ctx, 'cancelled', 'Cancelled');
-                if (!isSuccessExit(result.exitCode))
-                    return this.executor.endRun(ctx, 'error',
-                        result.lastError || exitCodeMessage(result.exitCode));
+                if (!isSuccessExit(result.exitCode)) {
+                    const message = ctx.deleteGuardHit && allowedDeletes !== null
+                        ? `Delete guard: the backup would delete more files than ` +
+                            `the allowed ${allowedDeletes}. The run was stopped to ` +
+                            'protect the existing copy.'
+                        : (result.lastError || exitCodeMessage(result.exitCode));
+                    return this.executor.endRun(ctx, 'error', message);
+                }
             }
             ctx.progressMapper = null;
             this.executor.updateProgress(ctx, {percent: 95, phase: 'cleanup'});
@@ -142,7 +162,7 @@ export class BackupService {
         } catch (e) {
             if (cancellable?.is_cancelled())
                 return this.executor.endRun(ctx, 'cancelled', 'Cancelled');
-            return this.executor.endRun(ctx, 'error', e.message || String(e));
+            return this.executor.endRun(ctx, 'error', e);
         }
     }
 
@@ -242,7 +262,7 @@ export class BackupService {
 
             return this.executor.endRun(ctx, 'success');
         } catch (e) {
-            return this.executor.endRun(ctx, 'error', e.message || String(e));
+            return this.executor.endRun(ctx, 'error', e);
         }
     }
 }

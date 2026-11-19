@@ -225,6 +225,9 @@ export class JobSupervisor {
     }
 
     _resolveLocal(descriptor) {
+        if (descriptor?.volumeUuid &&
+            typeof this.runner.volumes?.resolve === 'function')
+            return this.runner.volumes.resolve(descriptor);
         return localPathFor(descriptor, this.runner.volumes);
     }
 
@@ -238,7 +241,12 @@ export class JobSupervisor {
                     ? this._resolveLocal(source)
                     : remotePathFor(source);
             } catch (e) {
-                return {sourceAvailable: false, destAvailable: true, message: e.message};
+                const volume = source.volumeName ||
+                    e.descriptor?.volumeName || source.volumeUuid;
+                const message = e.name === 'VolumeUnavailableError' && volume
+                    ? `Source disk is unavailable: ${volume}`
+                    : e.message;
+                return {sourceAvailable: false, destAvailable: true, message};
             }
             if (source.kind === 'local') {
                 const file = Gio.File.new_for_path(resolved);
@@ -260,7 +268,21 @@ export class JobSupervisor {
                 ? this._resolveLocal(this.job.destination)
                 : remotePathFor(this.job.destination);
         } catch (e) {
-            return {sourceAvailable: true, destAvailable: false, message: e.message};
+            const volume = this.job.destination.volumeName ||
+                e.descriptor?.volumeName || this.job.destination.volumeUuid;
+            const message = e.name === 'VolumeUnavailableError' && volume
+                ? `Destination disk is unavailable: ${volume}`
+                : e.message;
+            return {sourceAvailable: true, destAvailable: false, message};
+        }
+        if (this.job.destination.kind === 'local' && dest) {
+            const file = Gio.File.new_for_path(dest);
+            if (file.query_exists(null) &&
+                file.query_file_type(Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, null) !==
+                    Gio.FileType.DIRECTORY) {
+                return {sourceAvailable: true, destAvailable: false,
+                    message: `Destination is not a directory: ${dest}`};
+            }
         }
         return {sourceAvailable: true, destAvailable: true, source: sources[0], dest};
     }
@@ -292,19 +314,19 @@ export class JobSupervisor {
             return;
         this._lastNotifyKey = key;
         const titles = {
-            'error': t('Backup failed'),
+            'error': 'Backup failed',
             'waiting-source': 'Backup source unavailable',
             'waiting-destination': 'Backup destination unavailable',
             'waiting-idle': 'Backup waiting for the computer to be idle',
             'needs-auth': 'Backup needs authentication',
             'delete-guard': 'Backup deletion blocked',
             'paused': 'Backup paused',
-            'success': t('Backup completed successfully'),
+            'success': 'Backup completed successfully',
         };
         this.onNotify?.({
             job: this.job,
             status,
-            title: titles[status] || 'SaveMe',
+            title: t(titles[status] || 'SaveMe'),
             body: message || this.job.name,
         });
     }
@@ -394,6 +416,23 @@ export class JobSupervisor {
         }
         this._pendingDueRun = false;
         this._pendingDueReason = null;
+        const availability = this._checkAvailability();
+        if (!availability.sourceAvailable) {
+            const message = friendlyError(
+                availability.message || 'Source unavailable');
+            this._setStatus('waiting-source', message);
+            this._notify('waiting-source', message);
+            this._scheduleRetry();
+            return null;
+        }
+        if (!availability.destAvailable) {
+            const message = friendlyError(
+                availability.message || 'Destination unavailable');
+            this._setStatus('waiting-destination', message);
+            this._notify('waiting-destination', message);
+            this._scheduleRetry();
+            return null;
+        }
         try {
             this.state.setJobState(this.job.id, {interrupted: false});
         } catch (_) {

@@ -132,7 +132,7 @@ export class SyncService {
         } catch (e) {
             if (cancellable?.is_cancelled())
                 return this.executor.endRun(ctx, 'cancelled', 'Cancelled');
-            return this.executor.endRun(ctx, 'error', e.message || String(e));
+            return this.executor.endRun(ctx, 'error', e);
         }
     }
 
@@ -239,7 +239,7 @@ export class SyncService {
 
             return this.executor.endRun(ctx, 'success');
         } catch (e) {
-            return this.executor.endRun(ctx, 'error', e.message || String(e));
+            return this.executor.endRun(ctx, 'error', e);
         }
     }
 }

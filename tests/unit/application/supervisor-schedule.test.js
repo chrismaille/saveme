@@ -58,6 +58,29 @@ export default suite('application/supervisor-schedule', [
         assertEqual(ctx.state.getJobState('job_test').stopped, false);
         assertEqual(ctx.state.getJobState('job_test').status, 'idle');
     }),
+    test('manual play refuses a missing source before starting a run', async () => {
+        const ctx = makeSupervisor(makeJob('backup', {
+            source: {kind: 'local', path: '/saveme-missing-source'},
+            trigger: {mode: 'manual'},
+        }));
+        await ctx.supervisor.play();
+        assertEqual(ctx.runs.length, 0);
+        const jobState = ctx.state.getJobState('job_test');
+        assertEqual(jobState.status, 'waiting-source');
+        assert(/disk|folder|source/i.test(jobState.message), jobState.message);
+    }),
+    test('manual play refuses an unavailable destination before starting', async () => {
+        const ctx = makeSupervisor(makeJob('backup', {
+            source: {kind: 'local', path: '/tmp'},
+            destination: {kind: 'local', path: '/dev/null'},
+            trigger: {mode: 'manual'},
+        }));
+        await ctx.supervisor.play();
+        assertEqual(ctx.runs.length, 0);
+        const jobState = ctx.state.getJobState('job_test');
+        assertEqual(jobState.status, 'waiting-destination');
+        assert(/destination/i.test(jobState.message), jobState.message);
+    }),
     test('interrupted backups resume once when the daemon starts', async () => {
         const job = makeJob('backup', {
             source: {kind: 'local', path: '/tmp'},
