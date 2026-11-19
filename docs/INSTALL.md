@@ -75,7 +75,7 @@ Opções úteis:
 ./scripts/install.sh --log PATH         # caminho do log
 ```
 
-Quando o repositório e os releases estiverem publicados:
+Quando os releases tiverem o `.deb` e o zip da extensão anexados:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/chrismaille/saveme/main/scripts/install.sh | sh

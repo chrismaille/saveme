@@ -107,14 +107,16 @@ O iCloud está fora do escopo até a Apple oferecer uma API estável.
 - GJS 1.88+, GTK 4.22+, libadwaita 1.9+
 - rclone 1.76+ (o instalador inclui um binário fixado)
 
-### Recomendado: script de instalação
+### Recomendado por enquanto: pacote local
 
 O script instala o aplicativo empacotado, ativa a extensão do GNOME e inicia o
 daemon. Rodar novamente atualiza a instalação sem tocar nos jobs, no estado ou
 na configuração.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/chrismaille/saveme/main/scripts/install.sh | sh
+make test
+make deb
+./scripts/install.sh
 ```
 
 Opções úteis:
@@ -126,12 +128,14 @@ Opções úteis:
 ./scripts/install.sh --uninstall      # remove o pacote
 ```
 
-A partir de um checkout local:
+### Instalador de release
+
+O mesmo script consegue instalar uma release publicada no GitHub. O empacotamento
+das releases ainda não é automático; quando o `.deb` e a extensão estiverem
+anexados a uma release, o comando será:
 
 ```bash
-make test
-make deb
-./scripts/install.sh
+curl -fsSL https://raw.githubusercontent.com/chrismaille/saveme/main/scripts/install.sh | sh
 ```
 
 Instruções completas: [docs/INSTALL.md](docs/INSTALL.md).

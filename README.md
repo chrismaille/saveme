@@ -104,14 +104,16 @@ iCloud is intentionally out of scope until Apple offers a stable API.
 - GJS 1.88+, GTK 4.22+, libadwaita 1.9+
 - rclone 1.76+ (the installer ships a pinned binary)
 
-### Recommended: installer script
+### Recommended for now: local package
 
 The script installs the packaged application, enables the GNOME extension and
 starts the daemon. Running it again updates an existing installation without
 touching jobs, state or configuration.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/chrismaille/saveme/main/scripts/install.sh | sh
+make test
+make deb
+./scripts/install.sh
 ```
 
 Useful options:
@@ -123,12 +125,14 @@ Useful options:
 ./scripts/install.sh --uninstall      # remove the package
 ```
 
-From a local checkout:
+### Release installer
+
+The same script can install a published GitHub Release. Release packaging is
+not automated yet; when `.deb` and extension assets are attached to a release,
+the one-liner is:
 
 ```bash
-make test
-make deb
-./scripts/install.sh
+curl -fsSL https://raw.githubusercontent.com/chrismaille/saveme/main/scripts/install.sh | sh
 ```
 
 Full instructions: [docs/INSTALL.md](docs/INSTALL.md).
