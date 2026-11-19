@@ -153,8 +153,19 @@ export class JobsPage {
         if (!jobs.some(job => job.id === this.selectedId))
             this.selectedId = jobs[0]?.id || null;
 
-        const key = jobs.map(job =>
-            `${job.id}:${job.name}:${job.type}:${job.enabled}`).join('|');
+        const key = jobs.map(job => [
+            job.id,
+            job.name,
+            job.type,
+            job.enabled,
+            JSON.stringify(job.options),
+            JSON.stringify(job.backup),
+            JSON.stringify(job.filters),
+            JSON.stringify(job.trigger),
+            JSON.stringify(job.sources),
+            JSON.stringify(job.destination),
+            job.destinationLayout,
+        ].join(':')).join('|');
         const structureChanged = key !== this.structureKey;
         if (structureChanged) {
             this.structureKey = key;
@@ -729,10 +740,8 @@ export class JobsPage {
         const group = new Adw.PreferencesGroup({title: t('Configuração')});
         group.add(this._configRow(t('Schedule'), triggerLabel(job.trigger),
             t('When this job runs automatically.')));
-        group.add(this._configRow(t('Delete guard'),
-            `${job.options.maxDeletePercent}% (min ${job.options.maxDeleteMinimum})`,
-            t('A run is stopped if it would delete more files than this limit.')));
         if (job.type === JOB_TYPES.BACKUP) {
+            group.add(this._deleteGuardRow(job));
             group.add(this._configRow(t('Retention'),
                 job.backup.keepForever || job.backup.retentionDays === 0
                     ? t('keep versions forever')
@@ -745,6 +754,115 @@ export class JobsPage {
                 t('Files matching these patterns are never copied.')));
         }
         return group;
+    }
+
+    _deleteGuardRow(job) {
+        const enabled = job.options.deleteGuardEnabled !== false;
+        const row = new Adw.ActionRow({
+            title: t('Delete guard'),
+            subtitle: t('A run is stopped if it would delete more files than this limit.'),
+        });
+        const value = new Gtk.Button({
+            label: enabled
+                ? `${job.options.maxDeletePercent}% (min ${job.options.maxDeleteMinimum})`
+                : t('Disabled'),
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat'],
+            tooltip_text: t('Change the deletion limits'),
+        });
+        value.sensitive = enabled;
+        value.connect('clicked', () => this._editDeleteGuardLimits(job));
+        const toggle = new Gtk.Switch({
+            active: enabled,
+            valign: Gtk.Align.CENTER,
+            tooltip_text: enabled ? t('Disable delete guard') : t('Enable delete guard'),
+        });
+        let busy = false;
+        toggle.connect('notify::active', async () => {
+            if (busy)
+                return;
+            busy = true;
+            const next = toggle.active;
+            try {
+                await this.window.client.setJobOptions(job.id, {
+                    deleteGuardEnabled: next,
+                });
+                await this.window.refresh();
+                this.window.toast(t('Delete guard updated.'));
+            } catch (e) {
+                toggle.active = !next;
+                this.window.toast(cleanError(e.message));
+            } finally {
+                busy = false;
+            }
+        });
+        const controls = new Gtk.Box({
+            orientation: Gtk.Orientation.HORIZONTAL,
+            spacing: 8,
+            valign: Gtk.Align.CENTER,
+        });
+        controls.append(value);
+        controls.append(toggle);
+        row.add_suffix(controls);
+        return row;
+    }
+
+    _editDeleteGuardLimits(job) {
+        const box = new Gtk.Box({
+            orientation: Gtk.Orientation.VERTICAL,
+            spacing: 12,
+        });
+        const percent = new Adw.SpinRow({
+            title: t('Maximum deletion (%)'),
+            adjustment: new Gtk.Adjustment({
+                lower: 0,
+                upper: 100,
+                step_increment: 1,
+                page_increment: 10,
+                value: Number(job.options.maxDeletePercent ?? 10),
+            }),
+        });
+        const minimum = new Adw.SpinRow({
+            title: t('Minimum deletion allowance (files)'),
+            adjustment: new Gtk.Adjustment({
+                lower: 0,
+                upper: 100000,
+                step_increment: 1,
+                page_increment: 10,
+                value: Number(job.options.maxDeleteMinimum ?? 10),
+            }),
+        });
+        box.append(percent);
+        box.append(minimum);
+        const dialog = new Adw.AlertDialog({
+            heading: t('Delete guard'),
+            body: t('Stop a backup when it would delete too many files.'),
+        });
+        dialog.set_extra_child(box);
+        dialog.add_response('cancel', t('Cancel'));
+        dialog.add_response('save', t('Save'));
+        dialog.set_response_appearance('save', Adw.ResponseAppearance.SUGGESTED);
+        dialog.set_default_response('save');
+        dialog.set_close_response('cancel');
+        dialog.connect('response', (_dialog, response) => {
+            if (response !== 'save')
+                return;
+            this._saveDeleteGuard(job, {
+                maxDeletePercent: Math.round(percent.value),
+                maxDeleteMinimum: Math.round(minimum.value),
+            });
+        });
+        dialog.present(this.window);
+    }
+
+    async _saveDeleteGuard(job, options) {
+        try {
+            await this.window.client.setJobOptions(job.id, options);
+            await this.window.refresh();
+            this.window.toast(t('Delete guard updated.'));
+        } catch (e) {
+            this.window.toast(cleanError(e.message));
+        }
     }
 
     _configRow(title, value, help) {

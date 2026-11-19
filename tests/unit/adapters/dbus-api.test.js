@@ -27,6 +27,8 @@ export default suite('adapters/dbus/api', [
         api.CancelJob('job');
         api.PauseJob('job', 1);
         api.SetJobEnabled('job', 0);
+        assertEqual(api.SetJobOptions('job', '{"deleteGuardEnabled":false}'),
+            'setJobOptions-result');
         api.PauseAll(1);
         assertEqual(api.SaveJob('{}'), 'saveJob-result');
         assertEqual(api.ImportJob('{}'), 'importJob-result');

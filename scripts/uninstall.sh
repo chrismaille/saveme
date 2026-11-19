@@ -5,7 +5,7 @@
 #   ./scripts/uninstall.sh --purge --yes
 #
 # Published:
-#   curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/master/scripts/uninstall.sh | sh -s -- --purge --yes
+#   curl -fsSL https://raw.githubusercontent.com/chrismaille/saveme/main/scripts/uninstall.sh | sh -s -- --purge --yes
 
 set -eu
 
@@ -22,7 +22,7 @@ if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/install.sh" ]; then
     exec sh "$SCRIPT_DIR/install.sh" --uninstall "$@"
 fi
 
-REPO="${SAVEME_REPO:-chrismaille/save_me}"
+REPO="${SAVEME_REPO:-chrismaille/saveme}"
 TMP="$(mktemp)"
 trap 'rm -f "$TMP"' EXIT INT TERM
 

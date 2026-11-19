@@ -660,6 +660,10 @@ const CATALOGS = {
         'Backup waiting for the computer to be idle': 'Backup aguardando o computador ficar ocioso',
         'Backup needs authentication': 'Backup precisa de autenticação',
         'Backup paused': 'Backup pausado',
+        'Change the deletion limits': 'Alterar os limites de exclusão',
+        'Disable delete guard': 'Desativar proteção contra exclusão',
+        'Enable delete guard': 'Ativar proteção contra exclusão',
+        'Delete guard updated.': 'Proteção contra exclusão atualizada.',
     },
     es: {
         'Jobs': 'Tareas', 'Accounts': 'Cuentas', 'Settings': 'Configuración',

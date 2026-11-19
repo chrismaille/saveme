@@ -214,6 +214,7 @@ GetSnapshot() -> s                       # JSON: settings, remotes, jobs, states
 RunJob(s job_id, b dry_run) -> s         # run_id
 CancelJob(s job_id)
 SetJobEnabled(s job_id, b enabled)
+SetJobOptions(s job_id, s options_json) -> s
 PauseAll(b paused)
 GetRun(s job_id, s run_id) -> s          # JSON
 GetRunLog(s job_id, s run_id) -> s

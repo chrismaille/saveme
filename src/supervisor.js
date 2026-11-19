@@ -104,6 +104,13 @@ export class JobSupervisor {
         this.job = job;
     }
 
+    updateOptions(options) {
+        this.job = {
+            ...this.job,
+            options: {...this.job.options, ...options},
+        };
+    }
+
     start({resumeInterrupted = false} = {}) {
         this._stopped = false;
         this._resumeInterrupted = resumeInterrupted;
@@ -874,6 +881,14 @@ export class JobManager {
             supervisor.stop();
             supervisor._setStatus('disabled', '');
         }
+        this.onChange?.();
+    }
+
+    updateJobOptions(jobId, options) {
+        const supervisor = this.supervisors.get(jobId);
+        if (!supervisor)
+            return;
+        supervisor.updateOptions(options);
         this.onChange?.();
     }
 

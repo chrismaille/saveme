@@ -78,8 +78,8 @@ Opções úteis:
 Quando o repositório e os releases estiverem publicados:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/master/scripts/install.sh | sh
-curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/master/scripts/install.sh | sh -s -- --with-extension
+curl -fsSL https://raw.githubusercontent.com/chrismaille/saveme/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/chrismaille/saveme/main/scripts/install.sh | sh -s -- --with-extension
 ```
 
 O script baixa `saveme_<arch>.deb` e, quando `--with-extension` é usado, o zip
@@ -160,7 +160,7 @@ Com o script (recomendado):
 Ou, quando publicado:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/master/scripts/uninstall.sh | sh -s -- --purge --yes
+curl -fsSL https://raw.githubusercontent.com/chrismaille/saveme/main/scripts/uninstall.sh | sh -s -- --purge --yes
 ```
 
 O script para o daemon, desabilita `saveme.service`, remove a extensão, apaga

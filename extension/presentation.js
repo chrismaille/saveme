@@ -183,14 +183,5 @@ export function progressView(state, {translate = value => value} = {}) {
             showBar: true,
         };
     }
-    if (state.message) {
-        return {
-            visible: true,
-            percent: 0,
-            text: state.message,
-            file: '',
-            showBar: false,
-        };
-    }
     return {visible: false, percent: 0, text: '', file: '', showBar: false};
 }

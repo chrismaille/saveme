@@ -105,8 +105,12 @@ export default suite('extension/presentation', [
             type: 'sync',
             state: {status: 'idle', lastFinishedAt: '2026-01-02T11:55:00Z'},
         }, {nowMs: NOW}), 'Last run 5 min');
+        assertEqual(statusDetail({
+            type: 'backup',
+            state: {status: 'delete-guard', message: 'Source changed'},
+        }), 'Source changed');
     }),
-    test('progressView exposes progress, messages and hidden state', () => {
+    test('progressView shows progress and stays hidden for terminal messages', () => {
         const progress = progressView({
             status: 'running',
             progress: {
@@ -131,9 +135,9 @@ export default suite('extension/presentation', [
         assertEqual(minimal.file, 'b');
 
         const message = progressView({status: 'error', message: 'Disk full'});
-        assertEqual(message.visible, true);
+        assertEqual(message.visible, false);
         assertEqual(message.showBar, false);
-        assertEqual(message.text, 'Disk full');
+        assertEqual(message.text, '');
         assertEqual(message.file, '');
 
         assertEqual(JSON.stringify(progressView({status: 'idle'})),

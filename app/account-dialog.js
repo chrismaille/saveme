@@ -19,8 +19,8 @@ const PROVIDER_LOGOS = {
     onedrive: 'onedrive.png',
     dropbox: 'dropbox.png',
     nextcloud: 'nextcloud.png',
-    s3: 's3.svg',
-    pcloud: 'pcloud.svg',
+    s3: 's3.png',
+    pcloud: 'pcloud.png',
 };
 const MODULE_DIR = GLib.path_get_dirname(GLib.filename_from_uri(import.meta.url)[0]);
 

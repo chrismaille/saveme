@@ -250,6 +250,21 @@ export class DaemonService {
         this._snapshot(true);
     }
 
+    setJobOptions(jobId, optionsJson) {
+        const options = optionsJson ? JSON.parse(optionsJson) : {};
+        const current = this.config.getJob(jobId);
+        if (!current)
+            throw new Error(`Job not found: ${jobId}`);
+        const saved = this.config.updateJob(jobId, {
+            options: {...current.options, ...options},
+        });
+        // Apply the change to the running/next supervisor without cancelling
+        // an active run just to toggle a safety setting.
+        this.manager.updateJobOptions(jobId, saved.options);
+        this._snapshot(true);
+        return JSON.stringify(saved);
+    }
+
     pauseAll(paused) {
         this.manager.pauseAll(paused);
         this._snapshot(true);

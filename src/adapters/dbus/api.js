@@ -28,6 +28,10 @@ export class DaemonApi {
         this.service.setJobEnabled(jobId, Boolean(enabled));
     }
 
+    SetJobOptions(jobId, optionsJson) {
+        return this.service.setJobOptions(jobId, optionsJson);
+    }
+
     PauseAll(paused) {
         this.service.pauseAll(Boolean(paused));
     }

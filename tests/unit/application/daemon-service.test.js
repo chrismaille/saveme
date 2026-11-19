@@ -61,6 +61,7 @@ class FakeManager {
     cancelJob(id) { this.calls.push(['cancelJob', id]); }
     pauseJob(id, paused) { this.calls.push(['pauseJob', id, paused]); }
     updateJob(id, job) { this.calls.push(['updateJob', id, job]); }
+    updateJobOptions(id, options) { this.calls.push(['updateJobOptions', id, options]); }
     addJob(job) { this.calls.push(['addJob', job]); }
     removeJob(id) { this.calls.push(['removeJob', id]); }
     pauseAll(paused) { this.calls.push(['pauseAll', paused]); }
@@ -259,6 +260,20 @@ export default suite('application/daemon-service', [
         assertEqual(ctx.manager.calls[3][0], 'pauseAll');
         assertEqual(ctx.manager.calls[4][0], 'removeJob');
         assert(ctx.snapshots() >= 5);
+    }),
+    test('setJobOptions updates the guard without restarting the job', () => {
+        const ctx = makeService();
+        ctx.config.jobs = [backupJob()];
+        const saved = JSON.parse(ctx.service.setJobOptions('job_1',
+            JSON.stringify({deleteGuardEnabled: false, maxDeletePercent: 25})));
+        assertEqual(saved.options.deleteGuardEnabled, false);
+        assertEqual(saved.options.maxDeletePercent, 25);
+        const call = ctx.manager.calls.find(item => item[0] === 'updateJobOptions');
+        assert(call);
+        assertEqual(call[1], 'job_1');
+        assertEqual(call[2].deleteGuardEnabled, false);
+        assertEqual(ctx.manager.calls.some(item => item[0] === 'updateJob'), false);
+        assertThrows(() => ctx.service.setJobOptions('missing', '{}'), /Job not found/);
     }),
     test('saveJob adds or updates and delegates', () => {
         const ctx = makeService();

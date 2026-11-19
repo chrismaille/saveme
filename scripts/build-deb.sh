@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-VERSION="${VERSION:-1.0.0~dev31}"
+VERSION="${VERSION:-1.0.0~dev32}"
 ARCH="${ARCH:-$(dpkg --print-architecture)}"
 MAINTAINER="${MAINTAINER:-chrismaille <chrismaille@users.noreply.github.com>}"
 STAGE="$ROOT_DIR/build/deb/saveme_${VERSION}_${ARCH}"
@@ -84,7 +84,7 @@ Installed-Size: ${INSTALLED_SIZE}
 Depends: gjs (>= 1.80), gir1.2-glib-2.0, gir1.2-gtk-4.0, gir1.2-adw-1, libglib2.0-bin, dbus-user-session, systemd, xdg-utils, curl
 Section: utils
 Priority: optional
-Homepage: https://github.com/chrismaille/save_me
+Homepage: https://github.com/chrismaille/saveme
 Description: One-way real-time sync and versioned backup for GNOME
  SaveMe mirrors a source folder to a destination in real time, or keeps a
  versioned backup of the source. It supports local folders, removable drives,

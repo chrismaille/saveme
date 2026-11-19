@@ -19,6 +19,7 @@ function fakeClient() {
         'cancelJob',
         'pauseJob',
         'setJobEnabled',
+        'setJobOptions',
         'pauseAll',
         'saveJob',
         'importJob',
@@ -78,6 +79,8 @@ export default suite('app/gateway/daemon-gateway', [
         assertEqual(await gateway.cancelJob('job'), 'cancelJob-result');
         assertEqual(await gateway.pauseJob('job', true), 'pauseJob-result');
         assertEqual(await gateway.setJobEnabled('job', false), 'setJobEnabled-result');
+        assertEqual(await gateway.setJobOptions('job', {deleteGuardEnabled: false}),
+            'setJobOptions-result');
         assertEqual(await gateway.pauseAll(true), 'pauseAll-result');
         assertEqual(await gateway.deleteJob('job'), 'deleteJob-result');
         assertEqual(await gateway.deleteJob('job', true), 'deleteJob-result');

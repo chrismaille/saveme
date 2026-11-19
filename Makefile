@@ -17,7 +17,7 @@ VENV := .venv
 PRE_COMMIT ?= $(VENV)/bin/pre-commit
 PYTHON ?= python3
 
-.PHONY: all setup setup-lint test tests coverage e2e e2e-extension e2e-app lint verify doctor run extension deb install uninstall clean
+.PHONY: all setup setup-lint setup-hooks test tests coverage e2e e2e-extension e2e-app lint verify doctor run extension deb install uninstall clean
 
 all: test
 
@@ -32,6 +32,9 @@ setup-lint:
 	@if [ ! -x node_modules/.bin/eslint ]; then \
 		if [ -f package-lock.json ]; then npm ci; else npm install; fi; \
 	fi
+
+setup-hooks: setup-lint
+	$(PRE_COMMIT) install --hook-type pre-commit --hook-type commit-msg
 
 lint: setup-lint
 	git ls-files --cached --others --exclude-standard -z | \

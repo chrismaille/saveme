@@ -49,6 +49,10 @@ export class DaemonGateway {
         return this.client.pauseAll(paused);
     }
 
+    setJobOptions(jobId, options) {
+        return this.client.setJobOptions(jobId, options);
+    }
+
     saveJob(job) {
         return this.client.saveJob(job);
     }

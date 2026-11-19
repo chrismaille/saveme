@@ -31,8 +31,8 @@ const SOURCE_PROVIDERS = [
     {type: 'onedrive', label: 'Microsoft OneDrive', logo: 'onedrive.png'},
     {type: 'dropbox', label: 'Dropbox', logo: 'dropbox.png'},
     {type: 'nextcloud', label: 'Nextcloud', logo: 'nextcloud.png'},
-    {type: 's3', label: 'S3 compatible', logo: 's3.svg'},
-    {type: 'pcloud', label: 'pCloud', logo: 'pcloud.svg'},
+    {type: 's3', label: 'S3 compatible', logo: 's3.png'},
+    {type: 'pcloud', label: 'pCloud', logo: 'pcloud.png'},
 ];
 
 const TRIGGER_OPTIONS = [
@@ -81,7 +81,12 @@ export const JobEditor = GObject.registerClass({
         if (this.sources.length === 0)
             this.sources.push({kind: 'local', path: ''});
         this.includes = [...(this.job.filters.include || [])];
-        this._step = this.job.draft ? this.job.draftStep : 0;
+        // The job type is fixed after creation. Editing starts at the name
+        // step and cannot navigate back to the type chooser.
+        this._firstStep = this.isNew ? 0 : 1;
+        this._step = this.job.draft
+            ? this.job.draftStep
+            : this._firstStep;
         this._build();
     }
 
@@ -428,8 +433,8 @@ export const JobEditor = GObject.registerClass({
             {kind: 'onedrive', label: 'Microsoft OneDrive', logo: 'onedrive.png'},
             {kind: 'dropbox', label: 'Dropbox', logo: 'dropbox.png'},
             {kind: 'nextcloud', label: 'Nextcloud', logo: 'nextcloud.png'},
-            {kind: 's3', label: 'S3 compatible', logo: 's3.svg'},
-            {kind: 'pcloud', label: 'pCloud', logo: 'pcloud.svg'},
+            {kind: 's3', label: 'S3 compatible', logo: 's3.png'},
+            {kind: 'pcloud', label: 'pCloud', logo: 'pcloud.png'},
         ];
         const flow = new Gtk.FlowBox({
             selection_mode: Gtk.SelectionMode.NONE,
@@ -980,16 +985,19 @@ export const JobEditor = GObject.registerClass({
     }
 
     _showStep(index) {
-        this._step = Math.max(0, Math.min(STEP_TITLES.length - 1, index));
+        this._step = Math.max(this._firstStep,
+            Math.min(STEP_TITLES.length - 1, index));
         const names = ['type', 'name', 'source', 'content', 'filters',
             'destination', 'newDestination', 'schedule', 'safety', 'review'];
         this.stack.set_visible_child_name(names[this._step]);
         if (this._step === 5 && this.existingGroup)
             this._renderExistingDestinations();
         const title = this.isDraft ? t('Continue job') : this.isNew ? t('New job') : t('Edit job');
+        const position = this._step + 1 - this._firstStep;
+        const total = STEP_TITLES.length - this._firstStep;
         this.windowTitle.title = `${title} · ` +
-            `${STEP_TITLES[this._step]} (${this._step + 1}/${STEP_TITLES.length})`;
-        this.backButton.visible = this._step > 0;
+            `${STEP_TITLES[this._step]} (${position}/${total})`;
+        this.backButton.visible = this._step > this._firstStep;
         this.nextButton.visible = this._step < STEP_TITLES.length - 1;
         this.saveButton.visible = this._step === STEP_TITLES.length - 1;
         this.runButton.visible = this._step === STEP_TITLES.length - 1;

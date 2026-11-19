@@ -6,15 +6,15 @@
 #   ./scripts/install.sh --uninstall --purge --yes
 #
 # Published:
-#   curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/master/scripts/install.sh | sh
-#   curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/master/scripts/install.sh | sh -s -- --uninstall --purge --yes
+#   curl -fsSL https://raw.githubusercontent.com/chrismaille/saveme/main/scripts/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/chrismaille/saveme/main/scripts/install.sh | sh -s -- --uninstall --purge --yes
 #
 # Run as your desktop user, not with sudo. The script calls sudo only for apt.
 
 set -eu
 
 ORIGINAL_ARGS="$*"
-REPO="${SAVEME_REPO:-chrismaille/save_me}"
+REPO="${SAVEME_REPO:-chrismaille/saveme}"
 UUID="saveme@chrismaille.github.io"
 ACTION="install"
 PURGE=0

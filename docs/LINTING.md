@@ -13,9 +13,10 @@ O hook de git roda nos arquivos staged. A verificação completa continua sendo
 ## Instalação
 
 ```bash
-make setup-lint
-.venv/bin/pre-commit install
+make setup-hooks
 ```
+
+O alvo instala os hooks de `pre-commit` e de `commit-msg` (commitlint).
 
 `make setup-lint` cria `.venv` com o `pre-commit` e instala as ferramentas Node
 locais em `node_modules`. O `pre-commit` gerencia os ambientes Python dos hooks

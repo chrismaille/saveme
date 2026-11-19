@@ -4,5 +4,5 @@
   "description": "Source to destination: real-time sync and versioned backups.",
   "shell-version": ["50"],
   "gettext-domain": "saveme",
-  "url": "https://github.com/chrismaille/save_me"
+  "url": "https://github.com/chrismaille/saveme"
 }

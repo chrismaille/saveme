@@ -107,7 +107,7 @@ to see the plan.
 After the GitHub releases are published, the one-liner is:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/chrismaille/save_me/master/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/chrismaille/saveme/main/scripts/install.sh | sh
 ```
 
 Full instructions: [docs/INSTALL.md](docs/INSTALL.md).
@@ -145,6 +145,8 @@ Lint details, hooks and the Omega architecture rules: [docs/LINTING.md](docs/LIN
 - [docs/INSTALL.md](docs/INSTALL.md) — install, CLI, uninstall
 - [docs/TESTING.md](docs/TESTING.md) — automated and manual test matrix
 - [docs/LINTING.md](docs/LINTING.md) — pre-commit, linters and Omega rules
+- [docs/RELEASING.md](docs/RELEASING.md) — Conventional Commits e releases
+- [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) — AppImage, Snap e Flatpak
 
 ## Status
 

@@ -1,6 +1,6 @@
 [Unit]
 Description=SaveMe sync and backup daemon
-Documentation=https://github.com/chrismaille/save_me
+Documentation=https://github.com/chrismaille/saveme
 After=graphical-session.target
 StartLimitIntervalSec=60
 StartLimitBurst=5

@@ -25,6 +25,11 @@ export const DAEMON_INTERFACE = `
       <arg type="s" direction="in"/>
       <arg type="b" direction="in"/>
     </method>
+    <method name="SetJobOptions">
+      <arg type="s" direction="in"/>
+      <arg type="s" direction="in"/>
+      <arg type="s" direction="out"/>
+    </method>
     <method name="PauseAll">
       <arg type="b" direction="in"/>
     </method>

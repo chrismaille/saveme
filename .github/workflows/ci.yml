@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -35,26 +35,3 @@ jobs:
           name: coverage
           path: build/coverage/coverage.lcov
           if-no-files-found: warn
-
-  package:
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install packaging dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gjs gnome-shell curl unzip dpkg-dev
-      - name: Build extension and .deb
-        run: make deb
-      - name: Run extension E2E
-        run: make e2e-extension
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: saveme-artifacts
-          path: |
-            dist/*.deb
-            dist/*.shell-extension.zip
-            dist/SHA256SUMS
-          if-no-files-found: error
