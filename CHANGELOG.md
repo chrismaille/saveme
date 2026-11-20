@@ -1,3 +1,10 @@
+## [1.3.1](https://github.com/chrismaille/saveme/compare/v1.3.0...v1.3.1) (2026-11-20)
+
+
+### Bug Fixes
+
+* **docs:** mark PPA as the distribution channel ([b9df114](https://github.com/chrismaille/saveme/commit/b9df11492b7a39b7fcd16ec9ee97059ccabd7471))
+
 # [1.3.0](https://github.com/chrismaille/saveme/compare/v1.2.0...v1.3.0) (2026-11-20)
 
 
