@@ -550,7 +550,7 @@ do_install() {
             say "GNOME extension: not installed (use --with-extension to add it)."
         fi
         say ""
-        say "Open the app with: saveme-settings"
+        say "Open the app with: saveme"
         say "Installation log: $LOG_FILE"
     fi
 }

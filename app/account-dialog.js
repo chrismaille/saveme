@@ -4,6 +4,7 @@ import GObject from 'gi://GObject';
 import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
 import {t} from '../src/i18n.js';
+import {sanitizeRemoteName} from '../src/domain/remote-name.js';
 
 const PROVIDERS = ['drive', 'onedrive', 'dropbox', 'nextcloud', 's3', 'pcloud'];
 const PROVIDER_LABELS = {
@@ -487,7 +488,7 @@ export const AccountDialog = GObject.registerClass({
     }
 
     _uniqueName(base) {
-        const name = String(base || '').trim() || t('Cloud connection');
+        const name = sanitizeRemoteName(base);
         const used = new Set((this.window.snapshot?.remotes || [])
             .map(remote => String(remote.name || '')));
         if (!used.has(name))
@@ -496,6 +497,20 @@ export const AccountDialog = GObject.registerClass({
         while (used.has(`${name} ${suffix}`))
             suffix++;
         return `${name} ${suffix}`;
+    }
+
+    _remoteName() {
+        const raw = this.existing
+            ? String(this.existing.name || '').trim()
+            : String(this.nameRow.text || '').trim();
+        if (!raw) {
+            this._showError(t('Remote name is required.'));
+            return null;
+        }
+        const name = sanitizeRemoteName(raw);
+        if (this.nameRow && this.nameRow.text !== name)
+            this.nameRow.text = name;
+        return name;
     }
 
     _syncNameDefault() {
@@ -547,13 +562,9 @@ export const AccountDialog = GObject.registerClass({
             await this._connectS3();
             return;
         }
-        const name = this.existing
-            ? String(this.existing.name || '').trim()
-            : String(this.nameRow.text || '').trim();
-        if (!name) {
-            this._showError(t('Remote name is required.'));
+        const name = this._remoteName();
+        if (!name)
             return;
-        }
         this.unsubscribe?.();
         this.unsubscribe = null;
         if (this.pollTimer) {
@@ -585,13 +596,13 @@ export const AccountDialog = GObject.registerClass({
     }
 
     async _connectNextcloud() {
-        const name = this.existing
-            ? String(this.existing.name || '').trim()
-            : String(this.nameRow.text || '').trim();
+        const name = this._remoteName();
+        if (!name)
+            return;
         const url = String(this.nextcloudUrlRow?.text || '').trim();
         const user = String(this.nextcloudUserRow?.text || '').trim();
         const pass = String(this.nextcloudPasswordRow?.text || '');
-        if (!name || !url || !user || !pass) {
+        if (!url || !user || !pass) {
             this._showError(t('Fill in the Nextcloud URL, user and password.'));
             return;
         }
@@ -618,14 +629,14 @@ export const AccountDialog = GObject.registerClass({
     }
 
     async _connectS3() {
-        const name = this.existing
-            ? String(this.existing.name || '').trim()
-            : String(this.nameRow.text || '').trim();
+        const name = this._remoteName();
+        if (!name)
+            return;
         const endpoint = String(this.s3EndpointRow?.text || '').trim();
         const region = String(this.s3RegionRow?.text || '').trim() || 'auto';
         const accessKey = String(this.s3AccessRow?.text || '').trim();
         const secretKey = String(this.s3SecretRow?.text || '');
-        if (!name || !endpoint || !accessKey || !secretKey) {
+        if (!endpoint || !accessKey || !secretKey) {
             this._showError(t('Fill in the S3 endpoint, access key and secret key.'));
             return;
         }

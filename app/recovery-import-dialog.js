@@ -43,7 +43,7 @@ function sourceDescription(source) {
 export const RecoveryImportDialog = GObject.registerClass({
     GTypeName: 'SaveMeRecoveryImportDialog',
 }, class RecoveryImportDialog extends Adw.Window {
-    constructor(parentWindow, recoverDialog, entry, result) {
+    constructor(parentWindow, recoverDialog, entry, result, {allowRestore = true} = {}) {
         super({
             transient_for: recoverDialog,
             modal: true,
@@ -55,6 +55,7 @@ export const RecoveryImportDialog = GObject.registerClass({
         this.recoverDialog = recoverDialog;
         this.entry = entry;
         this.result = result;
+        this.allowRestore = allowRestore;
         this._busy = false;
         this._build();
     }
@@ -106,7 +107,7 @@ export const RecoveryImportDialog = GObject.registerClass({
                 'It does not copy, move, delete or modify any file in the source folder or ' +
                 'in SaveMe.'),
         }));
-        if (this.entry.job.type === 'backup') {
+        if (this.allowRestore && this.entry.job.type === 'backup') {
             actions.add(new Adw.ActionRow({
                 title: t('Import and restore'),
                 subtitle: t('Recreates the job, then opens Restore. Restore copies files from ' +
@@ -157,7 +158,7 @@ export const RecoveryImportDialog = GObject.registerClass({
         this.importButton = new Gtk.Button({label: t('Import job')});
         this.importButton.connect('clicked', () => this._import(false));
         this.actionBox.append(this.importButton);
-        if (this.entry.job.type === 'backup') {
+        if (this.allowRestore && this.entry.job.type === 'backup') {
             this.restoreButton = new Gtk.Button({
                 label: t('Import and restore'),
                 css_classes: ['suggested-action'],

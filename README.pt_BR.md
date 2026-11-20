@@ -58,11 +58,13 @@ excluídos para uma pasta de versões. A retenção pode manter versões por alg
 dias ou para sempre. Um job de backup pode combinar várias origens. O modo em
 tempo real não está disponível para backups por decisão de projeto.
 
-### Restauração e recuperação
+### Buscar jobs e restaurar
 
-Abra uma pasta SaveMe existente, inspecione os manifestos, importe jobs e
-restaure uma versão para uma pasta local. Jobs importados ficam desativados e
-em modo manual até você revisar as origens e o destino.
+**Buscar seus Jobs** recupera a configuração de jobs de pastas SaveMe
+existentes. Os jobs importados ficam desativados e em modo manual até você
+revisar as origens e o destino. **Restaurar** recupera arquivos de um backup
+para uma pasta de destino; ele não mantém uma configuração temporária de job
+depois da restauração.
 
 ### Agendamento e controle
 

@@ -4,6 +4,7 @@ import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
 import {RemoteBrowserDialog} from './remote-browser.js';
 import {RecoveryImportDialog} from './recovery-import-dialog.js';
+import {RestoreDialog} from './restore-dialog.js';
 import {t} from '../src/i18n.js';
 
 const MODULE_DIR = GLib.path_get_dirname(GLib.filename_from_uri(import.meta.url)[0]);
@@ -20,16 +21,17 @@ const PROVIDERS = [
 export const RecoverDialog = GObject.registerClass({
     GTypeName: 'SaveMeRecoverDialog',
 }, class RecoverDialog extends Adw.Window {
-    constructor(parentWindow) {
+    constructor(parentWindow, {mode = 'import'} = {}) {
         super({
             transient_for: parentWindow,
             modal: true,
-            title: t('Restore'),
+            title: mode === 'restore' ? t('Restore') : t('Find jobs'),
             default_width: 760,
             default_height: 680,
         });
         this.parentWindow = parentWindow;
         this.client = parentWindow.client;
+        this.mode = mode;
         this.inspecting = false;
         this._build();
     }
@@ -37,7 +39,9 @@ export const RecoverDialog = GObject.registerClass({
     _build() {
         const toolbar = new Adw.ToolbarView();
         const header = new Adw.HeaderBar();
-        header.set_title_widget(new Adw.WindowTitle({title: t('Restore')}));
+        header.set_title_widget(new Adw.WindowTitle({
+            title: this.mode === 'restore' ? t('Restore') : t('Find jobs'),
+        }));
         const close = new Gtk.Button({label: t('Close')});
         close.connect('clicked', () => this.close());
         header.pack_start(close);
@@ -66,8 +70,10 @@ export const RecoverDialog = GObject.registerClass({
         const page = new Adw.PreferencesPage();
         const group = new Adw.PreferencesGroup({
             title: t('Where is the SaveMe folder?'),
-            description: t('Choose the service that contains the SaveMe folder from the ' +
-                'previous installation.'),
+            description: this.mode === 'restore'
+                ? t('Choose the service that contains the SaveMe folder to restore from.')
+                : t('Choose the service that contains the SaveMe folders with the jobs ' +
+                    'you want to bring back.'),
         });
         const flow = new Gtk.FlowBox({
             selection_mode: Gtk.SelectionMode.NONE,
@@ -237,13 +243,22 @@ export const RecoverDialog = GObject.registerClass({
                     title: job.name || entry.id,
                     subtitle,
                 });
-                const review = new Gtk.Button({
-                    label: t('Review & import'),
+                const action = new Gtk.Button({
+                    label: this.mode === 'restore' && job.type !== 'backup'
+                        ? t('Open current folder')
+                        : this.mode === 'restore'
+                            ? t('Restore')
+                            : t('Review & import'),
                     valign: Gtk.Align.CENTER,
                     css_classes: ['suggested-action'],
                 });
-                review.connect('clicked', () => this._confirmImport(entry, result));
-                row.add_suffix(review);
+                if (this.mode === 'restore' && job.type === 'backup')
+                    action.connect('clicked', () => this._restoreEntry(entry, result));
+                else if (this.mode === 'restore')
+                    action.connect('clicked', () => this._openCurrent(entry));
+                else
+                    action.connect('clicked', () => this._confirmImport(entry, result));
+                row.add_suffix(action);
                 this.resultsGroup.add(row);
                 continue;
             }
@@ -294,6 +309,28 @@ export const RecoverDialog = GObject.registerClass({
     }
 
     _confirmImport(entry, result) {
-        new RecoveryImportDialog(this.parentWindow, this, entry, result).present();
+        new RecoveryImportDialog(this.parentWindow, this, entry, result, {
+            allowRestore: false,
+        }).present();
+    }
+
+    async _restoreEntry(entry, result) {
+        const job = JSON.parse(JSON.stringify(entry.job));
+        job.id = entry.id;
+        if (result.destination)
+            job.destination = result.destination;
+        job.destinationLayout = 'saveMe';
+        try {
+            const saved = await this.client.importJob(job);
+            await this.parentWindow.refresh();
+            new RestoreDialog(this.parentWindow, saved, {
+                temporaryJob: true,
+            }).present();
+            this.close();
+        } catch (e) {
+            this.statusRow.set_subtitle(t('Cannot import backup: {message}', {
+                message: e.message,
+            }));
+        }
     }
 });

@@ -13,7 +13,7 @@ const STEP_TITLES = [
 export const RestoreDialog = GObject.registerClass({
     GTypeName: 'SaveMeRestoreDialog',
 }, class RestoreDialog extends Adw.Window {
-    constructor(parentWindow, job) {
+    constructor(parentWindow, job, {temporaryJob = false} = {}) {
         super({
             transient_for: parentWindow,
             modal: true,
@@ -24,6 +24,7 @@ export const RestoreDialog = GObject.registerClass({
         this.parentWindow = parentWindow;
         this.client = parentWindow.client;
         this.job = job;
+        this.temporary = temporaryJob;
         this.versions = [];
         this.target = null;
         this._step = 0;
@@ -324,6 +325,16 @@ export const RestoreDialog = GObject.registerClass({
             return;
         }
         await this._performRestore({version, path});
+    }
+
+    close(...args) {
+        if (this.temporary) {
+            this.temporary = false;
+            this.client.deleteJob(this.job.id, false)
+                .then(() => this.parentWindow.refresh())
+                .catch(() => {});
+        }
+        return super.close(...args);
     }
 
     async _performRestore({version, path}) {

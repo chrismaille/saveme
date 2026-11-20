@@ -669,6 +669,12 @@ const CATALOGS = {
         'Imported jobs stay disabled and manual until you confirm the sources and press Play.': 'Jobs importados ficam desativados e em modo manual até você confirmar as origens e pressionar Iniciar.',
         'Fix the missing sources before enabling the job.': 'Corrija as origens ausentes antes de ativar o job.',
         'Job imported and enabled.': 'Job importado e ativado.',
+        'Find jobs': 'Buscar',
+        'Find your jobs': 'Buscar seus Jobs',
+        'Select your existing SaveMe folders': 'Selecione suas pastas SaveMe existentes',
+        'Recover your data.': 'Recupere seus dados.',
+        'Cannot import backup: {message}': 'Não foi possível importar o backup: {message}',
+        'Project source and releases.': 'Código e releases do projeto.',
     },
     es: {
         'Jobs': 'Tareas', 'Accounts': 'Cuentas', 'Settings': 'Configuración',

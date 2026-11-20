@@ -135,21 +135,23 @@ systemctl --user enable --now saveme.service
 ## 5. Configurar
 
 ```bash
-saveme-settings
+saveme
 ```
+
+O comando `saveme-settings` continua disponível como alias.
 
 Fluxo recomendado:
 
-1. **Accounts** → adicionar Google Drive, OneDrive ou Dropbox.
-2. **Jobs** → **New job**.
+1. **Contas** → adicionar Google Drive, OneDrive, Dropbox, Nextcloud, S3 ou pCloud.
+2. **Tarefas** → **Novo job**.
 3. Escolher origem e destino.
 4. Escolher **Sync** (espelho em tempo real) ou **Backup** (com versões).
-5. Usar **Save & Dry Run** no primeiro job e conferir o resultado em **Logs**.
-6. Quando estiver correto, usar **Run now**.
+5. Usar **Salvar e simular** no primeiro job e conferir o resultado em **Diagnóstico**.
+6. Quando estiver correto, usar **Iniciar**.
 
-A aba **Debug** do app mostra o log do daemon, o resultado do Doctor, os
-caminhos de configuração/estado e um botão **Copy diagnostics** para relatar
-problemas. Também é possível abrir direto:
+A página **Diagnóstico** mostra o log do daemon, o resultado do Doctor, os
+caminhos de configuração/estado e um botão para copiar o diagnóstico.
+Também é possível abrir direto:
 
 ```bash
 saveme-settings --view debug

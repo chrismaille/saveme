@@ -61,7 +61,7 @@ install -Dm644 "$ROOT_DIR/README.md" "$STAGE/usr/share/doc/saveme/README.md"
 
 install -Dm755 "$ROOT_DIR/data/saveme" "$STAGE/usr/bin/saveme"
 install -Dm755 "$ROOT_DIR/data/saveme-daemon" "$STAGE/usr/bin/saveme-daemon"
-install -Dm755 "$ROOT_DIR/data/saveme-settings" "$STAGE/usr/bin/saveme-settings"
+install -Dm755 "$ROOT_DIR/data/saveme" "$STAGE/usr/bin/saveme"
 
 INSTALLED_SIZE="$(du -sk "$STAGE" | cut -f1)"
 cat > "$STAGE/DEBIAN/control" <<EOF
@@ -77,11 +77,11 @@ Homepage: https://github.com/chrismaille/saveme
 Description: One-way real-time sync and versioned backup for GNOME
  SaveMe mirrors a source folder to a destination in real time, or keeps a
  versioned backup of the source. It supports local folders, removable drives,
- Google Drive, Microsoft OneDrive and Dropbox through rclone.
+ Google Drive, Microsoft OneDrive, Dropbox, Nextcloud, S3 and pCloud through
+ rclone.
  .
  This package contains the background daemon, the GTK settings application,
- the command-line tool and a pinned rclone binary. The GNOME Shell extension
- is distributed separately through extensions.gnome.org.
+ the command-line tool, a pinned rclone binary and the GNOME Shell extension.
 EOF
 
 cat > "$STAGE/DEBIAN/postinst" <<'EOF'
@@ -96,11 +96,8 @@ fi
 cat <<'MSG'
 SaveMe installed.
 
-The GNOME Shell extension is installed and enabled automatically when you
-open SaveMe. No manual gnome-extensions command is required.
-
 Open the app with:
-  saveme-settings
+  saveme
 MSG
 exit 0
 EOF

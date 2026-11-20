@@ -7,6 +7,7 @@ import {
     joinRclonePath,
     versionsRootFor,
 } from '../domain/backup-layout.js';
+import {isValidRemoteName} from '../domain/remote-name.js';
 import {
     BACKUP_MANIFEST_FILE,
     parseBackupManifest,
@@ -670,7 +671,7 @@ export class DaemonService {
         const options = payload.options || {};
         if (!['nextcloud', 's3'].includes(type))
             throw new Error(`Unsupported remote type: ${type}`);
-        if (!name || /[:/\n\r]/.test(name))
+        if (!isValidRemoteName(name))
             throw new Error('Invalid remote name.');
         let providerType;
         let providerOptions;

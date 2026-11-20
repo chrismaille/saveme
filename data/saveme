@@ -1,2 +1,5 @@
 #!/bin/sh
+if [ "$#" -eq 0 ]; then
+    exec gjs -m /usr/lib/saveme/app/main.js
+fi
 exec gjs -m /usr/lib/saveme/bin/saveme.js "$@"

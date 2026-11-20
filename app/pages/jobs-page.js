@@ -84,11 +84,11 @@ export class JobsPage {
         });
         add.connect('clicked', () => this.window.newJob());
         header.append(add);
-        this.recoverButton = iconLabelButton(t('Restore'),
-            'document-revert-symbolic', {cssClasses: ['flat']});
-        this.recoverButton.connect('clicked', () =>
-            new RecoverDialog(this.window).present());
-        header.append(this.recoverButton);
+        const find = iconLabelButton(t('Find jobs'),
+            'system-search-symbolic', {cssClasses: ['flat']});
+        find.connect('clicked', () =>
+            new RecoverDialog(this.window, {mode: 'import'}).present());
+        header.append(find);
         sidebar.append(header);
 
         this.listBox = new Gtk.ListBox({
@@ -451,20 +451,59 @@ export class JobsPage {
                 description: t('Create a job to start syncing.'),
                 icon_name: 'view-list-symbolic',
             });
-            const button = iconLabelButton(t('New job'), 'list-add-symbolic', {
-                cssClasses: ['suggested-action'],
-            });
-            button.connect('clicked', () => this.window.newJob());
-            const recover = iconLabelButton(t('Restore'),
-                'document-revert-symbolic', {});
-            recover.connect('clicked', () => new RecoverDialog(this.window).present());
             const actions = new Gtk.Box({
                 orientation: Gtk.Orientation.HORIZONTAL,
-                spacing: 8,
+                spacing: 12,
+                homogeneous: true,
                 halign: Gtk.Align.CENTER,
             });
-            actions.append(button);
-            actions.append(recover);
+            const addAction = (iconName, title, help, cssClasses, callback) => {
+                const content = new Gtk.Box({
+                    orientation: Gtk.Orientation.VERTICAL,
+                    spacing: 6,
+                    margin_top: 14,
+                    margin_bottom: 14,
+                    margin_start: 12,
+                    margin_end: 12,
+                    halign: Gtk.Align.CENTER,
+                });
+                content.append(new Gtk.Image({
+                    icon_name: iconName,
+                    pixel_size: 32,
+                    halign: Gtk.Align.CENTER,
+                }));
+                content.append(new Gtk.Label({
+                    label: title,
+                    xalign: 0.5,
+                    justify: Gtk.Justification.CENTER,
+                    css_classes: ['title-3'],
+                }));
+                content.append(new Gtk.Label({
+                    label: help,
+                    xalign: 0.5,
+                    justify: Gtk.Justification.CENTER,
+                    wrap: true,
+                    max_width_chars: 24,
+                    css_classes: ['dim-label'],
+                }));
+                const button = new Gtk.Button({
+                    child: content,
+                    width_request: 190,
+                    height_request: 130,
+                    css_classes: ['card', ...cssClasses],
+                });
+                button.connect('clicked', callback);
+                actions.append(button);
+            };
+            addAction('list-add-symbolic', t('New job'),
+                t('Create a job to start syncing.'), ['suggested-action'],
+                () => this.window.newJob());
+            addAction('system-search-symbolic', t('Find your jobs'),
+                t('Select your existing SaveMe folders'), [],
+                () => new RecoverDialog(this.window, {mode: 'import'}).present());
+            addAction('document-revert-symbolic', t('Restore'),
+                t('Recover your data.'), [],
+                () => new RecoverDialog(this.window, {mode: 'restore'}).present());
             page.set_child(actions);
             scroll.set_child(page);
             return;

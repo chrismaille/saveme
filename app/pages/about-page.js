@@ -3,7 +3,8 @@ import Adw from 'gi://Adw?version=1';
 import {t} from '../../src/i18n.js';
 
 export class AboutPage {
-    constructor(_window) {
+    constructor(window) {
+        this.window = window;
         this.widget = new Adw.PreferencesPage();
         const heroGroup = new Adw.PreferencesGroup();
         const hero = new Gtk.Box({
@@ -52,18 +53,20 @@ export class AboutPage {
 
         const linksGroup = new Adw.PreferencesGroup({
             title: t('Links'),
-            description: t('Project links will appear here in a future release.'),
+            description: t('Project source and releases.'),
         });
-        linksGroup.add(new Adw.ActionRow({
+        const github = new Adw.ActionRow({
             title: 'GitHub',
-            subtitle: t('Coming soon'),
-            sensitive: false,
+            subtitle: 'chrismaille/saveme',
+            activatable: true,
+        });
+        github.add_suffix(new Gtk.Image({
+            icon_name: 'adw-external-link-symbolic',
+            pixel_size: 16,
         }));
-        linksGroup.add(new Adw.ActionRow({
-            title: 'Flatpak',
-            subtitle: t('Coming soon'),
-            sensitive: false,
-        }));
+        github.connect('activated', () => this.window.launcher.openUri(
+            'https://github.com/chrismaille/saveme'));
+        linksGroup.add(github);
         this.widget.add(linksGroup);
     }
 

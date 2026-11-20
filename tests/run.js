@@ -22,6 +22,7 @@ import logPolicySuite from './unit/domain/log-policy.test.js';
 import diskSpaceSuite from './unit/domain/disk-space.test.js';
 import backupManifestSuite from './unit/domain/backup-manifest.test.js';
 import includeFilterSuite from './unit/domain/include-filter.test.js';
+import remoteNameSuite from './unit/domain/remote-name.test.js';
 import scheduleSuite from './unit/domain/schedule.test.js';
 import syncServiceSuite from './unit/application/sync-service.test.js';
 import backupServiceSuite from './unit/application/backup-service.test.js';
@@ -86,6 +87,7 @@ const suites = [
     diskSpaceSuite,
     backupManifestSuite,
     includeFilterSuite,
+    remoteNameSuite,
     scheduleSuite,
     syncServiceSuite,
     backupServiceSuite,

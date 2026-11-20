@@ -1,3 +1,4 @@
+import {sanitizeRemoteName} from './domain/remote-name.js';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import {uniqueId} from './util.js';
@@ -38,9 +39,10 @@ export class RemoteAuthManager {
     begin(provider, name, options = {}) {
         if (!AUTH_PROVIDERS[provider])
             throw new Error(`Unsupported provider: ${provider}`);
-        const remoteName = String(name || '').trim();
-        if (!remoteName || /[:/\n\r]/.test(remoteName))
-            throw new Error('Remote name cannot contain colon, slash or line breaks.');
+        const rawName = String(name || '').trim();
+        if (!rawName)
+            throw new Error('Remote name is required.');
+        const remoteName = sanitizeRemoteName(rawName);
         const existing = this.config.getRemote(remoteName);
         if (existing && existing.type !== provider)
             throw new Error(`Remote ${remoteName} already exists with another type.`);

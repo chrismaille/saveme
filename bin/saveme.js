@@ -41,6 +41,7 @@ const BOOLEAN_OPTIONS = new Set([
 const USAGE = `SaveMe ${VERSION}
 
 Usage:
+  saveme                  Open the SaveMe application
   saveme doctor
   saveme status
   saveme job list

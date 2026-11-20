@@ -52,4 +52,10 @@ export default suite('app/gateway/system-launcher', [
         assertEqual(calls[0][1], 'file:///tmp/my file');
         assertEqual(calls[0][2], null);
     }),
+    test('openUri forwards the URI to the default application', () => {
+        const {launcher, calls} = makeLauncher();
+        assertEqual(launcher.openUri('https://github.com/chrismaille/saveme'), true);
+        assertEqual(calls[0][1], 'https://github.com/chrismaille/saveme');
+        assertEqual(calls[0][2], null);
+    }),
 ]);

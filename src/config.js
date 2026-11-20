@@ -1,3 +1,4 @@
+import {isValidRemoteName} from './domain/remote-name.js';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import {
@@ -277,8 +278,9 @@ export class ConfigStore {
             createdAt: nowIso(),
             updatedAt: nowIso(),
         };
-        if (!remote.name || /[:/\n\r]/.test(remote.name))
-            throw new Error('Remote name cannot contain colon, slash or line breaks.');
+        if (!isValidRemoteName(remote.name))
+            throw new Error('Remote name can only contain letters without accents, ' +
+                'numbers, spaces, dot, dash and underscore.');
         if (!['drive', 'onedrive', 'dropbox', 'nextcloud', 's3', 'pcloud'].includes(remote.type))
             throw new Error(`Unsupported remote type: ${remote.type}`);
         if (this.data.remotes.some(item => item.name === remote.name))

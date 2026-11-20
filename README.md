@@ -57,11 +57,12 @@ a version folder. Retention can keep versions for a number of days or forever.
 A backup job can combine multiple sources. Real-time mode is intentionally not
 available for backups.
 
-### Restore and recovery
+### Find jobs and restore
 
-Open an existing SaveMe folder, inspect the backup manifests, import jobs and
-restore a version to a local folder. Imported jobs stay disabled/manual until
-you review their sources and destination.
+**Find jobs** brings back job configuration from existing SaveMe folders.
+Imported jobs stay disabled/manual until you review their sources and
+destination. **Restore** recovers files from a backup into a target folder;
+it does not keep a temporary job configuration after the restore.
 
 ### Scheduling and control
 

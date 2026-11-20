@@ -30,9 +30,12 @@ export class SystemLauncher {
         return this._subprocess.new(argv, flags);
     }
 
+    openUri(uri) {
+        return this._appInfo.launch_default_for_uri(uri, null);
+    }
+
     openPath(path) {
-        return this._appInfo.launch_default_for_uri(
-            this._file.new_for_path(path).get_uri(), null);
+        return this.openUri(this._file.new_for_path(path).get_uri());
     }
 
     capture(argv) {
