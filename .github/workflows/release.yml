@@ -69,9 +69,10 @@ jobs:
           ./scripts/build-deb.sh
       - name: Verify package entry points
         run: |
-          dpkg-deb -c dist/saveme_amd64.deb | grep -q './usr/bin/saveme'
-          dpkg-deb -c dist/saveme_amd64.deb | grep -q './usr/bin/saveme-daemon'
-          dpkg-deb -c dist/saveme_amd64.deb | grep -q './usr/bin/saveme-settings'
+          dpkg-deb -c dist/saveme_amd64.deb > /tmp/saveme-files.txt
+          grep -q './usr/bin/saveme' /tmp/saveme-files.txt
+          grep -q './usr/bin/saveme-daemon' /tmp/saveme-files.txt
+          grep -q './usr/bin/saveme-settings' /tmp/saveme-files.txt
       - name: Import PPA signing key
         if: env.PPA_SIGNING_KEY != ''
         uses: crazy-max/ghaction-import-gpg@v6
