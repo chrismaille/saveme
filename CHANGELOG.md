@@ -1,3 +1,10 @@
+## [1.3.4](https://github.com/chrismaille/saveme/compare/v1.3.3...v1.3.4) (2026-11-20)
+
+
+### Bug Fixes
+
+* **packaging:** make the GNOME extension automatic ([8f75a68](https://github.com/chrismaille/saveme/commit/8f75a68826e4d8c92771fe307679904662d5a002))
+
 ## [1.3.3](https://github.com/chrismaille/saveme/compare/v1.3.2...v1.3.3) (2026-11-20)
 
 
