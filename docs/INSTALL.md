@@ -8,8 +8,7 @@
 
 ## Instalação via PPA (atualizações automáticas)
 
-O PPA do Launchpad está publicado. O primeiro build pode levar alguns minutos
-até aparecer no `apt`:
+O PPA do Launchpad é atualizado pelo Launchpad a cada release:
 
 ```bash
 sudo add-apt-repository ppa:chrismaille/saveme
@@ -21,12 +20,9 @@ Depois disso, `sudo apt upgrade` atualiza o SaveMe junto com o sistema.
 Detalhes de build e envio: [PPA.md](PPA.md).
 
 O pacote instala o aplicativo, daemon, serviço D-Bus, CLI e o zip da extensão.
-Para instalar a extensão ao usar somente o PPA:
-
-```bash
-gnome-extensions install --force /usr/share/saveme/extension.zip
-gnome-extensions enable saveme@chrismaille.github.io
-```
+Na primeira abertura, o aplicativo instala ou atualiza a extensão do GNOME e a
+ativa automaticamente. Se `gnome-extensions` não estiver disponível, a extensão
+é ignorada e o aplicativo/daemon continuam funcionando.
 
 ## 1. Construir o pacote
 

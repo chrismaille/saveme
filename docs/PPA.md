@@ -61,7 +61,8 @@ sudo apt update
 sudo apt install saveme
 ```
 
-Depois, `sudo apt upgrade` mantém o aplicativo atualizado.
+Depois, `sudo apt upgrade` mantém o aplicativo atualizado. Na primeira
+abertura, o aplicativo instala e ativa a extensão do GNOME automaticamente.
 
 ## Versão
 

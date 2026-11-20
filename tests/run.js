@@ -43,6 +43,7 @@ import dbusApiSuite from './unit/adapters/dbus-api.test.js';
 import appFormatSuite from './unit/app/format.test.js';
 import appGatewaySuite from './unit/app/daemon-gateway.test.js';
 import appLauncherSuite from './unit/app/system-launcher.test.js';
+import appExtensionManagerSuite from './unit/app/extension-manager.test.js';
 import extensionPresentationSuite from './unit/extension/presentation.test.js';
 import extensionDaemonClientSuite from './unit/extension/daemon-client.test.js';
 import extensionLauncherSuite from './unit/extension/system-launcher.test.js';
@@ -106,6 +107,7 @@ const suites = [
     appFormatSuite,
     appGatewaySuite,
     appLauncherSuite,
+    appExtensionManagerSuite,
     extensionPresentationSuite,
     extensionDaemonClientSuite,
     extensionLauncherSuite,

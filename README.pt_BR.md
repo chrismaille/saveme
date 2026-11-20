@@ -111,8 +111,7 @@ O iCloud está fora do escopo até a Apple oferecer uma API estável.
 ### Recomendado: PPA (Launchpad)
 
 O PPA é a instalação preferida porque o Ubuntu atualiza o SaveMe junto com o
-sistema. O primeiro build está sendo processado pelo Launchpad; se o pacote
-ainda não estiver disponível, use o script de instalação abaixo.
+sistema.
 
 ```bash
 sudo add-apt-repository ppa:chrismaille/saveme
@@ -127,13 +126,9 @@ sudo apt upgrade
 ```
 
 O pacote do PPA instala o aplicativo, daemon, serviço D-Bus, CLI e o zip da
-extensão. A extensão opcional do GNOME pode ser instalada e ativada uma vez
-com:
-
-```bash
-gnome-extensions install --force /usr/share/saveme/extension.zip
-gnome-extensions enable saveme@chrismaille.github.io
-```
+extensão. Na primeira execução o aplicativo instala ou atualiza a extensão
+opcional do GNOME e a ativa automaticamente; nenhum comando manual de
+`gnome-extensions` é necessário.
 
 Detalhes de build e envio: [docs/PPA.md](docs/PPA.md).
 

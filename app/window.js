@@ -12,6 +12,7 @@ import {VolumeResolver} from '../src/volumes.js';
 import {JOB_TYPES, localPathFor} from '../src/jobs.js';
 import {sleep} from '../src/util.js';
 import {SystemLauncher} from './gateway/system-launcher.js';
+import {ExtensionManager} from './extension-manager.js';
 import {JobsPage} from './pages/jobs-page.js';
 import {AccountsPage} from './pages/accounts-page.js';
 import {SettingsPage} from './pages/settings-page.js';
@@ -24,7 +25,11 @@ const ROOT_DIR = GLib.build_filenamev([APP_DIR, '..']);
 export const SaveMeWindow = GObject.registerClass({
     GTypeName: 'SaveMeSettingsWindow',
 }, class SaveMeWindow extends Adw.ApplicationWindow {
-    constructor(app, client, {monitor = null, appLog = null} = {}) {
+    constructor(app, client, {
+        monitor = null,
+        appLog = null,
+        autoInstallExtension = true,
+    } = {}) {
         super({
             application: app,
             title: 'SaveMe',
@@ -43,6 +48,18 @@ export const SaveMeWindow = GObject.registerClass({
         this._unsubscribe = null;
         this._monitorUnsubscribe = null;
         this._buildUI();
+        if (autoInstallExtension) {
+            const manager = new ExtensionManager({
+                launcher: this.launcher,
+                logger: this.appLog?.logger,
+            });
+            GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+                manager.ensure().catch(e =>
+                    this.appLog?.logger.warn(
+                        `Cannot sync GNOME extension: ${e.message}`));
+                return GLib.SOURCE_REMOVE;
+            });
+        }
         this._monitorUnsubscribe = this.monitor?.onSample(metrics => {
             this.jobsPage.updatePerformance(metrics);
             this.diagnosticsPage.updatePerformance(metrics);

@@ -102,6 +102,7 @@ const SaveMeApplication = GObject.registerClass({
             this._window = new SaveMeWindow(this, this._client, {
                 monitor: this._monitor,
                 appLog: this._appLog,
+                autoInstallExtension: !this._smokeTest,
             });
             this._window.connect('close-request', () => {
                 this._window = null;
