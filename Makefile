@@ -17,7 +17,7 @@ VENV := .venv
 PRE_COMMIT ?= $(VENV)/bin/pre-commit
 PYTHON ?= python3
 
-.PHONY: all setup setup-lint setup-hooks test tests coverage e2e e2e-extension e2e-app lint verify doctor run extension deb install uninstall clean
+.PHONY: all setup setup-lint setup-hooks test tests coverage e2e e2e-extension e2e-app lint verify doctor run extension deb ppa-source install uninstall clean
 
 all: test
 
@@ -115,6 +115,9 @@ extension/i18n.js: src/i18n.js
 
 deb: extension $(RCLONE)
 	./scripts/build-deb.sh
+
+ppa-source:
+	./scripts/build-ppa-source.sh -sa
 
 install: deb
 	./scripts/install.sh

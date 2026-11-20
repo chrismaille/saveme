@@ -33,3 +33,6 @@ __pycache__/
 .venv/
 node_modules/
 .env
+debian/files
+debian/saveme/
+build/ppa/

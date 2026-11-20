@@ -663,6 +663,11 @@ const CATALOGS = {
         'Disable delete guard': 'Desativar proteção contra exclusão',
         'Enable delete guard': 'Ativar proteção contra exclusão',
         'Delete guard updated.': 'Proteção contra exclusão atualizada.',
+        'Change': 'Alterar',
+        'Enable job after importing': 'Ativar job após importar',
+        'Imported jobs stay disabled and manual until you confirm the sources and press Play.': 'Jobs importados ficam desativados e em modo manual até você confirmar as origens e pressionar Iniciar.',
+        'Fix the missing sources before enabling the job.': 'Corrija as origens ausentes antes de ativar o job.',
+        'Job imported and enabled.': 'Job importado e ativado.',
     },
     es: {
         'Jobs': 'Tareas', 'Accounts': 'Cuentas', 'Settings': 'Configuración',

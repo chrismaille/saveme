@@ -58,7 +58,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            gjs gnome-shell curl unzip dpkg-dev apt-utils gnupg
+            gjs gnome-shell curl unzip dpkg-dev apt-utils gnupg rsync
       - name: Download pinned rclone
         run: make setup
       - name: Build package and extension
@@ -77,6 +77,8 @@ jobs:
             git archive FETCH_HEAD | tar -x -C build/apt
           fi
           ./scripts/build-apt-repo.sh build/apt
+      - name: Build PPA source package
+        run: ./scripts/build-ppa-source.sh -sa -us -uc -d
       - name: Attach release assets
         uses: softprops/action-gh-release@v2
         with:
@@ -85,6 +87,10 @@ jobs:
             dist/*.deb
             dist/*.shell-extension.zip
             dist/SHA256SUMS
+            build/ppa/*.dsc
+            build/ppa/*.orig.tar.gz
+            build/ppa/*.debian.tar.xz
+            build/ppa/*_source.changes
           fail_on_unmatched_files: true
       - name: Publish APT repository
         uses: peaceiris/actions-gh-pages@v4

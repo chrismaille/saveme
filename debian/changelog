@@ -1,0 +1,6 @@
+saveme (1.2.0-0ubuntu1) resolute; urgency=medium
+
+  * New upstream release.
+  * Add source confirmation and optional enable after recovery import.
+
+ -- chrismaille <chrismaille@users.noreply.github.com>  Thu, 19 Nov 2026 21:28:19 -0300

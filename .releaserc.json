@@ -24,7 +24,8 @@
           "package.json",
           "package-lock.json",
           "src/daemon.js",
-          "scripts/build-deb.sh"
+          "scripts/build-deb.sh",
+          "debian/changelog"
         ],
         "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
       }

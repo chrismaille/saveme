@@ -1,0 +1,12 @@
+tar-ignore = .git
+tar-ignore = .github
+tar-ignore = .idea
+tar-ignore = .venv
+tar-ignore = build
+tar-ignore = dist
+tar-ignore = node_modules
+tar-ignore = tools
+tar-ignore = .env
+tar-ignore = save_me.iml
+extend-diff-ignore = (^|/)(\.git|\.github|\.idea|\.venv|build|dist|node_modules|tools)(/|$)
+extend-diff-ignore = (^|/)(\.env|save_me\.iml)$

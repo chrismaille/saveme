@@ -91,25 +91,9 @@ export const RecoveryImportDialog = GObject.registerClass({
         }
         page.add(summary);
 
-        const sources = new Adw.PreferencesGroup({title: t('Sources')});
-        if ((this.entry.sources || []).length === 0) {
-            sources.add(new Adw.ActionRow({
-                title: t('No sources in the manifest'),
-                subtitle: t('The job will be imported disabled; choose the source in the editor.'),
-            }));
-        }
-        for (const source of this.entry.sources || []) {
-            const row = new Adw.ActionRow({
-                title: source.path || t('Unknown source'),
-                subtitle: sourceDescription(source),
-            });
-            row.add_prefix(new Gtk.Image({
-                icon_name: sourceIcon(source),
-                pixel_size: 18,
-            }));
-            sources.add(row);
-        }
-        page.add(sources);
+        this.sourceGroup = new Adw.PreferencesGroup({title: t('Sources')});
+        page.add(this.sourceGroup);
+        this._renderSources();
 
         const actions = new Adw.PreferencesGroup({
             title: t('Choose an action'),
@@ -130,6 +114,14 @@ export const RecoveryImportDialog = GObject.registerClass({
                     'original source folder; the source stays exactly as it is.'),
             }));
         }
+        this.enableRow = new Adw.SwitchRow({
+            title: t('Enable job after importing'),
+            subtitle: t('Imported jobs stay disabled and manual until you confirm ' +
+                'the sources and press Play.'),
+            active: false,
+        });
+        actions.add(this.enableRow);
+        this._updateEnableRow();
         page.add(actions);
 
         const existing = (this.parentWindow.snapshot?.jobs || [])
@@ -177,6 +169,91 @@ export const RecoveryImportDialog = GObject.registerClass({
         this.set_content(toolbar);
     }
 
+    _renderSources() {
+        for (const row of this.sourceRows || [])
+            this.sourceGroup.remove(row);
+        this.sourceRows = [];
+        const sources = this.entry.sources || [];
+        if (sources.length === 0) {
+            const row = new Adw.ActionRow({
+                title: t('No sources in the manifest'),
+                subtitle: t('The job will be imported disabled; choose the source in the editor.'),
+            });
+            this.sourceGroup.add(row);
+            this.sourceRows.push(row);
+        }
+        for (const [index, source] of sources.entries()) {
+            const row = new Adw.ActionRow({
+                title: source.path || t('Unknown source'),
+                subtitle: sourceDescription(source),
+            });
+            row.add_prefix(new Gtk.Image({
+                icon_name: sourceIcon(source),
+                pixel_size: 18,
+            }));
+            if (!source.remote) {
+                const change = new Gtk.Button({
+                    label: t('Change'),
+                    valign: Gtk.Align.CENTER,
+                    css_classes: ['flat'],
+                });
+                change.connect('clicked', () => this._chooseSource(index));
+                row.add_suffix(change);
+            }
+            this.sourceGroup.add(row);
+            this.sourceRows.push(row);
+        }
+        this._updateEnableRow();
+    }
+
+    _chooseSource(index) {
+        const dialog = new Gtk.FileDialog({
+            title: t('Choose source folder'),
+            modal: true,
+        });
+        dialog.select_folder(this, null, (source, result) => {
+            try {
+                const path = source.select_folder_finish(result).get_path();
+                if (!path)
+                    return;
+                const descriptor = this.parentWindow.volumes?.makeDescriptor
+                    ? this.parentWindow.volumes.makeDescriptor(path)
+                    : {kind: 'local', path};
+                this.entry.sources[index] = {
+                    kind: 'local',
+                    path,
+                    exists: true,
+                    remote: false,
+                };
+                const jobSources = Array.isArray(this.entry.job.sources)
+                    ? [...this.entry.job.sources]
+                    : [];
+                jobSources[index] = descriptor;
+                this.entry.job.sources = jobSources;
+                if (index === 0)
+                    this.entry.job.source = descriptor;
+                this._renderSources();
+            } catch (_) {
+                // Dialog dismissed.
+            }
+        });
+    }
+
+    _updateEnableRow() {
+        if (!this.enableRow)
+            return;
+        const sources = this.entry.sources || [];
+        const available = sources.length > 0 &&
+            sources.every(source => source.exists !== false);
+        this.enableRow.sensitive = available;
+        this.enableRow.subtitle = available
+            ? t('Imported jobs stay disabled and manual until you confirm ' +
+                'the sources and press Play.')
+            : t('Fix the missing sources before enabling the job.');
+        if (!available)
+            this.enableRow.active = false;
+    }
+
     _setBusy(busy) {
         this._busy = busy;
         for (const button of [this.importButton, this.restoreButton])
@@ -194,12 +271,16 @@ export const RecoveryImportDialog = GObject.registerClass({
                 job.destination = this.result.destination;
             job.destinationLayout = 'saveMe';
             const saved = await this.parentWindow.client.importJob(job);
+            const enable = Boolean(this.enableRow?.active);
+            if (enable)
+                await this.parentWindow.client.setJobEnabled(saved.id, true);
             await this.parentWindow.refresh();
             if (restore && saved.type === 'backup')
                 new RestoreDialog(this.parentWindow, saved).present();
             else
-                this.parentWindow.toast(
-                    t('Job imported. Review the sources before enabling it.'));
+                this.parentWindow.toast(enable
+                    ? t('Job imported and enabled.')
+                    : t('Job imported. Review the sources before enabling it.'));
             this.close();
             this.recoverDialog?.close();
         } catch (e) {

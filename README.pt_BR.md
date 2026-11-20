@@ -105,7 +105,8 @@ O iCloud está fora do escopo até a Apple oferecer uma API estável.
 
 - Ubuntu 26.04 ou distribuição compatível com GNOME 50
 - GJS 1.88+, GTK 4.22+, libadwaita 1.9+
-- rclone 1.76+ (o instalador inclui um binário fixado)
+- rclone 1.60+ (o instalador inclui um binário fixado 1.76; o pacote APT
+  usa o rclone da distribuição)
 
 ### Recomendado: script de instalação
 
@@ -232,6 +233,7 @@ Veja [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) para a comparação.
 - [docs/INSTALL.md](docs/INSTALL.md) — instalação, CLI e desinstalação
 - [docs/APT.md](docs/APT.md) — repositório APT assinado e rotação de chave
 - [docs/UBUNTU.md](docs/UBUNTU.md) — PPA e arquivo oficial do Ubuntu
+- [docs/PPA.md](docs/PPA.md) — build e envio para o PPA do Launchpad
 - [docs/TESTING.md](docs/TESTING.md) — matriz de testes automáticos e manuais
 - [docs/LINTING.md](docs/LINTING.md) — pre-commit, linters e regras Omega
 - [docs/RELEASING.md](docs/RELEASING.md) — commits e releases automáticas

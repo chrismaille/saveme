@@ -1,0 +1,60 @@
+#!/usr/bin/make -f
+
+PACKAGE := saveme
+VERSION := $(shell dpkg-parsechangelog -SVersion)
+DESTDIR := $(CURDIR)/debian/$(PACKAGE)
+
+%:
+	@echo "Unsupported target: $@" >&2
+	@exit 1
+
+clean:
+	rm -rf $(DESTDIR) debian/files
+
+build:
+	$(MAKE) extension/i18n.js
+
+binary: build
+	install -d $(DESTDIR)/usr/bin \
+		$(DESTDIR)/usr/lib/saveme/bin \
+		$(DESTDIR)/usr/lib/saveme/src \
+		$(DESTDIR)/usr/lib/saveme/app \
+		$(DESTDIR)/usr/lib/saveme/assets \
+		$(DESTDIR)/usr/lib/systemd/user \
+		$(DESTDIR)/usr/share/dbus-1/services \
+		$(DESTDIR)/usr/share/applications \
+		$(DESTDIR)/usr/share/icons/hicolor/256x256/apps \
+		$(DESTDIR)/usr/share/saveme \
+		$(DESTDIR)/usr/share/doc/saveme \
+		$(DESTDIR)/etc/xdg/autostart
+	cp -a src/. $(DESTDIR)/usr/lib/saveme/src/
+	cp -a app/. $(DESTDIR)/usr/lib/saveme/app/
+	cp -a assets/. $(DESTDIR)/usr/lib/saveme/assets/
+	install -m755 bin/saveme.js $(DESTDIR)/usr/lib/saveme/bin/saveme.js
+	install -m755 bin/saveme-daemon.js $(DESTDIR)/usr/lib/saveme/bin/saveme-daemon.js
+	install -m644 data/saveme.service \
+		$(DESTDIR)/usr/lib/systemd/user/saveme.service
+	install -m644 data/io.github.chrismaille.SaveMe.Daemon.service \
+		$(DESTDIR)/usr/share/dbus-1/services/io.github.chrismaille.SaveMe.Daemon.service
+	install -m644 data/io.github.chrismaille.SaveMe.Settings.desktop \
+		$(DESTDIR)/usr/share/applications/io.github.chrismaille.SaveMe.Settings.desktop
+	install -m644 data/io.github.chrismaille.SaveMe.Daemon.desktop \
+		$(DESTDIR)/usr/share/applications/io.github.chrismaille.SaveMe.Daemon.desktop
+	install -m644 data/saveme-daemon-autostart.desktop \
+		$(DESTDIR)/etc/xdg/autostart/saveme-daemon.desktop
+	install -m644 assets/icon.png \
+		$(DESTDIR)/usr/share/icons/hicolor/256x256/apps/io.github.chrismaille.SaveMe.png
+	install -m644 LICENSE $(DESTDIR)/usr/share/doc/saveme/LICENSE
+	install -m644 README.md $(DESTDIR)/usr/share/doc/saveme/README.md
+	install -m644 README.pt_BR.md $(DESTDIR)/usr/share/doc/saveme/README.pt_BR.md
+	install -m644 debian/copyright $(DESTDIR)/usr/share/doc/saveme/copyright
+	gzip -9 -c debian/changelog > $(DESTDIR)/usr/share/doc/saveme/changelog.Debian.gz
+	(cd extension && zip -qr "$(DESTDIR)/usr/share/saveme/extension.zip" .)
+	install -d $(DESTDIR)/DEBIAN
+	install -m755 debian/postinst $(DESTDIR)/DEBIAN/postinst
+	install -m755 debian/postrm $(DESTDIR)/DEBIAN/postrm
+	dpkg-gencontrol -p$(PACKAGE) -P$(DESTDIR)
+	(cd $(DESTDIR) && find usr -type f -print0 | sort -z | xargs -0 md5sum > DEBIAN/md5sums)
+	dpkg-deb --build --root-owner-group $(DESTDIR) ..
+
+.PHONY: clean build binary

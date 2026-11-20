@@ -1,0 +1,31 @@
+Source: saveme
+Section: utils
+Priority: optional
+Maintainer: chrismaille <chrismaille@users.noreply.github.com>
+Standards-Version: 4.7.0
+Homepage: https://github.com/chrismaille/saveme
+Vcs-Git: https://github.com/chrismaille/saveme.git
+Vcs-Browser: https://github.com/chrismaille/saveme
+Rules-Requires-Root: no
+Build-Depends: dpkg-dev (>= 1.19), zip
+
+Package: saveme
+Architecture: all
+Depends: gjs (>= 1.80),
+         gir1.2-glib-2.0,
+         gir1.2-gtk-4.0,
+         gir1.2-adw-1,
+         libglib2.0-bin,
+         dbus-user-session,
+         systemd,
+         xdg-utils,
+         curl,
+         rclone (>= 1.60.0)
+Recommends: gnome-shell
+Description: one-way sync and versioned backups for GNOME
+ SaveMe keeps a source folder in sync with a local or cloud destination, or
+ creates a versioned backup of it. It includes a GTK4/libadwaita settings app,
+ a user D-Bus daemon, a CLI and an optional GNOME Shell extension.
+ .
+ The package uses the rclone package from Ubuntu instead of bundling a
+ private rclone binary.

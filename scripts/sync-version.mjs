@@ -42,4 +42,15 @@ replaceOnce('scripts/build-deb.sh',
     /VERSION="\$\{VERSION:-[^}]+\}"/,
     `VERSION="\${VERSION:-${version}}"`);
 
+const changelogPath = path.join(root, 'debian/changelog');
+if (fs.existsSync(changelogPath)) {
+    const changelog = fs.readFileSync(changelogPath, 'utf8');
+    if (!/^saveme \([^)]+\)/.test(changelog)) {
+        console.error('Cannot find the version marker in debian/changelog');
+        process.exit(1);
+    }
+    fs.writeFileSync(changelogPath,
+        changelog.replace(/^saveme \([^)]+\)/, `saveme (${version}-0ubuntu1)`));
+}
+
 console.log(`SaveMe version updated to ${version}`);
