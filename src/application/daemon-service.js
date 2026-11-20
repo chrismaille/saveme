@@ -9,6 +9,10 @@ import {
 } from '../domain/backup-layout.js';
 import {isValidRemoteName} from '../domain/remote-name.js';
 import {
+    isValidRemoteFolderName,
+    normalizeRemoteFolderName,
+} from '../domain/remote-folder.js';
+import {
     BACKUP_MANIFEST_FILE,
     parseBackupManifest,
     serializeBackupManifest,
@@ -325,7 +329,7 @@ export class DaemonService {
         return JSON.stringify(saved);
     }
 
-    importJob(payloadJson) {
+    importJob(payloadJson, temporary = false) {
         const payload = JSON.parse(payloadJson);
         delete payload.state;
         if (!payload.id || ![JOB_TYPES.BACKUP, JOB_TYPES.SYNC].includes(payload.type))
@@ -342,7 +346,10 @@ export class DaemonService {
         const saved = existing
             ? this.config.updateJob(payload.id, payload)
             : this.config.addJob(payload);
-        this._writeManifest(saved);
+        // A temporary job is only used to drive the restore dialog. Its
+        // manifest already exists on the remote, so skip the slow write.
+        if (!temporary)
+            this._writeManifest(saved);
         this.manager.addJob(saved);
         this._snapshot(true);
         return JSON.stringify(saved);
@@ -598,7 +605,9 @@ export class DaemonService {
             throw new Error(`Job not found: ${jobId}`);
         if (job.type !== JOB_TYPES.BACKUP)
             return JSON.stringify([]);
-        const root = versionsRootFor(job, this._resolveJobDestination(job));
+        const root = job.restoreRoot
+            ? joinRclonePath(job.restoreRoot, 'versions')
+            : versionsRootFor(job, this._resolveJobDestination(job));
         const result = this.transfer.runCapture(['lsf', root, '--dirs-only', '--max-depth', '1']);
         if (result.exitCode === 3)
             return JSON.stringify([]);
@@ -628,6 +637,22 @@ export class DaemonService {
         return JSON.stringify(entriesFromList(result, {dirsOnly}));
     }
 
+    createRemoteFolder(remote, path, name) {
+        if (!remote || !this.config.getRemote(remote))
+            throw new Error(`Remote not found: ${remote}`);
+        const folder = normalizeRemoteFolderName(name);
+        if (!isValidRemoteFolderName(folder))
+            throw new Error('Invalid folder name.');
+        const cleanPath = String(path || '').replace(/^\/+|\/+$/g, '');
+        const parent = cleanPath ? `${remote}:${cleanPath}` : `${remote}:`;
+        const target = joinRclonePath(parent, folder);
+        this.transfer.mkdir(target);
+        return JSON.stringify({
+            name: folder,
+            path: cleanPath ? `${cleanPath}/${folder}` : folder,
+        });
+    }
+
     listBackup(jobId, version, path, dirsOnly) {
         const job = this.config.getJob(jobId);
         if (!job)
@@ -636,7 +661,13 @@ export class DaemonService {
             throw new Error('This job is not a backup job.');
         const dest = this._resolveJobDestination(job);
         let root;
-        if (version) {
+        if (job.restoreRoot) {
+            if (version && !isValidVersionName(version))
+                throw new Error('Invalid version name.');
+            root = version
+                ? joinRclonePath(joinRclonePath(job.restoreRoot, 'versions'), version)
+                : joinRclonePath(job.restoreRoot, 'current');
+        } else if (version) {
             if (!isValidVersionName(version))
                 throw new Error('Invalid version name.');
             root = joinRclonePath(versionsRootFor(job, dest), version);

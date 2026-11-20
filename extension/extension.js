@@ -16,6 +16,7 @@ export default class SaveMeExtension extends Extension {
     enable() {
         this._snapshot = null;
         this._daemonError = null;
+        this._isDev = Boolean(this.metadata.dev);
         this._rows = new Map();
         this._jobsKey = null;
         this._refreshTimer = 0;
@@ -30,7 +31,19 @@ export default class SaveMeExtension extends Extension {
         this._panelIconKey = null;
         this._panelSpin = null;
         this._pauseAllKey = null;
-        this._indicator.add_child(this._panelIcon);
+        if (this._isDev) {
+            this._devBadge = new St.Label({
+                text: 'DEV',
+                style_class: 'saveme-dev-badge',
+                y_align: Clutter.ActorAlign.CENTER,
+            });
+            const panelBox = new St.BoxLayout();
+            panelBox.add_child(this._panelIcon);
+            panelBox.add_child(this._devBadge);
+            this._indicator.add_child(panelBox);
+        } else {
+            this._indicator.add_child(this._panelIcon);
+        }
         this._indicator.menu.connect('open-state-changed', (_menu, open) => {
             if (open) {
                 this._stopPanelAnimation();
@@ -85,7 +98,7 @@ export default class SaveMeExtension extends Extension {
         });
         const headerBox = new St.BoxLayout({vertical: false, style_class: 'saveme-header'});
         const title = new St.Label({
-            text: 'SaveMe',
+            text: this.metadata.name,
             style_class: 'saveme-title',
             x_expand: true,
         });
@@ -186,7 +199,7 @@ export default class SaveMeExtension extends Extension {
             this._panelIcon.gicon = null;
             this._panelIcon.icon_name = icons[key];
         }
-        this._panelIcon.accessible_name = `SaveMe: ${key}`;
+        this._panelIcon.accessible_name = `${this.metadata.name}: ${key}`;
         this._setPanelAnimation(key === 'running');
     }
 
@@ -345,12 +358,12 @@ export default class SaveMeExtension extends Extension {
         try {
             const program = this._launcher.find('saveme-settings');
             if (!program) {
-                Main.notify('SaveMe', t('SaveMe Settings is not installed'));
+                Main.notify(this.metadata.name, t('SaveMe Settings is not installed'));
                 return;
             }
             this._launcher.spawn([program, ...args]);
         } catch (e) {
-            Main.notify('SaveMe', e.message);
+            Main.notify(this.metadata.name, e.message);
         }
     }
 

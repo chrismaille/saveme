@@ -343,10 +343,12 @@ export const JobEditor = GObject.registerClass({
             this._updateContentSummary();
         }
         this._renderSources();
-        if (localPathFor(descriptor, this.volumes)) {
-            this._showStep(3);
+        const local = Boolean(localPathFor(descriptor, this.volumes));
+        // Remote sources cannot use the content picker. Skip that step instead
+        // of leaving the wizard on the source page after a successful choice.
+        this._showStep(local ? 3 : 4);
+        if (local)
             this._selectSyncContent();
-        }
     }
 
     _buildContentPage() {
@@ -658,7 +660,7 @@ export const JobEditor = GObject.registerClass({
 
     _useNewDestination() {
         this._destinationMode = 'new';
-        this._setDestination({kind: 'local', path: ''});
+        this._setDestination({kind: 'local', path: ''}, {advance: false});
         this._showStep(6);
     }
 
@@ -1173,11 +1175,13 @@ export const JobEditor = GObject.registerClass({
         this._updateTriggerRows();
     }
 
-    _setDestination(descriptor) {
+    _setDestination(descriptor, {advance = true} = {}) {
         this.job.destination = descriptor;
         this.destinationRow?.set_subtitle(
             descriptorDisplay(descriptor, this.volumes) || t('Not selected'));
         this._updateProviderSelection();
+        if (advance && this._destinationSelected())
+            this._showStep(7);
     }
 
     _updateProviderSelection() {
@@ -1257,7 +1261,7 @@ export const JobEditor = GObject.registerClass({
     _forgetRemote(name) {
         if (this.job.destination?.kind === 'remote' &&
             this.job.destination.remote === name)
-            this._setDestination({kind: 'local', path: ''});
+            this._setDestination({kind: 'local', path: ''}, {advance: false});
         let changed = false;
         this.sources = this.sources.map(source => {
             if (source?.kind === 'remote' && source.remote === name) {

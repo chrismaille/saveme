@@ -8,11 +8,9 @@ function rclonePath() {
 }
 
 function configPath() {
-    return GLib.build_filenamev([
-        GLib.get_user_config_dir(),
-        'saveme',
-        'rclone.conf',
-    ]);
+    const configDir = GLib.getenv('SAVEME_CONFIG_DIR') ||
+        GLib.build_filenamev([GLib.get_user_config_dir(), 'saveme']);
+    return GLib.build_filenamev([configDir, 'rclone.conf']);
 }
 
 /**

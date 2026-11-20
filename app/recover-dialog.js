@@ -5,7 +5,9 @@ import Adw from 'gi://Adw?version=1';
 import {RemoteBrowserDialog} from './remote-browser.js';
 import {RecoveryImportDialog} from './recovery-import-dialog.js';
 import {RestoreDialog} from './restore-dialog.js';
+import {JobSaveDialog} from './job-save-dialog.js';
 import {t} from '../src/i18n.js';
+import {uniqueId} from '../src/util.js';
 
 const MODULE_DIR = GLib.path_get_dirname(GLib.filename_from_uri(import.meta.url)[0]);
 const PROVIDERS = [
@@ -143,7 +145,7 @@ export const RecoverDialog = GObject.registerClass({
         this.statusRow.add_suffix(this.spinner);
         locationGroup.add(this.statusRow);
         page.add(locationGroup);
-        this.resultsGroup = new Adw.PreferencesGroup({title: t('Backups found')});
+        this.resultsGroup = new Adw.PreferencesGroup({title: t('Jobs')});
         page.add(this.resultsGroup);
         return page;
     }
@@ -195,7 +197,7 @@ export const RecoverDialog = GObject.registerClass({
         this.backButton.visible = true;
         this.stack.set_visible_child_name('results');
         this.locationRow.set_subtitle(path);
-        this.statusRow.set_subtitle(t('Checking backups…'));
+        this.statusRow.set_subtitle(t('Checking jobs…'));
         this.spinner.visible = true;
         this._clearResults();
         try {
@@ -316,19 +318,31 @@ export const RecoverDialog = GObject.registerClass({
 
     async _restoreEntry(entry, result) {
         const job = JSON.parse(JSON.stringify(entry.job));
-        job.id = entry.id;
+        // Keep the temporary restore job separate from a real job that may
+        // already use the backup id. Closing Restore must not delete it.
+        job.id = uniqueId('job_restore_');
+        job.restoreRoot = entry.backupPath;
         if (result.destination)
             job.destination = result.destination;
         job.destinationLayout = 'saveMe';
+        const progress = new JobSaveDialog(this,
+            job.name || entry.id, {mode: 'restore'});
+        progress.present();
         try {
-            const saved = await this.client.importJob(job);
+            // The temporary job only exists while the restore dialog is open.
+            // It does not need to rewrite the manifest on the remote.
+            const saved = await this.client.importJob(job, true);
+            progress.setStage(2);
             await this.parentWindow.refresh();
-            new RestoreDialog(this.parentWindow, saved, {
+            const restore = new RestoreDialog(this.parentWindow, saved, {
                 temporaryJob: true,
-            }).present();
+            });
+            progress.complete();
+            progress.close();
+            restore.present();
             this.close();
         } catch (e) {
-            this.statusRow.set_subtitle(t('Cannot import backup: {message}', {
+            progress.fail(t('Cannot prepare restore: {message}', {
                 message: e.message,
             }));
         }

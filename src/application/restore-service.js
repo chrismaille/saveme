@@ -2,6 +2,7 @@ import {
     backupCurrentFor,
     isSafeRelativePath,
     isValidVersionName,
+    joinRclonePath,
     versionsRootFor,
 } from '../domain/backup-layout.js';
 import {JOB_TYPES} from '../domain/job.js';
@@ -24,7 +25,12 @@ export class RestoreService {
         if (payload.version) {
             if (!isValidVersionName(payload.version))
                 throw new Error('Invalid version name.');
-            source = `${versionsRootFor(job, destination)}/${payload.version}`;
+            const versionsRoot = job.restoreRoot
+                ? joinRclonePath(job.restoreRoot, 'versions')
+                : versionsRootFor(job, destination);
+            source = `${versionsRoot}/${payload.version}`;
+        } else if (job.restoreRoot && job.type === JOB_TYPES.BACKUP) {
+            source = joinRclonePath(job.restoreRoot, 'current');
         } else {
             source = job.type === JOB_TYPES.BACKUP
                 ? backupCurrentFor(job, destination)

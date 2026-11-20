@@ -373,7 +373,9 @@ export const AccountDialog = GObject.registerClass({
                 return ['s3Endpoint', 's3Region', 's3Access', 's3Secret', 'auth'];
             return ['auth'];
         }
-        const steps = ['provider'];
+        const steps = [];
+        if (!this._provider())
+            steps.push('provider');
         if (this._provider() === 'onedrive')
             steps.push('onedrive');
         if (this._provider() === 'nextcloud')
@@ -453,7 +455,7 @@ export const AccountDialog = GObject.registerClass({
         this._syncNameDefault();
         this._updateHeader();
         if (this._currentStep === 'provider')
-            this._showStep(this._steps()[1]);
+            this._showStep(this._steps()[0]);
     }
 
     _renderProviderSelection() {

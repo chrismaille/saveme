@@ -176,6 +176,35 @@ make deb
 ./scripts/install.sh
 ```
 
+### Isolated development build
+
+`scripts/install-dev.sh` installs a development copy without touching the
+production package. It has its own app, daemon, D-Bus name, configuration,
+state and GNOME extension:
+
+- App command: `saveme-dev` (also “SaveMe Dev” in the app menu)
+- App ID: `io.github.chrismaille.SaveMe.Dev.Settings`
+- Daemon: `saveme-dev-daemon` · `saveme-dev.service`
+- Config: `~/.config/saveme-dev`
+- State: `~/.local/state/saveme-dev`
+- Extension: `saveme-dev@chrismaille.github.io`
+
+```bash
+./scripts/install-dev.sh
+saveme-dev
+```
+
+The development install requires `gjs`, `zip` and rclone. It uses
+`tools/rclone` from `make setup` when available, otherwise rclone from `PATH`.
+The app installs and enables the development extension. It appears in the
+panel with the development icon and a **DEV** badge, and the menu header reads
+**SaveMe Dev**. In Wayland you may need to log out and back in before its panel
+icon appears. Uninstall it with:
+
+```bash
+./scripts/install-dev.sh --uninstall --yes
+```
+
 Full instructions: [docs/INSTALL.md](docs/INSTALL.md).
 
 ### First run

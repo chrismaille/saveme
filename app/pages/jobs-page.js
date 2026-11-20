@@ -46,6 +46,7 @@ export class JobsPage {
         this.detailsJobId = null;
         this.detail = null;
         this._updatingSelection = false;
+        this._settingEnabled = false;
         this.appMetrics = null;
         this._sizeCache = new Map();
         this._sizePending = new Set();
@@ -158,6 +159,7 @@ export class JobsPage {
             job.name,
             job.type,
             job.enabled,
+            job.recovered,
             JSON.stringify(job.options),
             JSON.stringify(job.backup),
             JSON.stringify(job.filters),
@@ -338,8 +340,8 @@ export class JobsPage {
         row.set_child(box);
         if (job.draft)
             row.add_css_class('saveme-job-draft');
-        const entry = {row, dot, name, status, typeBadge, sourcesBadge, subtitle,
-            paths, progress, job};
+        const entry = {row, dot, name, status, typeBadge,
+            sourcesBadge, subtitle, paths, progress, job};
         this._updateSidebarProgress(entry, job);
         return entry;
     }
@@ -555,6 +557,38 @@ export class JobsPage {
         statusRow.add_suffix(controls);
         statusGroup.add(statusRow);
 
+        const enabledRow = new Adw.SwitchRow({
+            title: t('Enabled'),
+            subtitle: t('Allow this job to run according to its schedule.'),
+            active: job.enabled !== false,
+            visible: !job.draft,
+        });
+        enabledRow.connect('notify::active', () => {
+            if (this._settingEnabled)
+                return;
+            const current = this.jobs.find(item => item.id === job.id);
+            if (!current)
+                return;
+            const enabled = enabledRow.active;
+            if (enabled === (current.enabled !== false))
+                return;
+            this._settingEnabled = true;
+            enabledRow.sensitive = false;
+            this.window.client.setJobEnabled(job.id, enabled)
+                .then(() => this.window.toast(enabled
+                    ? t('Job enabled.')
+                    : t('Job disabled.')))
+                .catch(e => {
+                    enabledRow.active = current.enabled !== false;
+                    this.window.toast(cleanError(e.message));
+                })
+                .finally(() => {
+                    this._settingEnabled = false;
+                    enabledRow.sensitive = true;
+                });
+        });
+        statusGroup.add(enabledRow);
+
         const progressBox = new Gtk.Box({
             orientation: Gtk.Orientation.VERTICAL,
             spacing: 6,
@@ -622,7 +656,7 @@ export class JobsPage {
             headlineStatus,
             headlineEta,
             destinationRow: this._baseRow,
-            controls: {playButton, pauseButton, stopButton},
+            controls: {playButton, pauseButton, stopButton, enabledRow},
             stats: stats.rows,
         };
         this._updateDetails(job);
@@ -1042,10 +1076,34 @@ export class JobsPage {
         row.add_suffix(button);
     }
 
-    _play(job) {
-        this.window.client.playJob(job.id)
-            .then(() => this.window.toast(t('Job started.')))
-            .catch(e => this.window.toast(cleanError(e.message)));
+    selectJob(jobId) {
+        const entry = this.rows.get(jobId);
+        if (!entry)
+            return;
+        this.selectedId = jobId;
+        this._updatingSelection = true;
+        this.listBox.select_row(entry.row);
+        this._updatingSelection = false;
+        entry.row.grab_focus();
+        this._renderDetails();
+    }
+
+    async _play(job) {
+        try {
+            // Imported jobs start disabled. Pressing Play is an explicit
+            // confirmation, so enable the job before starting it.
+            if (job.enabled === false) {
+                await this.window.client.setJobEnabled(job.id, true);
+                job.enabled = true;
+                const current = this.jobs.find(item => item.id === job.id);
+                if (current)
+                    current.enabled = true;
+            }
+            await this.window.client.playJob(job.id);
+            this.window.toast(t('Job started.'));
+        } catch (e) {
+            this.window.toast(cleanError(e.message));
+        }
     }
 
     _pause(job) {
@@ -1195,7 +1253,12 @@ export class JobsPage {
         this.detail.controls.playButton.visible = !draft;
         this.detail.controls.pauseButton.visible = !draft;
         this.detail.controls.stopButton.visible = !draft;
-        this.detail.controls.playButton.sensitive = usable && !running && !queued;
+        this.detail.controls.enabledRow.visible = !draft;
+        this.detail.controls.enabledRow.sensitive = !draft;
+        this._settingEnabled = true;
+        this.detail.controls.enabledRow.active = job.enabled !== false;
+        this._settingEnabled = false;
+        this.detail.controls.playButton.sensitive = !draft && !running && !queued;
         this.detail.controls.pauseButton.sensitive = usable && !paused && !stopped;
         this.detail.controls.stopButton.sensitive = usable && !stopped;
     }

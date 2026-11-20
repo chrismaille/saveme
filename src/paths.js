@@ -1,17 +1,28 @@
 import GLib from 'gi://GLib';
 
-export const DAEMON_APP_ID = 'io.github.chrismaille.SaveMe.Daemon';
-export const DAEMON_BUS_NAME = 'io.github.chrismaille.SaveMe.Daemon';
-export const DAEMON_INTERFACE = 'io.github.chrismaille.SaveMe.Daemon';
-export const DAEMON_OBJECT_PATH = '/io/github/chrismaille/SaveMe/Daemon';
-export const EXTENSION_UUID = 'saveme@chrismaille.github.io';
+function env(name, fallback) {
+    return GLib.getenv(name) || fallback;
+}
+
+export const DAEMON_APP_ID =
+    env('SAVEME_DAEMON_APP_ID', 'io.github.chrismaille.SaveMe.Daemon');
+export const DAEMON_BUS_NAME =
+    env('SAVEME_DAEMON_BUS_NAME', 'io.github.chrismaille.SaveMe.Daemon');
+export const DAEMON_INTERFACE =
+    env('SAVEME_DAEMON_INTERFACE', 'io.github.chrismaille.SaveMe.Daemon');
+export const DAEMON_OBJECT_PATH =
+    env('SAVEME_DAEMON_OBJECT_PATH', '/io/github/chrismaille/SaveMe/Daemon');
+export const EXTENSION_UUID =
+    env('SAVEME_EXTENSION_UUID', 'saveme@chrismaille.github.io');
 
 export function configDir() {
-    return GLib.build_filenamev([GLib.get_user_config_dir(), 'saveme']);
+    return env('SAVEME_CONFIG_DIR',
+        GLib.build_filenamev([GLib.get_user_config_dir(), 'saveme']));
 }
 
 export function stateDir() {
-    return GLib.build_filenamev([GLib.get_user_state_dir(), 'saveme']);
+    return env('SAVEME_STATE_DIR',
+        GLib.build_filenamev([GLib.get_user_state_dir(), 'saveme']));
 }
 
 export function configFile() {
@@ -57,7 +68,7 @@ export function tmpDir() {
 }
 
 export function bundledRclone() {
-    return '/usr/lib/saveme/bin/rclone';
+    return env('SAVEME_BUNDLED_RCLONE', '/usr/lib/saveme/bin/rclone');
 }
 
 export function projectRclone() {

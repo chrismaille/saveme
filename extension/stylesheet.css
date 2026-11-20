@@ -142,3 +142,13 @@
 .saveme-stop-button {
     color: #ef5350;
 }
+
+.saveme-dev-badge {
+    font-size: 0.62em;
+    font-weight: 800;
+    color: #e5a50a;
+    background: rgba(229, 165, 10, 0.18);
+    border-radius: 4px;
+    padding: 1px 4px;
+    margin-left: 4px;
+}

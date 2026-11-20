@@ -2,6 +2,7 @@ import GObject from 'gi://GObject';
 import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
 import {RestoreDialog} from './restore-dialog.js';
+import {JobSaveDialog} from './job-save-dialog.js';
 import {t} from '../src/i18n.js';
 
 function destinationDisplay(descriptor) {
@@ -98,8 +99,11 @@ export const RecoveryImportDialog = GObject.registerClass({
 
         const actions = new Adw.PreferencesGroup({
             title: t('Choose an action'),
-            description: t('Both options recreate the job configuration. Neither option ' +
-                'writes to the source folder.'),
+            description: this.allowRestore
+                ? t('Both options recreate the job configuration. Neither option ' +
+                    'writes to the source folder.')
+                : t('Importing recreates the job configuration. It does not ' +
+                    'write to the source folder.'),
         });
         actions.add(new Adw.ActionRow({
             title: t('Import job only'),
@@ -155,7 +159,10 @@ export const RecoveryImportDialog = GObject.registerClass({
         const cancelButton = new Gtk.Button({label: t('Cancel')});
         cancelButton.connect('clicked', () => this.close());
         this.actionBox.append(cancelButton);
-        this.importButton = new Gtk.Button({label: t('Import job')});
+        this.importButton = new Gtk.Button({
+            label: t('Import job'),
+            css_classes: this.allowRestore ? [] : ['suggested-action'],
+        });
         this.importButton.connect('clicked', () => this._import(false));
         this.actionBox.append(this.importButton);
         if (this.allowRestore && this.entry.job.type === 'backup') {
@@ -265,6 +272,9 @@ export const RecoveryImportDialog = GObject.registerClass({
         if (this._busy)
             return;
         this._setBusy(true);
+        const progress = new JobSaveDialog(this,
+            this.entry.job.name || this.entry.id, {mode: 'import'});
+        progress.present();
         try {
             const job = JSON.parse(JSON.stringify(this.entry.job));
             job.id = this.entry.id;
@@ -275,7 +285,12 @@ export const RecoveryImportDialog = GObject.registerClass({
             const enable = Boolean(this.enableRow?.active);
             if (enable)
                 await this.parentWindow.client.setJobEnabled(saved.id, true);
+            progress.setStage(2);
             await this.parentWindow.refresh();
+            this.parentWindow.showView?.('jobs');
+            this.parentWindow.jobsPage?.selectJob(saved.id);
+            progress.complete();
+            progress.close();
             if (restore && saved.type === 'backup')
                 new RestoreDialog(this.parentWindow, saved).present();
             else
@@ -285,12 +300,9 @@ export const RecoveryImportDialog = GObject.registerClass({
             this.close();
             this.recoverDialog?.close();
         } catch (e) {
-            const dialog = new Adw.AlertDialog({
-                heading: t('Cannot import backup'),
-                body: e.message,
-            });
-            dialog.add_response('ok', t('OK'));
-            dialog.present(this);
+            progress.fail(t('Cannot import backup: {message}', {
+                message: e.message,
+            }));
         } finally {
             this._setBusy(false);
         }

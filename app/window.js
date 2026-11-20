@@ -32,13 +32,14 @@ export const SaveMeWindow = GObject.registerClass({
     } = {}) {
         super({
             application: app,
-            title: 'SaveMe',
+            title: GLib.getenv('SAVEME_APP_TITLE') || 'SaveMe',
             default_width: 980,
             default_height: 720,
         });
         this.app = app;
         this.client = client;
-        this.set_icon_name('io.github.chrismaille.SaveMe');
+        this.set_icon_name(GLib.getenv('SAVEME_ICON_NAME') ||
+            'io.github.chrismaille.SaveMe');
         this.monitor = monitor;
         this.appLog = appLog;
         this.volumes = new VolumeResolver();
@@ -199,7 +200,8 @@ export const SaveMeWindow = GObject.registerClass({
             // Continue and spawn it.
         }
         try {
-            const program = this.launcher.find('saveme-daemon');
+            const configured = GLib.getenv('SAVEME_DAEMON_PROGRAM');
+            const program = configured || this.launcher.find('saveme-daemon');
             let argv = null;
             if (program) {
                 argv = [program];

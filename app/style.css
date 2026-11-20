@@ -127,3 +127,46 @@
     font-family: monospace;
     font-size: 0.9em;
 }
+
+.saveme-folder-row {
+    border-radius: 8px;
+    margin: 1px 4px;
+}
+
+.saveme-folder-row:hover {
+    background: rgba(127, 127, 127, 0.08);
+}
+
+.saveme-folder-row.saveme-folder-selected {
+    background: rgba(53, 132, 228, 0.22);
+    box-shadow: inset 0 0 0 1px rgba(53, 132, 228, 0.45);
+}
+
+.saveme-folder-selected label {
+    color: #3584e4;
+    font-weight: 600;
+}
+
+.saveme-folder-selected image {
+    color: #3584e4;
+}
+
+.saveme-folder-check {
+    color: #3584e4;
+}
+
+.saveme-tree-expander {
+    min-width: 22px;
+    min-height: 22px;
+    padding: 0;
+}
+
+.saveme-selection-bar {
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: rgba(127, 127, 127, 0.10);
+}
+
+.saveme-selection-path {
+    font-weight: 600;
+}

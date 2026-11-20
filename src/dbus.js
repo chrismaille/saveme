@@ -1,6 +1,11 @@
+import GLib from 'gi://GLib';
+
+const INTERFACE_NAME = GLib.getenv('SAVEME_DAEMON_INTERFACE') ||
+    'io.github.chrismaille.SaveMe.Daemon';
+
 export const DAEMON_INTERFACE = `
 <node>
-  <interface name="io.github.chrismaille.SaveMe.Daemon">
+  <interface name="${INTERFACE_NAME}">
     <method name="GetSnapshot">
       <arg type="s" direction="out"/>
     </method>
@@ -39,6 +44,7 @@ export const DAEMON_INTERFACE = `
     </method>
     <method name="ImportJob">
       <arg type="s" direction="in"/>
+      <arg type="b" direction="in"/>
       <arg type="s" direction="out"/>
     </method>
     <method name="InspectBackup">
@@ -81,6 +87,12 @@ export const DAEMON_INTERFACE = `
       <arg type="s" direction="in"/>
       <arg type="s" direction="in"/>
       <arg type="b" direction="in"/>
+      <arg type="s" direction="out"/>
+    </method>
+    <method name="CreateRemoteFolder">
+      <arg type="s" direction="in"/>
+      <arg type="s" direction="in"/>
+      <arg type="s" direction="in"/>
       <arg type="s" direction="out"/>
     </method>
     <method name="ListBackup">

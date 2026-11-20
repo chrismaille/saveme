@@ -1,7 +1,13 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
-export const EXTENSION_UUID = 'saveme@chrismaille.github.io';
+export const EXTENSION_UUID =
+    GLib.getenv('SAVEME_EXTENSION_UUID') || 'saveme@chrismaille.github.io';
+
+const EXTENSION_ZIP = GLib.getenv('SAVEME_EXTENSION_ZIP') ||
+    '/usr/share/saveme/extension.zip';
+const EXTENSION_SYSTEM_DIR = GLib.getenv('SAVEME_EXTENSION_SYSTEM_DIR') ||
+    `/usr/share/gnome-shell/extensions/${EXTENSION_UUID}`;
 
 function exists(path) {
     return Gio.File.new_for_path(path).query_exists(null);
@@ -27,8 +33,8 @@ export class ExtensionManager {
         launcher,
         logger = null,
         uuid = EXTENSION_UUID,
-        zipPath = '/usr/share/saveme/extension.zip',
-        systemDir = `/usr/share/gnome-shell/extensions/${EXTENSION_UUID}`,
+        zipPath = EXTENSION_ZIP,
+        systemDir = EXTENSION_SYSTEM_DIR,
         userDir = GLib.build_filenamev([
             GLib.get_user_data_dir(),
             'gnome-shell',

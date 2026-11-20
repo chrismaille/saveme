@@ -57,8 +57,8 @@ export class DaemonGateway {
         return this.client.saveJob(job);
     }
 
-    importJob(job) {
-        return this.client.importJob(job);
+    importJob(job, temporary = false) {
+        return this.client.importJob(job, temporary);
     }
 
     inspectBackup(path) {
@@ -95,6 +95,10 @@ export class DaemonGateway {
 
     listRemote(remote, path = '', dirsOnly = false) {
         return this.client.listRemote(remote, path, dirsOnly);
+    }
+
+    createRemoteFolder(remote, path = '', name = '') {
+        return this.client.createRemoteFolder(remote, path, name);
     }
 
     listBackup(jobId, version = '', path = '', dirsOnly = false) {

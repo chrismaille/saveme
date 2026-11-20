@@ -766,6 +766,24 @@ export default suite('application/daemon-service', [
             id: 'legacy', type: 'sync', destinationLayout: 'direct',
         })), /Legacy direct/);
     }),
+    test('temporary imports skip the remote manifest write', () => {
+        const ctx = makeService();
+        const job = {
+            id: 'job_temp',
+            name: 'Temporary',
+            type: 'backup',
+            sources: [{kind: 'local', path: '/src'}],
+            destination: {kind: 'local', path: '/dst'},
+            destinationLayout: 'saveMe',
+            trigger: {mode: 'interval', intervalMinutes: 60},
+        };
+        const before = ctx.transfer.files.size;
+        const saved = JSON.parse(ctx.service.importJob(JSON.stringify(job), true));
+        assertEqual(saved.id, 'job_temp');
+        assertEqual(saved.recovered, true);
+        assertEqual(ctx.transfer.files.size, before);
+    }),
+
     test('inspect and import sync manifests', () => {
         const ctx = makeService();
         const job = {
@@ -841,6 +859,45 @@ export default suite('application/daemon-service', [
             throw new Error('size unavailable');
         };
         assertEqual(JSON.parse(ctx.service.listRemote('drive', '', true)).length, 1);
+    }),
+    test('createRemoteFolder validates names and creates nested folders', () => {
+        const ctx = makeService();
+        assertThrows(() => ctx.service.createRemoteFolder('missing', '', 'New'),
+            /Remote not found/);
+        assertThrows(() => ctx.service.createRemoteFolder('drive', '', ''),
+            /Invalid folder name/);
+        assertThrows(() => ctx.service.createRemoteFolder('drive', '', '..'),
+            /Invalid folder name/);
+        assertThrows(() => ctx.service.createRemoteFolder('drive', '', 'a/b'),
+            /Invalid folder name/);
+        const nested = JSON.parse(ctx.service.createRemoteFolder(
+            'drive', 'SaveMe', 'New folder'));
+        assertEqual(nested.name, 'New folder');
+        assertEqual(nested.path, 'SaveMe/New folder');
+        assert(ctx.transfer.paths.has('drive:SaveMe/New folder'));
+        const root = JSON.parse(ctx.service.createRemoteFolder('drive', '', 'Root'));
+        assertEqual(root.path, 'Root');
+        assert(ctx.transfer.paths.has('drive:Root'));
+    }),
+
+    test('temporary restore jobs list from restoreRoot', () => {
+        const ctx = makeService();
+        ctx.config.jobs = [{
+            ...backupJob(),
+            id: 'job_restore',
+            restoreRoot: 'drive:Backups/SaveMe/job_1',
+        }];
+        ctx.transfer.captureHandler = () => ({
+            exitCode: 0,
+            stdout: '',
+            stderr: '',
+        });
+        ctx.service.listVersions('job_restore');
+        assert(ctx.transfer.captures.at(-1)
+            .includes('drive:Backups/SaveMe/job_1/versions'));
+        ctx.service.listBackup('job_restore', '', 'x', false);
+        assert(ctx.transfer.captures.at(-1)
+            .includes('drive:Backups/SaveMe/job_1/current/x'));
     }),
     test('listBackup handles current, version and invalid inputs', () => {
         const ctx = makeService();

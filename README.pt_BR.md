@@ -181,6 +181,35 @@ make deb
 ./scripts/install.sh
 ```
 
+### Build de desenvolvimento isolado
+
+`scripts/install-dev.sh` instala uma cópia de desenvolvimento sem tocar no
+pacote de produção. Ela tem app, daemon, nome D-Bus, configuração, estado e
+extensão do GNOME próprios:
+
+- Comando do app: `saveme-dev` (também “SaveMe Dev” no menu)
+- ID do app: `io.github.chrismaille.SaveMe.Dev.Settings`
+- Daemon: `saveme-dev-daemon` · `saveme-dev.service`
+- Configuração: `~/.config/saveme-dev`
+- Estado: `~/.local/state/saveme-dev`
+- Extensão: `saveme-dev@chrismaille.github.io`
+
+```bash
+./scripts/install-dev.sh
+saveme-dev
+```
+
+O build de desenvolvimento requer `gjs`, `zip` e rclone. Ele usa o
+`tools/rclone` do `make setup` quando disponível; caso contrário, o rclone do
+`PATH`. O app instala e ativa a extensão de desenvolvimento. Ela aparece no painel com
+o ícone de desenvolvimento e um selo **DEV**, e o cabeçalho do menu mostra
+**SaveMe Dev**. Em Wayland, pode ser necessário sair e entrar novamente para o
+ícone aparecer no painel. Para desinstalar:
+
+```bash
+./scripts/install-dev.sh --uninstall --yes
+```
+
 Instruções completas: [docs/INSTALL.md](docs/INSTALL.md).
 
 ### Primeira execução

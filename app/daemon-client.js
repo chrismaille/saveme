@@ -1,9 +1,12 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
-export const DAEMON_BUS_NAME = 'io.github.chrismaille.SaveMe.Daemon';
-export const DAEMON_OBJECT_PATH = '/io/github/chrismaille/SaveMe/Daemon';
-export const DAEMON_INTERFACE = 'io.github.chrismaille.SaveMe.Daemon';
+export const DAEMON_BUS_NAME =
+    GLib.getenv('SAVEME_DAEMON_BUS_NAME') || 'io.github.chrismaille.SaveMe.Daemon';
+export const DAEMON_OBJECT_PATH =
+    GLib.getenv('SAVEME_DAEMON_OBJECT_PATH') || '/io/github/chrismaille/SaveMe/Daemon';
+export const DAEMON_INTERFACE =
+    GLib.getenv('SAVEME_DAEMON_INTERFACE') || 'io.github.chrismaille.SaveMe.Daemon';
 
 export class DaemonClient {
     constructor() {
@@ -134,9 +137,12 @@ export class DaemonClient {
         return JSON.parse(reply.deepUnpack()[0]);
     }
 
-    async importJob(job) {
+    async importJob(job, temporary = false) {
+        // Import writes the job manifest to the destination, which can be a
+        // slow cloud remote.
         const reply = await this._call('ImportJob',
-            new GLib.Variant('(s)', [JSON.stringify(job)]));
+            new GLib.Variant('(sb)', [JSON.stringify(job), Boolean(temporary)]),
+            180_000);
         return JSON.parse(reply.deepUnpack()[0]);
     }
 
@@ -191,6 +197,12 @@ export class DaemonClient {
     async listRemote(remote, path = '', dirsOnly = false) {
         const reply = await this._call('ListRemote',
             new GLib.Variant('(ssb)', [remote, path, dirsOnly]), 60_000);
+        return JSON.parse(reply.deepUnpack()[0]);
+    }
+
+    async createRemoteFolder(remote, path, name) {
+        const reply = await this._call('CreateRemoteFolder',
+            new GLib.Variant('(sss)', [remote, path, name]), 60_000);
         return JSON.parse(reply.deepUnpack()[0]);
     }
 

@@ -47,7 +47,9 @@ lint: setup-lint
 test: setup
 	sh -n scripts/install.sh
 	sh -n scripts/uninstall.sh
+	sh -n scripts/install-dev.sh
 	sh tests/shell/installer-dry-run.sh
+	sh tests/shell/install-dev-dry-run.sh
 	$(PYTHON) -m unittest discover -s tests/python -p 'test_*.py'
 	SAVEME_RCLONE=$(abspath $(RCLONE)) gjs -m tests/run.js
 

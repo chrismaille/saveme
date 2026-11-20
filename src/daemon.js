@@ -88,7 +88,7 @@ export const SaveMeDaemonApplication = GObject.registerClass({
 
     vfunc_startup() {
         super.vfunc_startup();
-        GLib.set_application_name('SaveMe');
+        GLib.set_application_name(GLib.getenv('SAVEME_APP_NAME') || 'SaveMe');
         ensureDir(stateDir(), 0o700);
         this._logger = new Logger({
             name: 'daemon',
@@ -341,11 +341,15 @@ export const SaveMeDaemonApplication = GObject.registerClass({
         const action = new Gio.SimpleAction({name: 'open-settings'});
         action.connect('activate', () => {
             try {
-                const program = GLib.find_program_in_path('saveme-settings');
-                if (program)
+                const configured = GLib.getenv('SAVEME_SETTINGS_PROGRAM');
+                const program = configured ||
+                    GLib.find_program_in_path('saveme-settings');
+                if (program) {
                     Gio.Subprocess.new([program], Gio.SubprocessFlags.NONE);
-                else
-                    Gio.Subprocess.new(['gjs', '-m', 'app/main.js'], Gio.SubprocessFlags.NONE);
+                } else {
+                    const main = GLib.getenv('SAVEME_APP_MAIN') || 'app/main.js';
+                    Gio.Subprocess.new(['gjs', '-m', main], Gio.SubprocessFlags.NONE);
+                }
             } catch (e) {
                 this._logger?.warn(`Cannot open settings: ${e.message}`);
             }

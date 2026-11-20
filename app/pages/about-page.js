@@ -1,3 +1,4 @@
+import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
 import {t} from '../../src/i18n.js';
@@ -16,7 +17,8 @@ export class AboutPage {
             valign: Gtk.Align.CENTER,
         });
         hero.append(new Gtk.Image({
-            icon_name: 'io.github.chrismaille.SaveMe',
+            icon_name: GLib.getenv('SAVEME_ICON_NAME') ||
+                'io.github.chrismaille.SaveMe',
             pixel_size: 96,
         }));
         const heroText = new Gtk.Box({
@@ -25,7 +27,7 @@ export class AboutPage {
             valign: Gtk.Align.CENTER,
         });
         const title = new Gtk.Label({
-            label: 'SaveMe',
+            label: GLib.getenv('SAVEME_APP_TITLE') || 'SaveMe',
             xalign: 0,
             css_classes: ['title-1'],
         });

@@ -32,6 +32,7 @@ export default suite('adapters/dbus/api', [
         api.PauseAll(1);
         assertEqual(api.SaveJob('{}'), 'saveJob-result');
         assertEqual(api.ImportJob('{}'), 'importJob-result');
+        assertEqual(api.ImportJob('{}', 1), 'importJob-result');
         assertEqual(api.InspectBackup('/SaveMe'), 'inspectBackup-result');
         assertEqual(api.RemoteWebUrl('onedrive', 'SaveMe/job'),
             'remoteWebUrl-result');
@@ -43,6 +44,8 @@ export default suite('adapters/dbus/api', [
         assertEqual(api.ListRuns('job', 5), 'listRuns-result');
         assertEqual(api.ListVersions('job'), 'listVersions-result');
         assertEqual(api.ListRemote('drive', 'x', 1), 'listRemote-result');
+        assertEqual(api.CreateRemoteFolder('drive', 'x', 'New folder'),
+            'createRemoteFolder-result');
         assertEqual(api.ListBackup('job', 'v', 'x', 0), 'listBackup-result');
         assertEqual(api.Restore('{}'), 'restore-result');
         assertEqual(api.BeginRemoteAuth('drive', 'x', '{}'), 'beginRemoteAuth-result');
@@ -68,6 +71,11 @@ export default suite('adapters/dbus/api', [
             JSON.stringify([true]));
         assertEqual(JSON.stringify(calls.find(call => call[0] === 'listRemote')[1]),
             JSON.stringify(['drive', 'x', true]));
+        assertEqual(
+            JSON.stringify(calls.find(call => call[0] === 'createRemoteFolder')[1]),
+            JSON.stringify(['drive', 'x', 'New folder']));
+        assertEqual(JSON.stringify(calls.filter(call => call[0] === 'importJob')
+            .map(call => call[1])), JSON.stringify([['{}', false], ['{}', true]]));
     }),
     test('Quit without a callback is a no-op', () => {
         const service = {snapshotJson: () => '{}'};

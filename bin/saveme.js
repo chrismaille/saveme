@@ -33,6 +33,16 @@ import {
 import {humanBytes, removeRecursive, sleep} from '../src/util.js';
 
 const VERSION = '1.0.0-dev';
+const APP_MAIN = GLib.getenv('SAVEME_APP_MAIN') || '/usr/lib/saveme/app/main.js';
+const DAEMON_SERVICE = GLib.getenv('SAVEME_DAEMON_SERVICE') || 'saveme.service';
+const DEV_BUILD = GLib.getenv('SAVEME_DEV_BUILD') === '1';
+const CACHE_DIR = GLib.getenv('SAVEME_CACHE_DIR') ||
+    GLib.build_filenamev([GLib.get_user_cache_dir(), 'saveme']);
+const RUNTIME_DIR = GLib.getenv('SAVEME_RUNTIME_DIR') ||
+    GLib.build_filenamev([
+        GLib.getenv('XDG_RUNTIME_DIR') || GLib.get_tmp_dir(),
+        'saveme',
+    ]);
 const BOOLEAN_OPTIONS = new Set([
     'dry-run', 'force', 'help', 'no-initial', 'verbose', 'json',
     'purge', 'yes',
@@ -369,10 +379,10 @@ async function commandUninstall(options) {
     print('Stopping daemon…');
     await quitDaemon();
     await sleep(300);
-    runCommand(['pkill', '-TERM', '-f', '/usr/lib/saveme/app/main.js']);
+    runCommand(['pkill', '-TERM', '-f', APP_MAIN]);
 
     print('Disabling systemd user service…');
-    runCommand(['systemctl', '--user', 'disable', '--now', 'saveme.service']);
+    runCommand(['systemctl', '--user', 'disable', '--now', DAEMON_SERVICE]);
 
     print('Removing GNOME Shell extension…');
     const extensionExit = runCommand(['gnome-extensions', 'uninstall', EXTENSION_UUID]);
@@ -393,11 +403,8 @@ async function commandUninstall(options) {
         const paths = [
             configDir(),
             stateDir(),
-            GLib.build_filenamev([GLib.get_user_cache_dir(), 'saveme']),
-            GLib.build_filenamev([
-                GLib.getenv('XDG_RUNTIME_DIR') || GLib.get_tmp_dir(),
-                'saveme',
-            ]),
+            CACHE_DIR,
+            RUNTIME_DIR,
             GLib.build_filenamev([
                 GLib.path_get_dirname(stateDir()),
                 'saveme-install.log',
@@ -416,13 +423,9 @@ async function commandUninstall(options) {
             logsDir(),
             tmpDir(),
             filtersDir(),
-            GLib.build_filenamev([GLib.get_user_cache_dir(), 'saveme']),
+            CACHE_DIR,
         ];
-        const runtime = GLib.build_filenamev([
-            GLib.getenv('XDG_RUNTIME_DIR') || GLib.get_tmp_dir(),
-            'saveme',
-        ]);
-        transient.push(runtime);
+        transient.push(RUNTIME_DIR);
         for (const path of transient) {
             if (GLib.file_test(path, GLib.FileTest.EXISTS)) {
                 removeRecursive(path);
@@ -436,6 +439,10 @@ async function commandUninstall(options) {
     }
 
     print('');
+    if (DEV_BUILD) {
+        print('SaveMe Dev development files were removed.');
+        return 0;
+    }
     print('Now remove the system package:');
     print('  sudo apt remove saveme');
     return 0;

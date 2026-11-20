@@ -35,6 +35,26 @@ export default suite('application/restore-service', [
             `/dst/SaveMe/job_test/versions/${version}/a/b.txt`);
         assertEqual(transfer.captures[0][1], result.source);
     }),
+    test('restores from a temporary restoreRoot', () => {
+        const {service} = restoreContext();
+        const job = makeJob('backup');
+        job.restoreRoot = 'drive:Backups/SaveMe/job_test';
+        const current = service.restore({
+            job,
+            destination: '/dst',
+            payload: {target: '/restore', path: '', version: '', dryRun: false},
+        });
+        assertEqual(current.source,
+            'drive:Backups/SaveMe/job_test/current');
+        const version = '20260102T030405-000-run_1';
+        const dated = service.restore({
+            job,
+            destination: '/dst',
+            payload: {target: '/restore', path: '', version, dryRun: false},
+        });
+        assertEqual(dated.source,
+            `drive:Backups/SaveMe/job_test/versions/${version}`);
+    }),
     test('restores a sync destination and supports dry-run', () => {
         const {transfer, service} = restoreContext();
         const result = service.restore({

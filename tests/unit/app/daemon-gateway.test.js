@@ -33,6 +33,7 @@ function fakeClient() {
         'listRuns',
         'listVersions',
         'listRemote',
+        'createRemoteFolder',
         'listBackup',
         'restore',
         'beginRemoteAuth',
@@ -98,12 +99,16 @@ export default suite('app/gateway/daemon-gateway', [
         assertEqual(await gateway.listVersions('job'), 'listVersions-result');
         assertEqual(await gateway.listRemote('drive'), 'listRemote-result');
         assertEqual(await gateway.listRemote('drive', 'x', true), 'listRemote-result');
+        assertEqual(await gateway.createRemoteFolder('drive', 'x', 'New folder'),
+            'createRemoteFolder-result');
         assertEqual(await gateway.listBackup('job'), 'listBackup-result');
         assertEqual(await gateway.listBackup('job', 'v', 'x', true), 'listBackup-result');
         assertEqual(await gateway.restore({jobId: 'job'}), 'restore-result');
         assertEqual(JSON.stringify(byName(client, 'listRuns')[0][1]), JSON.stringify(['job', 50]));
         assertEqual(JSON.stringify(byName(client, 'listRemote')[0][1]),
             JSON.stringify(['drive', '', false]));
+        assertEqual(JSON.stringify(byName(client, 'createRemoteFolder')[0][1]),
+            JSON.stringify(['drive', 'x', 'New folder']));
         assertEqual(JSON.stringify(byName(client, 'listBackup')[0][1]),
             JSON.stringify(['job', '', '', false]));
     }),
@@ -113,6 +118,9 @@ export default suite('app/gateway/daemon-gateway', [
         const job = {id: 'job', name: 'Daily'};
         assertEqual(await gateway.saveJob(job), 'saveJob-result');
         assertEqual(await gateway.importJob(job), 'importJob-result');
+        assertEqual(await gateway.importJob(job, true), 'importJob-result');
+        assertEqual(JSON.stringify(byName(client, 'importJob')
+            .map(call => call[1])), JSON.stringify([[job, false], [job, true]]));
         assertEqual(await gateway.inspectBackup('/SaveMe'), 'inspectBackup-result');
         assertEqual(await gateway.remoteWebUrl('onedrive', 'SaveMe/job'),
             'remoteWebUrl-result');

@@ -21,8 +21,8 @@ Detalhes de build e envio: [PPA.md](PPA.md).
 
 O pacote instala o aplicativo, daemon, serviço D-Bus, CLI e o zip da extensão.
 Na primeira abertura, o aplicativo instala ou atualiza a extensão do GNOME e a
-ativa automaticamente. Se `gnome-extensions` não estiver disponível, a extensão
-é ignorada e o aplicativo/daemon continuam funcionando.
+ativa automaticamente. Em Wayland, a extensão recém-instalada só é carregada
+depois de sair e entrar novamente na sessão.
 
 ## 1. Construir o pacote
 
@@ -143,7 +143,7 @@ O comando `saveme-settings` continua disponível como alias.
 Fluxo recomendado:
 
 1. **Contas** → adicionar Google Drive, OneDrive, Dropbox, Nextcloud, S3 ou pCloud.
-2. **Tarefas** → **Novo job**.
+2. **Jobs** → **Novo job**.
 3. Escolher origem e destino.
 4. Escolher **Sync** (espelho em tempo real) ou **Backup** (com versões).
 5. Usar **Salvar e simular** no primeiro job e conferir o resultado em **Diagnóstico**.
@@ -167,6 +167,34 @@ saveme job add --name "Docs" --type sync \
   --source ~/Documentos --dest gdrive:SaveMe/Documentos
 saveme run <job-id> --dry-run
 saveme run <job-id>
+```
+
+## Build de desenvolvimento isolado
+
+Para testar alterações locais sem esperar o PPA e sem tocar na instalação de
+produção:
+
+```bash
+./scripts/install-dev.sh
+saveme-dev
+```
+
+O script instala tudo dentro do seu home e usa identificadores próprios:
+
+- app `saveme-dev`, ID `io.github.chrismaille.SaveMe.Dev.Settings`;
+- daemon `saveme-dev-daemon`, nome D-Bus `io.github.chrismaille.SaveMe.Dev.Daemon`;
+- configuração em `~/.config/saveme-dev`;
+- estado em `~/.local/state/saveme-dev`;
+- extensão `saveme-dev@chrismaille.github.io`.
+
+A instalação de produção, a configuração existente e a extensão
+`saveme@chrismaille.github.io` não são alteradas. A extensão de
+desenvolvimento aparece no painel com o ícone próprio e um selo **DEV**.
+Requisitos: `gjs`, `zip` e rclone (`make setup` ou `PATH`). Para remover:
+
+```bash
+./scripts/install-dev.sh --uninstall --yes
+./scripts/install-dev.sh --uninstall --purge --yes  # remove também os dados
 ```
 
 ## Desinstalar

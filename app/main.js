@@ -17,7 +17,8 @@ import {AppMonitor} from './observability/app-monitor.js';
 import {buildSoakSnapshot} from './observability/soak.js';
 import {SaveMeWindow} from './window.js';
 
-const APP_ID = 'io.github.chrismaille.SaveMe.Settings';
+const APP_ID = GLib.getenv('SAVEME_APP_ID') ||
+    'io.github.chrismaille.SaveMe.Settings';
 const APP_DIR = GLib.path_get_dirname(GLib.filename_from_uri(import.meta.url)[0]);
 
 const SaveMeApplication = GObject.registerClass({

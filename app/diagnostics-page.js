@@ -6,6 +6,7 @@ import {t} from '../src/i18n.js';
 import {formatBytes, formatWhen} from './presentation/format.js';
 import {readTail} from './widgets/common.js';
 import {sanitizeLogText} from '../src/domain/log-policy.js';
+import {configDir, stateDir} from '../src/paths.js';
 
 export class DiagnosticsPage {
     constructor(window) {
@@ -13,8 +14,8 @@ export class DiagnosticsPage {
         this.widget = new Adw.PreferencesPage();
         this.snapshot = null;
         this.storageLoaded = false;
-        this.configPath = GLib.build_filenamev([GLib.get_user_config_dir(), 'saveme']);
-        this.statePath = GLib.build_filenamev([GLib.get_user_state_dir(), 'saveme']);
+        this.configPath = configDir();
+        this.statePath = stateDir();
         this.logPath = GLib.build_filenamev([this.statePath, 'daemon.log']);
         this._build();
     }
@@ -403,10 +404,12 @@ export class DiagnosticsPage {
         this.window.toast(t('Restarting daemon…'));
         try {
             this.window.launcher.spawn(['systemctl', '--user', 'restart',
-                'saveme.service']);
+                GLib.getenv('SAVEME_DAEMON_SERVICE') || 'saveme.service']);
         } catch (_) {
             try {
-                this.window.launcher.spawn(['saveme-daemon']);
+                this.window.launcher.spawn([
+                    GLib.getenv('SAVEME_DAEMON_PROGRAM') || 'saveme-daemon',
+                ]);
             } catch (e) {
                 this.window.toast(t('Cannot restart daemon: {message}',
                     {message: e.message}));

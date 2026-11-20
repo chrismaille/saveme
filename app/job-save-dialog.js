@@ -4,7 +4,7 @@ import Gtk from 'gi://Gtk?version=4.0';
 import Adw from 'gi://Adw?version=1';
 import {t} from '../src/i18n.js';
 
-const STAGES = [
+const SAVE_STAGES = [
     'Validating settings',
     'Preparing the destination',
     'Writing the backup manifest',
@@ -12,20 +12,53 @@ const STAGES = [
     'Finishing',
 ];
 
+const IMPORT_STAGES = [
+    'Validating job',
+    'Writing the job manifest',
+    'Updating the job list',
+    'Finishing',
+];
+
+const RESTORE_STAGES = [
+    'Validating job',
+    'Preparing the temporary job',
+    'Opening restore',
+    'Finishing',
+];
+
 export const JobSaveDialog = GObject.registerClass({
     GTypeName: 'SaveMeJobSaveDialog',
 }, class JobSaveDialog extends Adw.Window {
-    constructor(parentWindow, jobName) {
+    constructor(parentWindow, jobName, {mode = 'save'} = {}) {
+        const importMode = mode === 'import';
+        const restoreMode = mode === 'restore';
+        const slowMode = importMode || restoreMode;
+        const title = restoreMode ? t('Preparing restore')
+            : importMode ? t('Importing job') : t('Saving job');
         super({
             transient_for: parentWindow,
             modal: true,
-            title: t('Saving job'),
+            title,
             default_width: 560,
-            default_height: 360,
+            default_height: slowMode ? 320 : 360,
         });
         this.window = parentWindow;
-        this.stage = 0;
+        this.titleText = title;
+        this.importMode = importMode;
+        this.restoreMode = restoreMode;
+        this.slowMode = slowMode;
+        this.busyText = restoreMode ? t('Preparing…')
+            : importMode ? t('Importing…') : t('Saving…');
+        this.doneText = restoreMode ? t('Restore ready.')
+            : importMode ? t('Job imported.') : t('Job saved.');
+        this.stages = restoreMode ? RESTORE_STAGES
+            : importMode ? IMPORT_STAGES : SAVE_STAGES;
+        // Importing and restoring are single daemon calls. Show the stage
+        // that is actually in progress instead of pretending to advance.
+        this.stage = slowMode ? 1 : 0;
         this.finished = false;
+        this.failed = false;
+        this.failureMessage = '';
         this.timer = 0;
         this.pulseTimer = 0;
         this._build(jobName);
@@ -35,7 +68,7 @@ export const JobSaveDialog = GObject.registerClass({
         const toolbar = new Adw.ToolbarView();
         const header = new Adw.HeaderBar();
         header.set_title_widget(new Adw.WindowTitle({
-            title: t('Saving job'),
+            title: this.titleText,
             subtitle: jobName,
         }));
         toolbar.add_top_bar(header);
@@ -49,8 +82,10 @@ export const JobSaveDialog = GObject.registerClass({
             margin_end: 18,
         });
         this.status = new Gtk.Label({
-            label: t('Saving…'),
+            label: this.busyText,
             xalign: 0,
+            wrap: true,
+            max_width_chars: 54,
             css_classes: ['title-3'],
         });
         box.append(this.status);
@@ -59,8 +94,16 @@ export const JobSaveDialog = GObject.registerClass({
         });
         this.progress.pulse();
         box.append(this.progress);
+        if (this.slowMode) {
+            box.append(new Gtk.Label({
+                label: t('Cloud destinations can take a few seconds.'),
+                xalign: 0,
+                wrap: true,
+                css_classes: ['dim-label'],
+            }));
+        }
         this.stepLabels = [];
-        for (const stage of STAGES) {
+        for (const stage of this.stages) {
             const row = new Gtk.Box({
                 orientation: Gtk.Orientation.HORIZONTAL,
                 spacing: 8,
@@ -96,25 +139,33 @@ export const JobSaveDialog = GObject.registerClass({
                 this.progress.pulse();
             return GLib.SOURCE_CONTINUE;
         });
-        this.timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 700, () => {
-            if (this.finished)
-                return GLib.SOURCE_REMOVE;
-            this.stage = Math.min(this.stage + 1, STAGES.length - 1);
-            this._refreshStages();
-            return GLib.SOURCE_CONTINUE;
-        });
+        if (!this.slowMode) {
+            this.timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 700, () => {
+                if (this.finished)
+                    return GLib.SOURCE_REMOVE;
+                this.setStage(this.stage + 1);
+                return GLib.SOURCE_CONTINUE;
+            });
+        }
     }
 
     _refreshStages() {
         for (const [index, item] of this.stepLabels.entries()) {
-            if (index < this.stage) {
+            if (this.failed && index === this.stage) {
+                item.icon.icon_name = 'dialog-error-symbolic';
+                item.icon.remove_css_class('dim-label');
+                item.icon.add_css_class('error');
+                item.label.remove_css_class('dim-label');
+            } else if (index < this.stage) {
                 item.icon.icon_name = 'object-select-symbolic';
                 item.icon.remove_css_class('dim-label');
+                item.icon.remove_css_class('error');
                 item.icon.add_css_class('success');
                 item.label.remove_css_class('dim-label');
             } else if (index === this.stage && !this.finished) {
                 item.icon.icon_name = 'emblem-synchronizing-symbolic';
                 item.icon.remove_css_class('dim-label');
+                item.icon.remove_css_class('error');
                 item.icon.add_css_class('accent');
                 item.label.remove_css_class('dim-label');
             } else {
@@ -122,22 +173,31 @@ export const JobSaveDialog = GObject.registerClass({
                 item.icon.add_css_class('dim-label');
                 item.icon.remove_css_class('success');
                 item.icon.remove_css_class('accent');
+                item.icon.remove_css_class('error');
                 item.label.add_css_class('dim-label');
             }
         }
-        this.status.set_text(this.finished
-            ? t('Job saved.')
-            : t(STAGES[this.stage]));
+        let message;
+        if (this.failed)
+            message = this.failureMessage;
+        else if (this.finished)
+            message = this.doneText;
+        else
+            message = t(this.stages[this.stage] || this.busyText);
+        this.status.set_text(message);
+    }
+
+    setStage(index) {
+        if (this.finished)
+            return;
+        this.stage = Math.max(0, Math.min(this.stages.length - 1, index));
+        this._refreshStages();
     }
 
     complete() {
         this.finished = true;
-        this.stage = STAGES.length;
-        if (this.timer) {
-            GLib.source_remove(this.timer);
-            this.timer = 0;
-        this.pulseTimer = 0;
-        }
+        this.stage = this.stages.length;
+        this._stopTimers();
         this.progress.set_fraction(1);
         this.closeButton.visible = true;
         this._refreshStages();
@@ -145,22 +205,27 @@ export const JobSaveDialog = GObject.registerClass({
 
     fail(message) {
         this.finished = true;
+        this.failed = true;
+        this.failureMessage = message;
+        this._stopTimers();
+        this.progress.set_fraction(0);
+        this.closeButton.visible = true;
+        this._refreshStages();
+    }
+
+    _stopTimers() {
         if (this.timer) {
             GLib.source_remove(this.timer);
             this.timer = 0;
-        this.pulseTimer = 0;
         }
-        this.progress.set_fraction(0);
-        this.status.set_text(message);
-        this.closeButton.visible = true;
+        if (this.pulseTimer) {
+            GLib.source_remove(this.pulseTimer);
+            this.pulseTimer = 0;
+        }
     }
 
     close(...args) {
-        if (this.timer) {
-            GLib.source_remove(this.timer);
-            this.timer = 0;
-        this.pulseTimer = 0;
-        }
+        this._stopTimers();
         return super.close(...args);
     }
 });

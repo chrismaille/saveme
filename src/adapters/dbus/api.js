@@ -40,8 +40,8 @@ export class DaemonApi {
         return this.service.saveJob(payloadJson);
     }
 
-    ImportJob(payloadJson) {
-        return this.service.importJob(payloadJson);
+    ImportJob(payloadJson, temporary) {
+        return this.service.importJob(payloadJson, Boolean(temporary));
     }
 
     InspectBackup(path) {
@@ -78,6 +78,10 @@ export class DaemonApi {
 
     ListRemote(remote, path, dirsOnly) {
         return this.service.listRemote(remote, path, Boolean(dirsOnly));
+    }
+
+    CreateRemoteFolder(remote, path, name) {
+        return this.service.createRemoteFolder(remote, path, name);
     }
 
     ListBackup(jobId, version, path, dirsOnly) {
