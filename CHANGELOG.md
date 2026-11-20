@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/chrismaille/saveme/compare/v1.4.2...v1.5.0) (2026-11-20)
+
+
+### Features
+
+* **app:** improve job import, restore and folder browsing ([4406a49](https://github.com/chrismaille/saveme/commit/4406a49f22b834790d08ed6a1e2039dde0f8108b))
+
 ## [1.4.2](https://github.com/chrismaille/saveme/compare/v1.4.1...v1.4.2) (2026-11-20)
 
 

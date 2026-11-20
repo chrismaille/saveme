@@ -1,4 +1,4 @@
-saveme (1.4.2-0ubuntu1) resolute; urgency=medium
+saveme (1.5.0-0ubuntu1) resolute; urgency=medium
 
   * New upstream release.
   * Add source confirmation and optional enable after recovery import.
