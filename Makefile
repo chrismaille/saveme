@@ -1,6 +1,7 @@
 SHELL := /bin/bash
 
 RCLONE_VERSION ?= 1.76.0
+EXTENSION_UUID := saveme@chrismaille.github.io
 UNAME_M := $(shell uname -m)
 
 ifeq ($(UNAME_M),x86_64)
@@ -17,7 +18,7 @@ VENV := .venv
 PRE_COMMIT ?= $(VENV)/bin/pre-commit
 PYTHON ?= python3
 
-.PHONY: all setup setup-lint setup-hooks test tests coverage e2e e2e-extension e2e-app lint verify doctor run extension deb ppa-source install uninstall clean
+.PHONY: all setup setup-lint setup-hooks test tests coverage e2e e2e-extension e2e-app lint verify doctor run extension extension-zip deb ppa-source install uninstall clean
 
 all: test
 
@@ -108,6 +109,11 @@ extension: extension/i18n.js
 		--extra-source=daemon-client.js --extra-source=presentation.js \
 		--extra-source=system-launcher.js --extra-source=ui \
 		--extra-source=i18n.js
+
+extension-zip: extension/i18n.js
+	mkdir -p dist
+	rm -f dist/$(EXTENSION_UUID).shell-extension.zip
+	(cd extension && zip -qr ../dist/$(EXTENSION_UUID).shell-extension.zip .)
 
 extension/i18n.js: src/i18n.js
 	printf '%s\n' '// Generated from src/i18n.js by make extension. Do not edit.' > $@
