@@ -231,6 +231,7 @@ Veja [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) para a comparação.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — decisões técnicas
 - [docs/INSTALL.md](docs/INSTALL.md) — instalação, CLI e desinstalação
 - [docs/APT.md](docs/APT.md) — repositório APT assinado e rotação de chave
+- [docs/UBUNTU.md](docs/UBUNTU.md) — PPA e arquivo oficial do Ubuntu
 - [docs/TESTING.md](docs/TESTING.md) — matriz de testes automáticos e manuais
 - [docs/LINTING.md](docs/LINTING.md) — pre-commit, linters e regras Omega
 - [docs/RELEASING.md](docs/RELEASING.md) — commits e releases automáticas

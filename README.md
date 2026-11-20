@@ -227,6 +227,7 @@ See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) for the comparison.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — technical decisions
 - [docs/INSTALL.md](docs/INSTALL.md) — install, CLI and uninstall
 - [docs/APT.md](docs/APT.md) — signed APT repository and key rotation
+- [docs/UBUNTU.md](docs/UBUNTU.md) — PPA and the official Ubuntu archive
 - [docs/TESTING.md](docs/TESTING.md) — automated and manual test matrix
 - [docs/LINTING.md](docs/LINTING.md) — pre-commit, linters and Omega rules
 - [docs/RELEASING.md](docs/RELEASING.md) — commits and automatic releases
