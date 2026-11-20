@@ -32,6 +32,9 @@ binary: build
 	cp -a assets/. $(DESTDIR)/usr/lib/saveme/assets/
 	install -m755 bin/saveme.js $(DESTDIR)/usr/lib/saveme/bin/saveme.js
 	install -m755 bin/saveme-daemon.js $(DESTDIR)/usr/lib/saveme/bin/saveme-daemon.js
+	install -m755 data/saveme $(DESTDIR)/usr/bin/saveme
+	install -m755 data/saveme-daemon $(DESTDIR)/usr/bin/saveme-daemon
+	install -m755 data/saveme-settings $(DESTDIR)/usr/bin/saveme-settings
 	install -m644 data/saveme.service \
 		$(DESTDIR)/usr/lib/systemd/user/saveme.service
 	install -m644 data/io.github.chrismaille.SaveMe.Daemon.service \

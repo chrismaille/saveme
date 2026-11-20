@@ -1,0 +1,2 @@
+#!/bin/sh
+exec gjs -m /usr/lib/saveme/app/main.js "$@"

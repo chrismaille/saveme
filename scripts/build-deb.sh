@@ -59,20 +59,9 @@ install -Dm644 "$ROOT_DIR/LICENSE" "$STAGE/usr/share/doc/saveme/LICENSE"
 install -Dm644 "$ROOT_DIR/data/rclone-LICENSE" "$STAGE/usr/share/doc/saveme/rclone-LICENSE"
 install -Dm644 "$ROOT_DIR/README.md" "$STAGE/usr/share/doc/saveme/README.md"
 
-cat > "$STAGE/usr/bin/saveme" <<'EOF'
-#!/bin/sh
-exec gjs -m /usr/lib/saveme/bin/saveme.js "$@"
-EOF
-cat > "$STAGE/usr/bin/saveme-daemon" <<'EOF'
-#!/bin/sh
-exec gjs -m /usr/lib/saveme/bin/saveme-daemon.js "$@"
-EOF
-cat > "$STAGE/usr/bin/saveme-settings" <<'EOF'
-#!/bin/sh
-exec gjs -m /usr/lib/saveme/app/main.js "$@"
-EOF
-chmod 755 "$STAGE/usr/bin/saveme" "$STAGE/usr/bin/saveme-daemon" \
-    "$STAGE/usr/bin/saveme-settings"
+install -Dm755 "$ROOT_DIR/data/saveme" "$STAGE/usr/bin/saveme"
+install -Dm755 "$ROOT_DIR/data/saveme-daemon" "$STAGE/usr/bin/saveme-daemon"
+install -Dm755 "$ROOT_DIR/data/saveme-settings" "$STAGE/usr/bin/saveme-settings"
 
 INSTALLED_SIZE="$(du -sk "$STAGE" | cut -f1)"
 cat > "$STAGE/DEBIAN/control" <<EOF
