@@ -107,12 +107,11 @@ fi
 cat <<'MSG'
 SaveMe installed.
 
-The GNOME Shell extension is distributed separately. Install it from
-extensions.gnome.org, or use the zip at:
-  /usr/share/saveme/extension.zip
+The GNOME Shell extension is installed and enabled automatically when you
+open SaveMe. No manual gnome-extensions command is required.
 
-The daemon starts automatically at your next login. To start it now:
-  saveme-daemon &
+Open the app with:
+  saveme-settings
 MSG
 exit 0
 EOF

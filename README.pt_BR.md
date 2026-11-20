@@ -18,7 +18,7 @@
 O SaveMe é um aplicativo GTK4/libadwaita com um pequeno daemon de usuário que
 mantém uma pasta sincronizada com um disco local ou destino na nuvem, ou cria
 um backup com versões dessa pasta. Foi feito para o GNOME no Linux e se integra
-ao Shell por meio de uma extensão opcional.
+ao Shell por meio da extensão do GNOME Shell.
 
 > **Estado do projeto:** pré-release. O aplicativo, daemon, CLI, extensão do
 > GNOME, fluxo de recuperação e provedores de nuvem estão implementados. A
@@ -39,7 +39,7 @@ ao Shell por meio de uma extensão opcional.
 - **Recuperação de verdade.** Navegue por uma pasta SaveMe, importe jobs e
   restaure arquivos para outra pasta local.
 - **Integração nativa.** Autostart, serviço `systemd --user`, D-Bus,
-  notificações de backup e extensão opcional do GNOME Shell.
+  notificações de backup e integração com o GNOME Shell.
 - **Traduzido.** O aplicativo, o daemon e a extensão têm 16 idiomas.
 
 ## Funcionalidades
@@ -126,9 +126,9 @@ sudo apt upgrade
 ```
 
 O pacote do PPA instala o aplicativo, daemon, serviço D-Bus, CLI e o zip da
-extensão. Na primeira execução o aplicativo instala ou atualiza a extensão
-opcional do GNOME e a ativa automaticamente; nenhum comando manual de
-`gnome-extensions` é necessário.
+extensão. Na primeira execução o aplicativo instala ou atualiza a extensão do
+GNOME e a ativa automaticamente; nenhum comando manual de `gnome-extensions`
+é necessário.
 
 Detalhes de build e envio: [docs/PPA.md](docs/PPA.md).
 
@@ -191,12 +191,13 @@ Instruções completas: [docs/INSTALL.md](docs/INSTALL.md).
 6. Use o botão Iniciar para rodar agora, ou deixe o agendamento executar.
 
 A extensão do GNOME mostra o status dos jobs e oferece Iniciar/Pausar/Parar no
-painel superior. Ela é opcional; o aplicativo e o daemon funcionam sem ela.
+painel superior. O aplicativo instala e ativa a extensão automaticamente na
+primeira execução.
 
 ## Arquitetura
 
 ```text
-Extensão do GNOME Shell (GJS, opcional) ──D-Bus──┐
+Extensão do GNOME Shell (GJS) ──D-Bus──┐
                                                   ├── saveme-daemon (GJS,
 SaveMe Settings (GTK4/Adwaita) ───────────────────┤    systemd --user) ── rclone
                                                   │                         │

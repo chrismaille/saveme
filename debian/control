@@ -25,7 +25,7 @@ Recommends: gnome-shell
 Description: one-way sync and versioned backups for GNOME
  SaveMe keeps a source folder in sync with a local or cloud destination, or
  creates a versioned backup of it. It includes a GTK4/libadwaita settings app,
- a user D-Bus daemon, a CLI and an optional GNOME Shell extension.
+ a user D-Bus daemon, a CLI and GNOME Shell integration.
  .
  The package uses the rclone package from Ubuntu instead of bundling a
  private rclone binary.

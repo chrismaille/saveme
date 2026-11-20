@@ -18,7 +18,7 @@ function modified(path) {
 }
 
 /**
- * Install or refresh the optional GNOME Shell extension from the zip shipped
+ * Install or refresh the GNOME Shell extension from the zip shipped
  * with the package. The PPA/apt packages update the zip; the app syncs it into
  * the user's extension directory and enables it without manual commands.
  */

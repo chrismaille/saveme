@@ -18,7 +18,7 @@
 SaveMe is a GTK4/libadwaita application with a small user daemon that keeps a
 folder in sync with a local disk or cloud destination, or creates a versioned
 backup of it. It is designed for GNOME on Linux and integrates with the Shell
-through an optional extension.
+through the GNOME Shell extension.
 
 > **Project status:** pre-release. The core app, daemon, CLI, GNOME extension,
 > recovery flow and cloud providers are implemented. Real-account validation
@@ -38,7 +38,7 @@ through an optional extension.
 - **Real recovery.** Browse a SaveMe folder, import its jobs and restore files
   to a different local folder.
 - **Native desktop integration.** Autostart, systemd user service, D-Bus,
-  desktop notifications for backups and an optional GNOME Shell extension.
+  desktop notifications for backups and GNOME Shell integration.
 - **Translated.** The app, daemon and extension ship with 16 locales.
 
 ## Features
@@ -123,8 +123,8 @@ sudo apt upgrade
 ```
 
 The PPA package installs the app, daemon, D-Bus service, CLI and the extension
-zip. On first launch the app installs or refreshes the optional GNOME extension
-and enables it automatically; no manual `gnome-extensions` command is needed.
+zip. On first launch the app installs or refreshes the GNOME extension and
+enables it automatically; no manual `gnome-extensions` command is needed.
 
 Build and upload details: [docs/PPA.md](docs/PPA.md).
 
@@ -187,12 +187,12 @@ Full instructions: [docs/INSTALL.md](docs/INSTALL.md).
 6. Use the Play button to run immediately, or let the schedule run it.
 
 The GNOME extension shows job status and exposes Play/Pause/Stop from the top
-panel. It is optional; the app and daemon work without it.
+panel. The app installs and enables it automatically on first launch.
 
 ## Architecture
 
 ```text
-GNOME Shell extension (GJS, optional) ──D-Bus──┐
+GNOME Shell extension (GJS) ──D-Bus──┐
                                                ├── saveme-daemon (GJS,
 SaveMe Settings (GTK4/Adwaita) ────────────────┤    systemd --user) ── rclone
                                                │                         │
