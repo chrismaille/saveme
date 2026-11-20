@@ -6,6 +6,31 @@
 - Sessão Wayland ou X11
 - O `.deb` já inclui o rclone 1.76 pinado em `/usr/lib/saveme/bin/rclone`
 
+## Instalação via APT (atualizações automáticas)
+
+O repositório APT assinado fica em
+`https://chrismaille.github.io/saveme/`. Configure-o uma vez:
+
+```bash
+sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://chrismaille.github.io/saveme/saveme-archive-keyring.gpg \
+  | sudo tee /etc/apt/keyrings/saveme-archive-keyring.gpg >/dev/null
+echo "deb [signed-by=/etc/apt/keyrings/saveme-archive-keyring.gpg] https://chrismaille.github.io/saveme/ stable main" \
+  | sudo tee /etc/apt/sources.list.d/saveme.list
+sudo apt update
+sudo apt install saveme
+```
+
+Depois disso, `sudo apt upgrade` atualiza o SaveMe junto com o sistema.
+
+O pacote instala o aplicativo, daemon, serviço D-Bus, CLI e o zip da extensão.
+Para instalar a extensão ao usar somente APT:
+
+```bash
+gnome-extensions install --force /usr/share/saveme/extension.zip
+gnome-extensions enable saveme@chrismaille.github.io
+```
+
 ## 1. Construir o pacote
 
 ```bash
@@ -42,7 +67,7 @@ O script:
 - detecta se o SaveMe já está instalado e atualiza automaticamente;
 - para o app e o daemon existentes (`systemctl --user` + `pkill`);
 - reinstala/atualiza o `.deb` com `apt-get install --reinstall`;
-- instala a extensão somente com `--with-extension` (ou `--extension PATH`);
+- instala e ativa a extensão por padrão (pule com `--no-extension`);
 - inicia o daemon, exceto com `--no-start`;
 - roda `saveme doctor` no final.
 
@@ -65,8 +90,8 @@ Opções úteis:
 
 ```bash
 ./scripts/install.sh                    # instalar ou atualizar (padrão)
-./scripts/install.sh --with-extension   # instalar/atualizar a extensão GNOME
-./scripts/install.sh --no-extension     # app-only (padrão)
+./scripts/install.sh --with-extension   # instalar/atualizar a extensão (padrão)
+./scripts/install.sh --no-extension     # app-only
 ./scripts/install.sh --app-only         # alias de --no-extension
 ./scripts/install.sh --no-start         # não inicia o daemon agora
 ./scripts/install.sh --deb PATH         # usa um .deb específico
@@ -75,7 +100,7 @@ Opções úteis:
 ./scripts/install.sh --log PATH         # caminho do log
 ```
 
-Quando os releases tiverem o `.deb` e o zip da extensão anexados:
+Instalação a partir de uma release publicada (o script baixa os anexos):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/chrismaille/saveme/main/scripts/install.sh | sh

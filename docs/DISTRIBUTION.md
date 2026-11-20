@@ -91,20 +91,31 @@ protótipo para validar daemon, D-Bus, unidades removíveis e extensão.
 O `.deb` é o formato atual e o que melhor cobre a arquitetura:
 
 - instala app, daemon, serviço `systemd --user`, D-Bus, autostart,
-  extensão e `rclone`;
+  a CLI e o `rclone`;
 - permite acesso direto a montagens e unidades removíveis;
 - integra com o `apt` e com o fluxo de atualização do sistema.
 
 A desvantagem é ser específico para Debian/Ubuntu e não ter sandbox.
 
+## Repositório APT
+
+O repositório assinado fica em
+`https://chrismaille.github.io/saveme/`. Ele é atualizado a cada release e
+permite que o sistema receba novas versões com `sudo apt upgrade`.
+
+O instalador por script continua sendo o caminho mais simples para a primeira
+instalação porque também instala e ativa a extensão do GNOME. Depois, o APT
+cuida das atualizações do aplicativo, daemon, D-Bus e CLI.
+
 ## Recomendação
 
-1. Manter o `.deb` como instalação principal nesta fase.
-2. Prototipar Snap antes de Flatpak, porque o Snap consegue empacotar o
+1. Manter o `.deb` com repositório APT como canal principal no Linux.
+2. Usar o script para a primeira instalação e para a extensão.
+3. Prototipar Snap antes de Flatpak, porque o Snap consegue empacotar o
    daemon e o app juntos.
-3. Se o Flatpak for necessário para o Flathub, separar claramente:
+4. Se o Flatpak for necessário para o Flathub, separar claramente:
    app Flatpak + daemon/extensão instalados por um pacote do sistema.
-4. Não investir em AppImage para este produto.
+5. Não investir em AppImage para este produto.
 
-A decisão final depende de testes reais com D-Bus de sessão, unidades
-removíveis e OAuth em cada formato.
+A decisão final sobre Snap/Flathub depende de testes reais com D-Bus de
+sessão, unidades removíveis e OAuth em cada formato.

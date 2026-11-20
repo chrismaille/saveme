@@ -107,16 +107,14 @@ O iCloud está fora do escopo até a Apple oferecer uma API estável.
 - GJS 1.88+, GTK 4.22+, libadwaita 1.9+
 - rclone 1.76+ (o instalador inclui um binário fixado)
 
-### Recomendado por enquanto: pacote local
+### Recomendado: script de instalação
 
-O script instala o aplicativo empacotado, ativa a extensão do GNOME e inicia o
-daemon. Rodar novamente atualiza a instalação sem tocar nos jobs, no estado ou
-na configuração.
+O script instala o aplicativo, ativa a extensão do GNOME e inicia o daemon.
+Rodar novamente atualiza a instalação sem tocar nos jobs, no estado ou na
+configuração.
 
 ```bash
-make test
-make deb
-./scripts/install.sh
+curl -fsSL https://raw.githubusercontent.com/chrismaille/saveme/main/scripts/install.sh | sh
 ```
 
 Opções úteis:
@@ -128,14 +126,36 @@ Opções úteis:
 ./scripts/install.sh --uninstall      # remove o pacote
 ```
 
-### Instalador de release
+### Gerenciador de pacotes (APT)
 
-O mesmo script consegue instalar uma release publicada no GitHub. O empacotamento
-das releases ainda não é automático; quando o `.deb` e a extensão estiverem
-anexados a uma release, o comando será:
+Adicione o repositório assinado uma vez; depois disso, `apt upgrade` mantém o
+SaveMe atualizado:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/chrismaille/saveme/main/scripts/install.sh | sh
+sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://chrismaille.github.io/saveme/saveme-archive-keyring.gpg \
+  | sudo tee /etc/apt/keyrings/saveme-archive-keyring.gpg >/dev/null
+echo "deb [signed-by=/etc/apt/keyrings/saveme-archive-keyring.gpg] https://chrismaille.github.io/saveme/ stable main" \
+  | sudo tee /etc/apt/sources.list.d/saveme.list
+sudo apt update
+sudo apt install saveme
+```
+
+O pacote APT instala o aplicativo, o daemon, o serviço D-Bus e a CLI. A
+extensão do GNOME é instalada e ativada pelo script de instalação; se você
+instalar somente via APT, instale e ative uma vez:
+
+```bash
+gnome-extensions install --force /usr/share/saveme/extension.zip
+gnome-extensions enable saveme@chrismaille.github.io
+```
+
+### A partir de um checkout local
+
+```bash
+make test
+make deb
+./scripts/install.sh
 ```
 
 Instruções completas: [docs/INSTALL.md](docs/INSTALL.md).
@@ -198,9 +218,10 @@ Veja [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Distribuição
 
-O caminho de instalação suportado hoje é o pacote `.deb` instalado pelo script.
-AppImage não combina com o daemon, D-Bus, serviço `systemd --user` e extensão do
-GNOME. Snap e Flatpak estão em avaliação antes de qualquer envio para lojas.
+O caminho de instalação suportado hoje é o pacote `.deb` instalado pelo script,
+com um repositório APT assinado para atualizações automáticas. AppImage não
+combina com o daemon, D-Bus, serviço `systemd --user` e extensão do GNOME. Snap
+e Flatpak estão em avaliação antes de qualquer envio para lojas.
 
 Veja [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) para a comparação.
 

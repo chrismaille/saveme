@@ -1,6 +1,7 @@
 {
   "globs": ["**/*.md"],
   "ignores": [
+    "CHANGELOG.md",
     "build/**",
     "dist/**",
     "node_modules/**",

@@ -338,8 +338,24 @@ download_artifacts() {
         say "curl is required."
         exit 1
     }
-    say "Downloading $BASE_URL/saveme_${ARCH}.deb"
-    curl -fL --retry 3 -o "$DEB" "$BASE_URL/saveme_${ARCH}.deb"
+    download_package() {
+        say "Downloading $BASE_URL/saveme_${ARCH}.deb"
+        if curl -fL --retry 3 -o "$DEB" "$BASE_URL/saveme_${ARCH}.deb"; then
+            return 0
+        fi
+        if [ -n "$VERSION" ]; then
+            say "Downloading $BASE_URL/saveme_${VERSION}_${ARCH}.deb"
+            if curl -fL --retry 3 -o "$DEB" \
+                "$BASE_URL/saveme_${VERSION}_${ARCH}.deb"; then
+                return 0
+            fi
+        fi
+        return 1
+    }
+    if ! download_package; then
+        say "Cannot download the SaveMe package."
+        exit 1
+    fi
     if [ "$WITH_EXTENSION" -eq 1 ]; then
         say "Downloading $BASE_URL/$UUID.shell-extension.zip"
         curl -fL --retry 3 -o "$EXT" "$BASE_URL/$UUID.shell-extension.zip"

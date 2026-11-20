@@ -104,16 +104,14 @@ iCloud is intentionally out of scope until Apple offers a stable API.
 - GJS 1.88+, GTK 4.22+, libadwaita 1.9+
 - rclone 1.76+ (the installer ships a pinned binary)
 
-### Recommended for now: local package
+### Recommended: installer script
 
-The script installs the packaged application, enables the GNOME extension and
-starts the daemon. Running it again updates an existing installation without
-touching jobs, state or configuration.
+The script installs the application, enables the GNOME extension and starts the
+daemon. Running it again updates an existing installation without touching
+jobs, state or configuration.
 
 ```bash
-make test
-make deb
-./scripts/install.sh
+curl -fsSL https://raw.githubusercontent.com/chrismaille/saveme/main/scripts/install.sh | sh
 ```
 
 Useful options:
@@ -125,14 +123,35 @@ Useful options:
 ./scripts/install.sh --uninstall      # remove the package
 ```
 
-### Release installer
+### Package manager (APT)
 
-The same script can install a published GitHub Release. Release packaging is
-not automated yet; when `.deb` and extension assets are attached to a release,
-the one-liner is:
+Add the signed repository once; after that, `apt upgrade` keeps SaveMe current:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/chrismaille/saveme/main/scripts/install.sh | sh
+sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://chrismaille.github.io/saveme/saveme-archive-keyring.gpg \
+  | sudo tee /etc/apt/keyrings/saveme-archive-keyring.gpg >/dev/null
+echo "deb [signed-by=/etc/apt/keyrings/saveme-archive-keyring.gpg] https://chrismaille.github.io/saveme/ stable main" \
+  | sudo tee /etc/apt/sources.list.d/saveme.list
+sudo apt update
+sudo apt install saveme
+```
+
+The APT package installs the app, daemon, D-Bus service and CLI. The GNOME
+extension is installed and enabled by the installer script; if you install with
+APT only, install and enable it once:
+
+```bash
+gnome-extensions install --force /usr/share/saveme/extension.zip
+gnome-extensions enable saveme@chrismaille.github.io
+```
+
+### From a local checkout
+
+```bash
+make test
+make deb
+./scripts/install.sh
 ```
 
 Full instructions: [docs/INSTALL.md](docs/INSTALL.md).
@@ -196,9 +215,9 @@ See [docs/RELEASING.md](docs/RELEASING.md).
 ## Distribution
 
 The supported installation path today is the `.deb` package installed by the
-script. AppImage is not a good fit for the daemon, D-Bus, systemd user service
-and GNOME extension. Snap and Flatpak are being evaluated before any store
-submission.
+script, with a signed APT repository for automatic updates. AppImage is not a
+good fit for the daemon, D-Bus, systemd user service and GNOME extension. Snap
+and Flatpak are being evaluated before any store submission.
 
 See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) for the comparison.
 

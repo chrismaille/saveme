@@ -17,6 +17,8 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.released.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,3 +38,60 @@ jobs:
           GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
           GIT_COMMITTER_NAME: github-actions[bot]
           GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+      - name: Read released tag
+        id: released
+        shell: bash
+        run: |
+          tag="$(git tag --points-at HEAD | head -n1)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  package:
+    needs: release
+    if: needs.release.outputs.tag != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+          fetch-depth: 0
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gjs gnome-shell curl unzip dpkg-dev apt-utils gnupg
+      - name: Download pinned rclone
+        run: make setup
+      - name: Build package and extension
+        run: make deb
+      - name: Import APT signing key
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+          git_user_signingkey: false
+      - name: Build APT repository
+        shell: bash
+        run: |
+          mkdir -p build/apt
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git fetch --depth=1 origin gh-pages
+            git archive FETCH_HEAD | tar -x -C build/apt
+          fi
+          ./scripts/build-apt-repo.sh build/apt
+      - name: Attach release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.release.outputs.tag }}
+          files: |
+            dist/*.deb
+            dist/*.shell-extension.zip
+            dist/SHA256SUMS
+          fail_on_unmatched_files: true
+      - name: Publish APT repository
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./build/apt
+          publish_branch: gh-pages
+          force_orphan: true
+          user_name: github-actions[bot]
+          user_email: 41898282+github-actions[bot]@users.noreply.github.com

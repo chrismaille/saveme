@@ -32,3 +32,4 @@ __pycache__/
 # Lint tooling
 .venv/
 node_modules/
+.env
