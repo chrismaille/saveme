@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/chrismaille/saveme/compare/v1.3.5...v1.4.0) (2026-11-20)
+
+
+### Features
+
+* **app:** separate job discovery from file restore ([58c721f](https://github.com/chrismaille/saveme/commit/58c721f2c45a132089923bbd5f7b0111e4fdeacb))
+
 ## [1.3.5](https://github.com/chrismaille/saveme/compare/v1.3.4...v1.3.5) (2026-11-20)
 
 
