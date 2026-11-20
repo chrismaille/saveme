@@ -1,7 +1,7 @@
 Source: saveme
 Section: utils
 Priority: optional
-Maintainer: chrismaille <chrismaille@users.noreply.github.com>
+Maintainer: chrismaille <chrismaillefaud@gmail.com>
 Standards-Version: 4.7.0
 Homepage: https://github.com/chrismaille/saveme
 Vcs-Git: https://github.com/chrismaille/saveme.git

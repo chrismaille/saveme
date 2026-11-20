@@ -76,7 +76,7 @@ jobs:
           git_user_signingkey: false
       - name: Build PPA source package (signed)
         if: env.PPA_SIGNING_KEY != ''
-        run: ./scripts/build-ppa-source.sh -sa -d
+        run: ./scripts/build-ppa-source.sh -sa -d -k460040FBC56CEE41
       - name: Build PPA source package (unsigned)
         if: env.PPA_SIGNING_KEY == ''
         run: ./scripts/build-ppa-source.sh -sa -us -uc -d
