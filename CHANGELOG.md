@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/chrismaille/saveme/compare/v1.2.0...v1.3.0) (2026-11-20)
+
+
+### Features
+
+* **app:** install the GNOME extension automatically ([5245f08](https://github.com/chrismaille/saveme/commit/5245f08bbb3ddde47c970af503ac1d06ea3f8c4f))
+
 # [1.2.0](https://github.com/chrismaille/saveme/compare/v1.1.0...v1.2.0) (2026-11-20)
 
 
