@@ -1,3 +1,10 @@
+## [1.4.2](https://github.com/chrismaille/saveme/compare/v1.4.1...v1.4.2) (2026-11-20)
+
+
+### Bug Fixes
+
+* **packaging:** include the saveme-settings wrapper ([a32a3c7](https://github.com/chrismaille/saveme/commit/a32a3c7fd2723428d0a742d590b48420adb09c4b))
+
 ## [1.4.1](https://github.com/chrismaille/saveme/compare/v1.4.0...v1.4.1) (2026-11-20)
 
 

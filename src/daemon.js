@@ -33,7 +33,7 @@ import {
 } from './paths.js';
 import {ensureDir, nowIso, uniqueId} from './util.js';
 
-const VERSION = '1.4.1';
+const VERSION = '1.4.2';
 
 function getPid() {
     try {
