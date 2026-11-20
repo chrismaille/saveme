@@ -56,11 +56,30 @@ O Launchpad vai:
 ## Upload automático pelo GitHub Actions
 
 O workflow `Release` pode assinar e enviar o pacote ao Launchpad
-automaticamente. Para ativar, configure os segredos do repositório:
+automaticamente. Para ativar, configure os segredos do repositório em
+**Settings → Secrets and variables → Actions**:
 
 - `PPA_GPG_PRIVATE_KEY`: conteúdo ASCII armored da chave privada GPG.
 - `PPA_GPG_PASSPHRASE`: passphrase da chave; deixe vazio se a chave não tiver
   passphrase.
+
+Para gerar o arquivo da chave privada:
+
+```bash
+gpg --armor --export-secret-keys 460040FBC56CEE41   > saveme-ppa-private.asc
+chmod 600 saveme-ppa-private.asc
+```
+
+Com o GitHub CLI:
+
+```bash
+gh secret set PPA_GPG_PRIVATE_KEY < saveme-ppa-private.asc
+gh secret set PPA_GPG_PASSPHRASE
+```
+
+O segundo comando pede a passphrase sem colocá-la no histórico. Pela interface
+do GitHub, cole o conteúdo completo do arquivo, incluindo as linhas de início e
+fim do bloco de chave privada PGP.
 
 Com esses segredos, o workflow:
 
