@@ -1,3 +1,10 @@
+## [1.3.3](https://github.com/chrismaille/saveme/compare/v1.3.2...v1.3.3) (2026-11-20)
+
+
+### Bug Fixes
+
+* **ci:** select the PPA signing key explicitly ([15cc1d1](https://github.com/chrismaille/saveme/commit/15cc1d1b7fd67c0745cd67c18be5fa9030a2200f))
+
 ## [1.3.2](https://github.com/chrismaille/saveme/compare/v1.3.1...v1.3.2) (2026-11-20)
 
 
