@@ -22,6 +22,7 @@ sudo apt install saveme
 ```
 
 Depois disso, `sudo apt upgrade` atualiza o SaveMe junto com o sistema.
+Detalhes do repositório e rotação da chave: [APT.md](APT.md).
 
 O pacote instala o aplicativo, daemon, serviço D-Bus, CLI e o zip da extensão.
 Para instalar a extensão ao usar somente APT:
