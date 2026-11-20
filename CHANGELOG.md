@@ -1,3 +1,10 @@
+## [1.4.1](https://github.com/chrismaille/saveme/compare/v1.4.0...v1.4.1) (2026-11-20)
+
+
+### Bug Fixes
+
+* **ci:** avoid SIGPIPE in package entry check ([609649f](https://github.com/chrismaille/saveme/commit/609649f004a8856a70d9f629ee097e480c17935e))
+
 # [1.4.0](https://github.com/chrismaille/saveme/compare/v1.3.5...v1.4.0) (2026-11-20)
 
 
