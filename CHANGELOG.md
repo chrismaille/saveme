@@ -1,3 +1,10 @@
+## [1.3.2](https://github.com/chrismaille/saveme/compare/v1.3.1...v1.3.2) (2026-11-20)
+
+
+### Bug Fixes
+
+* **ci:** avoid heavy build dependencies in release ([ab4b149](https://github.com/chrismaille/saveme/commit/ab4b149e18403866f6df6de258ec112b47128f20))
+
 ## [1.3.1](https://github.com/chrismaille/saveme/compare/v1.3.0...v1.3.1) (2026-11-20)
 
 
