@@ -49,6 +49,8 @@ jobs:
     needs: release
     if: needs.release.outputs.tag != ''
     runs-on: ubuntu-latest
+    env:
+      PPA_SIGNING_KEY: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -63,8 +65,25 @@ jobs:
         run: make setup
       - name: Build package and extension
         run: make deb
-      - name: Build PPA source package
+      - name: Import PPA signing key
+        if: env.PPA_SIGNING_KEY != ''
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.PPA_GPG_PASSPHRASE }}
+          git_user_signingkey: false
+      - name: Build PPA source package (signed)
+        if: env.PPA_SIGNING_KEY != ''
+        run: ./scripts/build-ppa-source.sh -sa -d
+      - name: Build PPA source package (unsigned)
+        if: env.PPA_SIGNING_KEY == ''
         run: ./scripts/build-ppa-source.sh -sa -us -uc -d
+      - name: Upload to Launchpad PPA
+        if: env.PPA_SIGNING_KEY != ''
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dput
+          dput ppa:chrismaille/saveme build/ppa/*_source.changes
       - name: Attach release assets
         uses: softprops/action-gh-release@v2
         with:

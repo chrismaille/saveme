@@ -53,6 +53,27 @@ O Launchpad vai:
 3. assinar o repositório;
 4. publicar o binário.
 
+## Upload automático pelo GitHub Actions
+
+O workflow `Release` pode assinar e enviar o pacote ao Launchpad
+automaticamente. Para ativar, configure os segredos do repositório:
+
+- `PPA_GPG_PRIVATE_KEY`: conteúdo ASCII armored da chave privada GPG.
+- `PPA_GPG_PASSPHRASE`: passphrase da chave; deixe vazio se a chave não tiver
+  passphrase.
+
+Com esses segredos, o workflow:
+
+1. importa a chave;
+2. gera o pacote-fonte assinado;
+3. executa `dput ppa:chrismaille/saveme ...`;
+4. anexa os arquivos à release.
+
+Sem os segredos, o workflow ainda constrói o pacote-fonte, mas o upload precisa
+ser feito manualmente. A chave privada nunca deve ser commitada. Use um segredo
+de repositório ou, preferencialmente, de environment com aprovação. Se a chave
+vazar, revogue-a no Launchpad e gere outra.
+
 ## Instalar
 
 ```bash

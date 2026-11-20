@@ -67,9 +67,10 @@ Ao receber um push na `main`, o workflow `Release`:
 8. gera os arquivos-fonte do PPA;
 9. anexa os artefatos à release.
 
-O upload ao Launchpad continua manual, porque exige a chave GPG da conta.
-Veja [PPA.md](PPA.md). O empacotamento Snap/Flatpak ainda não faz parte do
-workflow.
+O upload ao Launchpad pode ser automático se os segredos
+`PPA_GPG_PRIVATE_KEY` e `PPA_GPG_PASSPHRASE` estiverem configurados; sem eles,
+o pacote-fonte é anexado à release e o envio é manual. Veja [PPA.md](PPA.md).
+O empacotamento Snap/Flatpak ainda não faz parte do workflow.
 
 ## Primeira release
 
