@@ -61,7 +61,7 @@ install -Dm644 "$ROOT_DIR/README.md" "$STAGE/usr/share/doc/saveme/README.md"
 
 install -Dm755 "$ROOT_DIR/data/saveme" "$STAGE/usr/bin/saveme"
 install -Dm755 "$ROOT_DIR/data/saveme-daemon" "$STAGE/usr/bin/saveme-daemon"
-install -Dm755 "$ROOT_DIR/data/saveme" "$STAGE/usr/bin/saveme"
+install -Dm755 "$ROOT_DIR/data/saveme-settings" "$STAGE/usr/bin/saveme-settings"
 
 INSTALLED_SIZE="$(du -sk "$STAGE" | cut -f1)"
 cat > "$STAGE/DEBIAN/control" <<EOF
