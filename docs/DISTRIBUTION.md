@@ -99,7 +99,7 @@ A desvantagem é ser específico para Debian/Ubuntu e não ter sandbox.
 
 ## PPA
 
-O PPA do Launchpad está em preparação em `ppa:<usuario>/saveme`. Ele permitirá
+O PPA do Launchpad está publicado em `ppa:chrismaille/saveme`. Ele permite
 que o sistema receba novas versões com `sudo apt upgrade` sem um repositório
 próprio mantido pelo projeto.
 

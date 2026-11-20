@@ -9,7 +9,7 @@ Um PPA é um repositório APT pessoal hospedado no Launchpad. Para o usuário, a
 experiência é:
 
 ```bash
-sudo add-apt-repository ppa:<usuario-launchpad>/saveme
+sudo add-apt-repository ppa:chrismaille/saveme
 sudo apt update
 sudo apt install saveme
 ```
@@ -38,7 +38,7 @@ O usuário não precisa adicionar chave GPG manualmente.
 6. Enviar para o PPA:
 
    ```bash
-   dput ppa:<usuario-launchpad>/saveme \
+   dput ppa:chrismaille/saveme \
      build/ppa/saveme_<versão>_source.changes
    ```
 

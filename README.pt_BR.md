@@ -108,11 +108,59 @@ O iCloud está fora do escopo até a Apple oferecer uma API estável.
 - rclone 1.60+ (o instalador inclui um binário fixado 1.76; o pacote PPA
   usa o rclone da distribuição)
 
-### Recomendado: script de instalação
+### Recomendado: PPA (Launchpad)
 
-O script instala o aplicativo, ativa a extensão do GNOME e inicia o daemon.
-Rodar novamente atualiza a instalação sem tocar nos jobs, no estado ou na
-configuração.
+O PPA é a instalação preferida porque o Ubuntu atualiza o SaveMe junto com o
+sistema. O primeiro build está sendo processado pelo Launchpad; se o pacote
+ainda não estiver disponível, use o script de instalação abaixo.
+
+```bash
+sudo add-apt-repository ppa:chrismaille/saveme
+sudo apt update
+sudo apt install saveme
+```
+
+Depois disso:
+
+```bash
+sudo apt upgrade
+```
+
+O pacote do PPA instala o aplicativo, daemon, serviço D-Bus, CLI e o zip da
+extensão. A extensão opcional do GNOME pode ser instalada e ativada uma vez
+com:
+
+```bash
+gnome-extensions install --force /usr/share/saveme/extension.zip
+gnome-extensions enable saveme@chrismaille.github.io
+```
+
+Detalhes de build e envio: [docs/PPA.md](docs/PPA.md).
+
+### Alternativa: script de instalação
+
+O script é um bootstrap para o `.deb` das releases do GitHub. Ele serve para a
+primeira instalação, para testar um build local ou quando o pacote do PPA
+ainda não está disponível. Ele não é específico desta máquina: usa apenas o
+usuário atual, a arquitetura do host e os caminhos padrão da sessão.
+
+O que o script faz antes de instalar:
+
+1. resolve o pacote:
+   - `--deb PATH`, se informado;
+   - um `dist/saveme_<arch>.deb` local, quando rodado de um checkout;
+   - senão, a release mais recente do GitHub (ou `--version X.Y.Z`).
+2. baixa o zip da extensão e verifica o `SHA256SUMS` quando disponível.
+3. para o aplicativo e o daemon `systemd --user` em execução.
+4. chama `sudo` somente para o `apt-get install --reinstall` do `.deb`.
+5. instala/atualiza a extensão do GNOME por padrão
+   (`--no-extension`/`--app-only` pula).
+6. ativa e inicia o daemon do usuário.
+7. roda `saveme doctor` e grava o log em
+   `~/.local/state/saveme-install.log`.
+
+Ele **não** apaga jobs, configuração, contas ou histórico. Use
+`--uninstall --purge --yes` somente quando quiser remover esses dados.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/chrismaille/saveme/main/scripts/install.sh | sh
@@ -123,30 +171,10 @@ Opções úteis:
 ```bash
 ./scripts/install.sh --no-extension   # somente app + daemon
 ./scripts/install.sh --app-only       # apelido para --no-extension
-./scripts/install.sh --dry-run        # mostra o plano
-./scripts/install.sh --uninstall      # remove o pacote
+./scripts/install.sh --dry-run        # mostra o plano sem alterar nada
+./scripts/install.sh --remote         # força a release mesmo com dist/
+./scripts/install.sh --uninstall      # remove o pacote, mantém os dados
 ```
-
-### PPA (Launchpad)
-
-O PPA no Launchpad está em preparação. Quando o build for publicado:
-
-```bash
-sudo add-apt-repository ppa:<usuario-launchpad>/saveme
-sudo apt update
-sudo apt install saveme
-```
-
-Depois disso, `apt upgrade` mantém o SaveMe atualizado. O pacote do PPA instala
-o aplicativo, o daemon, o serviço D-Bus e a CLI; a extensão opcional do GNOME
-pode ser instalada uma vez com:
-
-```bash
-gnome-extensions install --force /usr/share/saveme/extension.zip
-gnome-extensions enable saveme@chrismaille.github.io
-```
-
-Detalhes de build e envio: [docs/PPA.md](docs/PPA.md).
 
 ### A partir de um checkout local
 

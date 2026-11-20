@@ -8,10 +8,11 @@
 
 ## Instalação via PPA (atualizações automáticas)
 
-O PPA do Launchpad está em preparação. Quando o build estiver publicado:
+O PPA do Launchpad está publicado. O primeiro build pode levar alguns minutos
+até aparecer no `apt`:
 
 ```bash
-sudo add-apt-repository ppa:<usuario-launchpad>/saveme
+sudo add-apt-repository ppa:chrismaille/saveme
 sudo apt update
 sudo apt install saveme
 ```
