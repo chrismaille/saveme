@@ -1,6 +1,6 @@
 # PPA no Launchpad
 
-O PPA é o próximo canal de distribuição para Ubuntu:
+O PPA é o canal de distribuição para Ubuntu:
 
 ```text
 ppa:chrismaille/saveme
