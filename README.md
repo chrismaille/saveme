@@ -102,7 +102,7 @@ iCloud is intentionally out of scope until Apple offers a stable API.
 
 - Ubuntu 26.04 or a compatible GNOME 50 distribution
 - GJS 1.88+, GTK 4.22+, libadwaita 1.9+
-- rclone 1.60+ (the installer ships a pinned 1.76 binary; the APT package
+- rclone 1.60+ (the installer ships a pinned 1.76 binary; the PPA package
   uses the distribution's rclone)
 
 ### Recommended: installer script
@@ -124,28 +124,26 @@ Useful options:
 ./scripts/install.sh --uninstall      # remove the package
 ```
 
-### Package manager (APT)
+### PPA (Launchpad)
 
-Add the signed repository once; after that, `apt upgrade` keeps SaveMe current:
+The Launchpad PPA is being prepared. Once its build is published:
 
 ```bash
-sudo install -d -m 0755 /etc/apt/keyrings
-curl -fsSL https://chrismaille.github.io/saveme/saveme-archive-keyring.gpg \
-  | sudo tee /etc/apt/keyrings/saveme-archive-keyring.gpg >/dev/null
-echo "deb [signed-by=/etc/apt/keyrings/saveme-archive-keyring.gpg] https://chrismaille.github.io/saveme/ stable main" \
-  | sudo tee /etc/apt/sources.list.d/saveme.list
+sudo add-apt-repository ppa:<launchpad-user>/saveme
 sudo apt update
 sudo apt install saveme
 ```
 
-The APT package installs the app, daemon, D-Bus service and CLI. The GNOME
-extension is installed and enabled by the installer script; if you install with
-APT only, install and enable it once:
+After that, `apt upgrade` keeps SaveMe current. The PPA package installs the
+app, daemon, D-Bus service and CLI; the optional GNOME extension can be
+installed once with:
 
 ```bash
 gnome-extensions install --force /usr/share/saveme/extension.zip
 gnome-extensions enable saveme@chrismaille.github.io
 ```
+
+Build and upload details: [docs/PPA.md](docs/PPA.md).
 
 ### From a local checkout
 
@@ -216,9 +214,9 @@ See [docs/RELEASING.md](docs/RELEASING.md).
 ## Distribution
 
 The supported installation path today is the `.deb` package installed by the
-script, with a signed APT repository for automatic updates. AppImage is not a
-good fit for the daemon, D-Bus, systemd user service and GNOME extension. Snap
-and Flatpak are being evaluated before any store submission.
+script, with a Launchpad PPA for automatic updates. AppImage is not a good fit
+for the daemon, D-Bus, systemd user service and GNOME extension. Snap and
+Flatpak are being evaluated before any store submission.
 
 See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) for the comparison.
 
@@ -227,7 +225,6 @@ See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) for the comparison.
 - [docs/SPEC.md](docs/SPEC.md) — product scope and acceptance criteria
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — technical decisions
 - [docs/INSTALL.md](docs/INSTALL.md) — install, CLI and uninstall
-- [docs/APT.md](docs/APT.md) — signed APT repository and key rotation
 - [docs/UBUNTU.md](docs/UBUNTU.md) — PPA and the official Ubuntu archive
 - [docs/PPA.md](docs/PPA.md) — Launchpad PPA build and upload
 - [docs/TESTING.md](docs/TESTING.md) — automated and manual test matrix

@@ -85,12 +85,12 @@ dch --distribution <série> --release
 dput ppa:chrismaille/saveme build/ppa/saveme_<versão>_source.changes
 ```
 
-## Diferenças em relação ao APT próprio
+## Diferenças em relação ao .deb do instalador
 
-- O APT próprio em GitHub Pages é atualizado automaticamente pelo workflow de
-  release e não depende do Launchpad.
-- O PPA exige upload manual assinado (ou um fluxo separado com credenciais do
-  Launchpad) e compila os binários no Launchpad.
+- O `.deb` do instalador inclui um rclone fixado e é baixado diretamente da
+  release do GitHub.
+- O PPA compila no Launchpad, usa o `rclone` da distribuição e é atualizado
+  com `apt upgrade`.
 - O PPA não coloca o app no App Center nem no arquivo oficial do Ubuntu; isso
   exige o processo descrito em [UBUNTU.md](UBUNTU.md).
 

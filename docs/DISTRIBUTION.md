@@ -97,19 +97,19 @@ O `.deb` é o formato atual e o que melhor cobre a arquitetura:
 
 A desvantagem é ser específico para Debian/Ubuntu e não ter sandbox.
 
-## Repositório APT
+## PPA
 
-O repositório assinado fica em
-`https://chrismaille.github.io/saveme/`. Ele é atualizado a cada release e
-permite que o sistema receba novas versões com `sudo apt upgrade`.
+O PPA do Launchpad está em preparação em `ppa:<usuario>/saveme`. Ele permitirá
+que o sistema receba novas versões com `sudo apt upgrade` sem um repositório
+próprio mantido pelo projeto.
 
 O instalador por script continua sendo o caminho mais simples para a primeira
-instalação porque também instala e ativa a extensão do GNOME. Depois, o APT
+instalação porque também instala e ativa a extensão do GNOME. Depois, o PPA
 cuida das atualizações do aplicativo, daemon, D-Bus e CLI.
 
 ## Recomendação
 
-1. Manter o `.deb` com repositório APT como canal principal no Linux.
+1. Manter o `.deb` e o PPA como canal principal no Ubuntu.
 2. Usar o script para a primeira instalação e para a extensão.
 3. Prototipar Snap antes de Flatpak, porque o Snap consegue empacotar o
    daemon e o app juntos.

@@ -6,26 +6,21 @@
 - Sessão Wayland ou X11
 - O `.deb` já inclui o rclone 1.76 pinado em `/usr/lib/saveme/bin/rclone`
 
-## Instalação via APT (atualizações automáticas)
+## Instalação via PPA (atualizações automáticas)
 
-O repositório APT assinado fica em
-`https://chrismaille.github.io/saveme/`. Configure-o uma vez:
+O PPA do Launchpad está em preparação. Quando o build estiver publicado:
 
 ```bash
-sudo install -d -m 0755 /etc/apt/keyrings
-curl -fsSL https://chrismaille.github.io/saveme/saveme-archive-keyring.gpg \
-  | sudo tee /etc/apt/keyrings/saveme-archive-keyring.gpg >/dev/null
-echo "deb [signed-by=/etc/apt/keyrings/saveme-archive-keyring.gpg] https://chrismaille.github.io/saveme/ stable main" \
-  | sudo tee /etc/apt/sources.list.d/saveme.list
+sudo add-apt-repository ppa:<usuario-launchpad>/saveme
 sudo apt update
 sudo apt install saveme
 ```
 
 Depois disso, `sudo apt upgrade` atualiza o SaveMe junto com o sistema.
-Detalhes do repositório e rotação da chave: [APT.md](APT.md).
+Detalhes de build e envio: [PPA.md](PPA.md).
 
 O pacote instala o aplicativo, daemon, serviço D-Bus, CLI e o zip da extensão.
-Para instalar a extensão ao usar somente APT:
+Para instalar a extensão ao usar somente o PPA:
 
 ```bash
 gnome-extensions install --force /usr/share/saveme/extension.zip

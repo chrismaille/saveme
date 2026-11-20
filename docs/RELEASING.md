@@ -65,8 +65,7 @@ Ao receber um push na `main`, o workflow `Release`:
 6. cria a tag `vX.Y.Z` e a release no GitHub;
 7. constrói o `.deb` e a extensão;
 8. gera os arquivos-fonte do PPA;
-9. anexa os artefatos à release;
-10. publica o repositório APT assinado no GitHub Pages.
+9. anexa os artefatos à release.
 
 O upload ao Launchpad continua manual, porque exige a chave GPG da conta.
 Veja [PPA.md](PPA.md). O empacotamento Snap/Flatpak ainda não faz parte do

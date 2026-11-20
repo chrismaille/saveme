@@ -58,25 +58,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            gjs gnome-shell curl unzip dpkg-dev apt-utils gnupg rsync
+            gjs gnome-shell curl unzip dpkg-dev rsync
       - name: Download pinned rclone
         run: make setup
       - name: Build package and extension
         run: make deb
-      - name: Import APT signing key
-        uses: crazy-max/ghaction-import-gpg@v6
-        with:
-          gpg_private_key: ${{ secrets.APT_GPG_PRIVATE_KEY }}
-          git_user_signingkey: false
-      - name: Build APT repository
-        shell: bash
-        run: |
-          mkdir -p build/apt
-          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
-            git fetch --depth=1 origin gh-pages
-            git archive FETCH_HEAD | tar -x -C build/apt
-          fi
-          ./scripts/build-apt-repo.sh build/apt
       - name: Build PPA source package
         run: ./scripts/build-ppa-source.sh -sa -us -uc -d
       - name: Attach release assets
@@ -92,12 +78,3 @@ jobs:
             build/ppa/*.debian.tar.xz
             build/ppa/*_source.changes
           fail_on_unmatched_files: true
-      - name: Publish APT repository
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./build/apt
-          publish_branch: gh-pages
-          force_orphan: true
-          user_name: github-actions[bot]
-          user_email: 41898282+github-actions[bot]@users.noreply.github.com

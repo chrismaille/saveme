@@ -1,30 +1,15 @@
-# Ubuntu: repositório próprio, PPA e arquivo oficial
+# Ubuntu: PPA e arquivo oficial
 
-Existem três níveis diferentes de "estar no APT do Ubuntu". Eles não são a
+Existem dois níveis diferentes de "estar no APT do Ubuntu". Eles não são a
 mesma coisa.
 
-## 1. Repositório APT próprio (já implementado)
-
-O SaveMe publica um repositório assinado em:
-
-```text
-https://chrismaille.github.io/saveme/
-```
-
-O usuário adiciona a chave e a linha `deb` uma vez, e depois usa
-`sudo apt upgrade`. Funciona, é atualizado a cada release e não depende de
-aprovação de terceiros.
-
-Limitação: não é descoberto pelo Ubuntu, não aparece no App Center e o usuário
-precisa conhecer o projeto para adicionar o repositório.
-
-## 2. PPA (próximo passo natural)
+## 1. PPA (próximo passo natural)
 
 Um PPA é um repositório APT pessoal hospedado no Launchpad. Para o usuário, a
 experiência é:
 
 ```bash
-sudo add-apt-repository ppa:chrismaille/saveme
+sudo add-apt-repository ppa:<usuario-launchpad>/saveme
 sudo apt update
 sudo apt install saveme
 ```
@@ -42,24 +27,19 @@ O usuário não precisa adicionar chave GPG manualmente.
 
 1. Criar conta no Launchpad e assinar o Código de Conduta.
 2. Registrar a chave GPG da conta no Launchpad.
-3. Criar o PPA `ppa:chrismaille/saveme`.
-4. Adicionar um diretório `debian/` de verdade ao projeto:
-   - `debian/control`
-   - `debian/rules`
-   - `debian/changelog`
-   - `debian/copyright`
-   - `debian/source/format`
-   - `debian/install`
-5. Gerar o pacote-fonte:
+3. Criar o PPA `saveme`.
+4. Adicionar o `debian/` do projeto (já incluído no repositório).
+5. Gerar e assinar o pacote-fonte:
 
    ```bash
-   debuild -S -sa
+   ./scripts/build-ppa-source.sh -sa -k<KEYID>
    ```
 
 6. Enviar para o PPA:
 
    ```bash
-   dput ppa:chrismaille/saveme ../saveme_<versão>_source.changes
+   dput ppa:<usuario-launchpad>/saveme \
+     build/ppa/saveme_<versão>_source.changes
    ```
 
 7. Esperar o build no Launchpad e testar a instalação.
@@ -72,10 +52,10 @@ aplicativo no arquivo oficial nem no App Center.
 
 O Launchpad compila a partir do código-fonte. Ele não aceita simplesmente o
 `.deb` que o `scripts/build-deb.sh` gera hoje. Também não é adequado embutir o
-binário do `rclone` dentro do pacote-fonte: o correto é depender do pacote
-`rclone` do Ubuntu ou publicar uma versão compatível em um pacote separado.
+binário do `rclone` dentro do pacote-fonte: o pacote do PPA depende do
+`rclone` do Ubuntu.
 
-## 3. Arquivo oficial do Ubuntu
+## 2. Arquivo oficial do Ubuntu
 
 É o que faz o SaveMe aparecer no `universe` (e futuramente no `main`) sem o
 usuário adicionar PPA. O fluxo é bem mais rigoroso.
@@ -112,21 +92,19 @@ usuário adicionar PPA. O fluxo é bem mais rigoroso.
 
 ## Situação atual do SaveMe
 
-O repositório APT próprio está pronto e funcionando. O PPA é o próximo passo
-mais útil para usuários Ubuntu.
+O pacote-fonte do PPA já está pronto em `debian/` e é publicado como anexo das
+releases. O upload ao Launchpad depende da conta e da chave GPG do mantenedor.
 
 Antes do arquivo oficial, ainda faltam:
 
-1. trocar o empacotamento artesanal por um `debian/` de pacote-fonte;
-2. remover o `rclone` embutido e definir a dependência do pacote do Ubuntu;
-3. decidir como a extensão do GNOME será instalada e ativada;
-4. validar as contas reais dos provedores de nuvem;
-5. encontrar um sponsor para o upload no Ubuntu.
+1. definir como a extensão do GNOME será instalada e ativada;
+2. validar as contas reais dos provedores de nuvem;
+3. rodar `lintian` e testes `autopkgtest`;
+4. encontrar um sponsor para o upload no Ubuntu.
 
 ## Ordem recomendada
 
-1. Manter o repositório APT próprio para releases rápidas.
-2. Criar um PPA para distribuição Ubuntu com `apt upgrade`.
-3. Depois de estabilizar o pacote-fonte e a extensão, buscar o `universe`.
-4. Snap Store/Flathub são canais separados, com os desafios de daemon e
+1. Publicar o PPA para distribuição Ubuntu com `apt upgrade`.
+2. Depois de estabilizar o pacote-fonte e a extensão, buscar o `universe`.
+3. Snap Store/Flathub são canais separados, com os desafios de daemon e
    extensão já documentados em [DISTRIBUTION.md](DISTRIBUTION.md).
