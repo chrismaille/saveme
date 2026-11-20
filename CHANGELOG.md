@@ -1,3 +1,10 @@
+## [1.3.5](https://github.com/chrismaille/saveme/compare/v1.3.4...v1.3.5) (2026-11-20)
+
+
+### Bug Fixes
+
+* **packaging:** install command wrappers ([1f346b9](https://github.com/chrismaille/saveme/commit/1f346b92b0a1222ae43e5abf8957d36afca65c92))
+
 ## [1.3.4](https://github.com/chrismaille/saveme/compare/v1.3.3...v1.3.4) (2026-11-20)
 
 
