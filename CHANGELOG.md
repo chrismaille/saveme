@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/chrismaille/saveme/compare/v1.1.0...v1.2.0) (2026-11-20)
+
+
+### Features
+
+* **recovery:** confirm sources before importing jobs ([1f2516c](https://github.com/chrismaille/saveme/commit/1f2516c17b4e1f368a50b1ba5a6be33965ec3955))
+
 # [1.1.0](https://github.com/chrismaille/saveme/compare/v1.0.0...v1.1.0) (2026-11-20)
 
 
