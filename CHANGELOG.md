@@ -1,3 +1,10 @@
+# [1.6.0](https://github.com/chrismaille/saveme/compare/v1.5.0...v1.6.0) (2026-11-21)
+
+
+### Features
+
+* **app:** refine schedules and make installers safer ([65320d1](https://github.com/chrismaille/saveme/commit/65320d1b5f8df382bfef60df069995a56f2b6f3e))
+
 # [1.5.0](https://github.com/chrismaille/saveme/compare/v1.4.2...v1.5.0) (2026-11-20)
 
 
