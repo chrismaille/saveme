@@ -811,9 +811,9 @@ export class JobsPage {
 
     _configurationSection(job) {
         const group = new Adw.PreferencesGroup({title: t('Configuração')});
-        group.add(this._configRow(t('Schedule'), triggerLabel(job.trigger),
-            t('When this job runs automatically.')));
         if (job.type === JOB_TYPES.BACKUP) {
+            group.add(this._configRow(t('Schedule'), triggerLabel(job.trigger),
+                t('When this job runs automatically.')));
             group.add(this._deleteGuardRow(job));
             group.add(this._configRow(t('Retention'),
                 job.backup.keepForever || job.backup.retentionDays === 0

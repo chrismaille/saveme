@@ -58,11 +58,17 @@ anterior:
 O script:
 
 - detecta se o SaveMe já está instalado e atualiza automaticamente;
-- para o app e o daemon existentes (`systemctl --user` + `pkill`);
 - reinstala/atualiza o `.deb` com `apt-get install --reinstall`;
-- instala e ativa a extensão por padrão (pule com `--no-extension`);
-- inicia o daemon, exceto com `--no-start`;
-- roda `saveme doctor` no final.
+- **não** para o app, **não** reinicia o daemon e **não** inicia serviços;
+- não instala a extensão por padrão: o app atualiza a extensão na próxima
+  abertura (use `--with-extension` para instalar/atualizar agora).
+
+O app e o daemon continuam na versão anterior até serem reiniciados. Para
+aplicar a atualização imediatamente, interrompendo jobs em andamento:
+
+```bash
+systemctl --user restart saveme.service
+```
 
 Use `--dry-run` para ver exatamente o que será feito:
 
@@ -76,17 +82,16 @@ O log completo da instalação fica em:
 ~/.local/state/saveme-install.log
 ```
 
-Use `--log PATH` para escolher outro arquivo. Em caso de falha do systemd, o
-script anexa ao log o `systemctl status` e o `journalctl` do serviço.
+Use `--log PATH` para escolher outro arquivo.
 
 Opções úteis:
 
 ```bash
-./scripts/install.sh                    # instalar ou atualizar (padrão)
-./scripts/install.sh --with-extension   # instalar/atualizar a extensão (padrão)
-./scripts/install.sh --no-extension     # app-only
+./scripts/install.sh                    # instalar ou atualizar o pacote (padrão)
+./scripts/install.sh --with-extension   # instalar/atualizar também a extensão GNOME
+./scripts/install.sh --no-extension     # compatibilidade; é o padrão
 ./scripts/install.sh --app-only         # alias de --no-extension
-./scripts/install.sh --no-start         # não inicia o daemon agora
+./scripts/install.sh --no-start         # compatibilidade; nenhum serviço é iniciado
 ./scripts/install.sh --deb PATH         # usa um .deb específico
 ./scripts/install.sh --extension PATH   # usa um zip específico (implica extensão)
 ./scripts/install.sh --version 1.0.0    # release específico (força remoto)

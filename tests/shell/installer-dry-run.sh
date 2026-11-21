@@ -54,6 +54,16 @@ fi
 printf '%s\n' "$OUTPUT" | grep -q 'apt-get install -y --reinstall'
 
 OUTPUT="$(run_plan --deb "$FAKE_DEB")"
+if printf '%s\n' "$OUTPUT" | grep -q 'shell-extension.zip'; then
+    echo "default install must not download the extension" >&2
+    exit 1
+fi
+if printf '%s\n' "$OUTPUT" | grep -qE 'systemctl --user (stop|restart)|pkill'; then
+    echo "default install must not stop or restart services" >&2
+    exit 1
+fi
+
+OUTPUT="$(run_plan --deb "$FAKE_DEB" --with-extension)"
 printf '%s\n' "$OUTPUT" | grep -q 'shell-extension.zip'
 
 OUTPUT="$(SAVEME_FAKE_NOT_INSTALLED=1 run_plan --deb "$FAKE_DEB")"

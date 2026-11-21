@@ -141,20 +141,26 @@ primeira instalação, para testar um build local ou quando o pacote do PPA
 ainda não está disponível. Ele não é específico desta máquina: usa apenas o
 usuário atual, a arquitetura do host e os caminhos padrão da sessão.
 
-O que o script faz antes de instalar:
+O que o script faz:
 
 1. resolve o pacote:
    - `--deb PATH`, se informado;
    - um `dist/saveme_<arch>.deb` local, quando rodado de um checkout;
    - senão, a release mais recente do GitHub (ou `--version X.Y.Z`).
-2. baixa o zip da extensão e verifica o `SHA256SUMS` quando disponível.
-3. para o aplicativo e o daemon `systemd --user` em execução.
-4. chama `sudo` somente para o `apt-get install --reinstall` do `.deb`.
-5. instala/atualiza a extensão do GNOME por padrão
-   (`--no-extension`/`--app-only` pula).
-6. ativa e inicia o daemon do usuário.
-7. roda `saveme doctor` e grava o log em
-   `~/.local/state/saveme-install.log`.
+2. chama `sudo` somente para o `apt-get install --reinstall` do `.deb`.
+3. grava o log em `~/.local/state/saveme-install.log`.
+
+Ele **não** para o aplicativo, não reinicia o daemon, não inicia serviços e não
+altera a sessão em execução. O app e o daemon continuam na versão atual até
+serem reiniciados. O zip da extensão do GNOME é instalado pelo pacote e
+atualizado pelo aplicativo na próxima abertura.
+
+Para aplicar a atualização ao daemon em execução imediatamente (isso interrompe
+jobs em andamento):
+
+```bash
+systemctl --user restart saveme.service
+```
 
 Ele **não** apaga jobs, configuração, contas ou histórico. Use
 `--uninstall --purge --yes` somente quando quiser remover esses dados.
@@ -166,8 +172,7 @@ curl -fsSL https://raw.githubusercontent.com/chrismaille/saveme/main/scripts/ins
 Opções úteis:
 
 ```bash
-./scripts/install.sh --no-extension   # somente app + daemon
-./scripts/install.sh --app-only       # apelido para --no-extension
+./scripts/install.sh --with-extension # instala/atualiza também a extensão do GNOME
 ./scripts/install.sh --dry-run        # mostra o plano sem alterar nada
 ./scripts/install.sh --remote         # força a release mesmo com dist/
 ./scripts/install.sh --uninstall      # remove o pacote, mantém os dados

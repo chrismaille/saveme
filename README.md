@@ -136,20 +136,26 @@ useful for a first install, for testing a local build or when the PPA package
 is not available. It is not machine-specific: it only uses the current user,
 the host architecture and the standard user/session paths.
 
-What the script does before installing:
+What the script does:
 
 1. Resolves the package:
    - `--deb PATH` if given;
    - a local `dist/saveme_<arch>.deb` when run from a checkout;
    - otherwise the latest GitHub release (or `--version X.Y.Z`).
-2. Downloads the extension zip and verifies `SHA256SUMS` when available.
-3. Stops the running app and the `systemd --user` daemon.
-4. Calls `sudo` only for `apt-get install --reinstall` of the downloaded `.deb`.
-5. Installs/updates the GNOME extension by default
-   (`--no-extension`/`--app-only` skips it).
-6. Enables and starts the user daemon.
-7. Runs `saveme doctor` and writes a log to
-   `~/.local/state/saveme-install.log`.
+2. Calls `sudo` only for `apt-get install --reinstall` of the downloaded `.deb`.
+3. Writes a log to `~/.local/state/saveme-install.log`.
+
+It does **not** stop the app, restart the daemon, start services or change the
+running session. The app and daemon keep their current version until they are
+restarted. The GNOME extension zip is installed by the package and refreshed by
+the app on its next launch.
+
+To apply an update to a running daemon immediately (this interrupts running
+jobs):
+
+```bash
+systemctl --user restart saveme.service
+```
 
 It does **not** erase jobs, configuration, accounts or history. Use
 `--uninstall --purge --yes` only when you really want to remove that data.
@@ -161,8 +167,7 @@ curl -fsSL https://raw.githubusercontent.com/chrismaille/saveme/main/scripts/ins
 Useful options:
 
 ```bash
-./scripts/install.sh --no-extension   # app + daemon only
-./scripts/install.sh --app-only       # alias for --no-extension
+./scripts/install.sh --with-extension # also install/update the GNOME extension
 ./scripts/install.sh --dry-run        # show the plan without changing anything
 ./scripts/install.sh --remote         # force the GitHub release even with dist/
 ./scripts/install.sh --uninstall      # remove the package, keep user data

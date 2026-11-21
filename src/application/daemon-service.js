@@ -19,6 +19,7 @@ import {
 } from '../domain/backup-manifest.js';
 import {
     JOB_TYPES,
+    TRIGGER_MODES,
     jobRemoteNames,
     jobSources,
     localPathFor,
@@ -341,7 +342,10 @@ export class DaemonService {
         payload.enabled = false;
         payload.recovered = true;
         payload.destinationLayout = 'saveMe';
-        payload.trigger = {...payload.trigger, mode: 'manual'};
+        if (payload.type === JOB_TYPES.BACKUP)
+            payload.trigger = {...payload.trigger, mode: TRIGGER_MODES.MANUAL};
+        else
+            payload.trigger = {...payload.trigger, mode: TRIGGER_MODES.REALTIME};
         const existing = this.config.getJob(payload.id);
         const saved = existing
             ? this.config.updateJob(payload.id, payload)

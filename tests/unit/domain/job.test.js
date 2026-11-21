@@ -196,6 +196,13 @@ export default suite('domain/job', [
         assertEqual(job.backup.retentionDays, 30);
         assertEqual(job.enabled, false);
     }),
+    test('sync jobs are always real-time', () => {
+        const job = normalizeJobFields(baseJob({
+            type: JOB_TYPES.SYNC,
+            trigger: {mode: TRIGGER_MODES.MANUAL},
+        }));
+        assertEqual(job.trigger.mode, TRIGGER_MODES.REALTIME);
+    }),
     test('normalizeJobFields keeps valid values', () => {
         const job = normalizeJobFields(baseJob({
             type: JOB_TYPES.BACKUP,

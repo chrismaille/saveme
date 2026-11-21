@@ -19,6 +19,7 @@ import {
     validateJob,
 } from '../src/jobs.js';
 import {INTERVAL_UNITS, WEEKDAYS, isValidTime, triggerLabel} from '../src/domain/schedule.js';
+import {sunsetTime} from '../src/domain/sun.js';
 import {cleanError, remoteTypeLabel} from './presentation/format.js';
 import {t} from '../src/i18n.js';
 import {JobSaveDialog} from './job-save-dialog.js';
@@ -105,7 +106,7 @@ export const JobEditor = GObject.registerClass({
             tooltip_text: t('Back'),
             css_classes: ['flat'],
         });
-        this.backButton.connect('clicked', () => this._showStep(this._step - 1));
+        this.backButton.connect('clicked', () => this._showStep(this._previousStep()));
         header.pack_start(this.backButton);
 
         this.nextButton = new Gtk.Button({
@@ -819,18 +820,40 @@ export const JobEditor = GObject.registerClass({
         return Math.max(1, Math.round(Number(this.intervalRow?.value || 1) * factor));
     }
 
-    _duskTime() {
+    _duskSettings() {
         try {
-            const settings = Gio.Settings.new('org.gnome.settings-daemon.plugins.color');
+            const settings = Gio.Settings.new(
+                'org.gnome.settings-daemon.plugins.color');
+            if (settings.get_boolean('night-light-schedule-automatic')) {
+                const [latitude, longitude] = settings
+                    .get_value('night-light-last-coordinates').deepUnpack();
+                if (Number.isFinite(latitude) && Number.isFinite(longitude) &&
+                    (latitude !== 0 || longitude !== 0)) {
+                    const time = sunsetTime(latitude, longitude);
+                    if (time)
+                        return {time, automatic: true, latitude, longitude};
+                }
+            }
             const hours = Number(settings.get_double('night-light-schedule-from'));
             if (!Number.isFinite(hours))
-                return '18:00';
+                return {time: '18:00', automatic: false,
+                    latitude: null, longitude: null};
             const total = ((Math.round(hours * 60) % 1440) + 1440) % 1440;
-            return `${String(Math.floor(total / 60)).padStart(2, '0')}:` +
-                `${String(total % 60).padStart(2, '0')}`;
+            return {
+                time: `${String(Math.floor(total / 60)).padStart(2, '0')}:` +
+                    `${String(total % 60).padStart(2, '0')}`,
+                automatic: false,
+                latitude: null,
+                longitude: null,
+            };
         } catch (_) {
-            return '18:00';
+            return {time: '18:00', automatic: false,
+                latitude: null, longitude: null};
         }
+    }
+
+    _duskTime() {
+        return this._duskSettings().time;
     }
 
     _buildSafetyPage() {
@@ -984,9 +1007,34 @@ export const JobEditor = GObject.registerClass({
         };
         for (const [key, value] of Object.entries(types))
             this.reviewRows[key].set_subtitle(String(value));
+        if (this.reviewRows.schedule)
+            this.reviewRows.schedule.visible = job.type === JOB_TYPES.BACKUP;
+    }
+
+    _isSyncJob() {
+        return this.typeRow?.selected !== 1;
+    }
+
+    _visibleSteps() {
+        const steps = [];
+        for (let index = this._firstStep; index < STEP_TITLES.length; index++) {
+            if (index === 7 && this._isSyncJob())
+                continue;
+            steps.push(index);
+        }
+        return steps;
+    }
+
+    _previousStep() {
+        let index = this._step - 1;
+        if (this._isSyncJob() && index === 7)
+            index = 6;
+        return index;
     }
 
     _showStep(index) {
+        if (this._isSyncJob() && index === 7)
+            index = 8;
         this._step = Math.max(this._firstStep,
             Math.min(STEP_TITLES.length - 1, index));
         const names = ['type', 'name', 'source', 'content', 'filters',
@@ -995,12 +1043,12 @@ export const JobEditor = GObject.registerClass({
         if (this._step === 5 && this.existingGroup)
             this._renderExistingDestinations();
         const title = this.isDraft ? t('Continue job') : this.isNew ? t('New job') : t('Edit job');
-        const position = this._step + 1 - this._firstStep;
-        const total = STEP_TITLES.length - this._firstStep;
+        const steps = this._visibleSteps();
+        const position = Math.max(1, steps.indexOf(this._step) + 1);
         this.windowTitle.title = `${title} · ` +
-            `${STEP_TITLES[this._step]} (${position}/${total})`;
-        this.backButton.visible = this._step > this._firstStep;
-        this.nextButton.visible = this._step < STEP_TITLES.length - 1;
+            `${STEP_TITLES[this._step]} (${position}/${steps.length})`;
+        this.backButton.visible = position > 1;
+        this.nextButton.visible = position < steps.length;
         this.saveButton.visible = this._step === STEP_TITLES.length - 1;
         this.runButton.visible = this._step === STEP_TITLES.length - 1;
         this.cancelButton.label = this._step >= 1 && (this.isNew || this.isDraft)
@@ -1012,8 +1060,15 @@ export const JobEditor = GObject.registerClass({
     }
 
     _next() {
-        if (this._validateStep(this._step))
-            this._showStep(this._step + 1);
+        if (!this._validateStep(this._step))
+            return;
+        let index = this._step + 1;
+        // A destination already selected in the existing list does not need
+        // the "new destination" step.
+        if (this._step === 5 && this._destinationMode !== 'new' &&
+            this._destinationSelected())
+            index = 7;
+        this._showStep(index);
     }
 
     _validateStep(index) {
@@ -1360,6 +1415,9 @@ export const JobEditor = GObject.registerClass({
     _collectJob() {
         const type = this.typeRow.selected === 1 ? JOB_TYPES.BACKUP : JOB_TYPES.SYNC;
         const source = this.sources[0] || {kind: 'local', path: ''};
+        const mode = type === JOB_TYPES.SYNC
+            ? TRIGGER_MODES.REALTIME : this.triggerMode;
+        const dusk = mode === TRIGGER_MODES.DUSK ? this._duskSettings() : null;
         return normalizeJob({
             ...this.job,
             name: this.nameRow.text.trim(),
@@ -1368,15 +1426,16 @@ export const JobEditor = GObject.registerClass({
             sources: [source],
             destination: this.job.destination,
             trigger: {
-                mode: this.triggerMode,
+                mode,
                 intervalMinutes: this._intervalMinutes(),
                 intervalValue: Number(this.intervalRow.value),
                 intervalUnit: INTERVAL_UNITS[this.intervalUnitRow.selected] || 'hours',
                 dayOfWeek: this.dayOfWeekRow.selected,
                 dayOfMonth: Number(this.dayOfMonthRow.value),
-                time: this.triggerMode === TRIGGER_MODES.DUSK
-                    ? this._duskTime()
-                    : (this.timeRow.text.trim() || '18:00'),
+                time: dusk ? dusk.time : (this.timeRow.text.trim() || '18:00'),
+                duskAutomatic: Boolean(dusk?.automatic),
+                duskLatitude: dusk?.automatic ? dusk.latitude : null,
+                duskLongitude: dusk?.automatic ? dusk.longitude : null,
                 idleOnly: this.idleRow.active,
             },
             filters: {

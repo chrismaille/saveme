@@ -7,6 +7,7 @@ import {
     previousRunMs,
     triggerLabel,
 } from '../../../src/domain/schedule.js';
+import {sunsetTime} from '../../../src/domain/sun.js';
 import {assert, assertEqual, suite, test} from '../../harness.js';
 
 const NOW = new Date(2026, 10, 14, 12, 0, 0).getTime();
@@ -115,6 +116,33 @@ export default suite('domain/schedule', [
         const configured = nextRunDelay({mode: 'dusk', time: '23:30'}, evening);
         assertEqual(new Date(evening + configured).getDate(), 14);
         assertEqual(nextRunDelay({mode: 'realtime'}), null);
+    }),
+    test('dusk follows automatic sunset coordinates', () => {
+        const noon = new Date(2026, 10, 21, 12, 0, 0);
+        const trigger = {
+            mode: 'dusk',
+            time: '20:00',
+            duskAutomatic: true,
+            duskLatitude: -23.5505,
+            duskLongitude: -46.6333,
+        };
+        const sunset = sunsetTime(trigger.duskLatitude, trigger.duskLongitude, noon);
+        const [hours, minutes] = sunset.split(':').map(Number);
+        const expected = new Date(2026, 10, 21, hours, minutes, 0).getTime() -
+            noon.getTime();
+        assertEqual(nextRunDelay(trigger, noon.getTime()), expected);
+        assertEqual(triggerLabel(trigger), `At dusk (${sunset})`);
+    }),
+    test('dusk falls back when automatic coordinates are unusable', () => {
+        assertEqual(triggerLabel({mode: 'dusk', time: '21:00',
+            duskAutomatic: true, duskLatitude: 'x', duskLongitude: -46.6}),
+        'At dusk (21:00)');
+        assertEqual(triggerLabel({mode: 'dusk', time: '21:00',
+            duskAutomatic: true, duskLatitude: -23.5, duskLongitude: NaN}),
+        'At dusk (21:00)');
+        assertEqual(triggerLabel({mode: 'dusk', time: '21:00',
+            duskAutomatic: true, duskLatitude: 90, duskLongitude: 0}),
+        'At dusk (21:00)');
     }),
     test('dusk defaults to 18:00 and time parsing is defensive', () => {
         const delay = nextRunDelay({mode: 'dusk'}, NOW);

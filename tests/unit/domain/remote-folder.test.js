@@ -7,6 +7,8 @@ import {assertEqual, suite, test} from '../../harness.js';
 export default suite('domain/remote-folder', [
     test('normalizes and validates cloud folder names', () => {
         assertEqual(normalizeRemoteFolderName('  Minha pasta  '), 'Minha pasta');
+        assertEqual(normalizeRemoteFolderName(null), '');
+        assertEqual(normalizeRemoteFolderName(undefined), '');
         assertEqual(isValidRemoteFolderName('Minha pasta'), true);
         assertEqual(isValidRemoteFolderName('Conexão'), true);
         assertEqual(isValidRemoteFolderName(''), false);

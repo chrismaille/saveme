@@ -75,6 +75,9 @@ export function normalizeJobFields(job) {
     job.trigger.mode = Object.values(TRIGGER_MODES).includes(job.trigger.mode)
         ? job.trigger.mode
         : TRIGGER_MODES.REALTIME;
+    // Sync jobs are always real-time; they do not have a schedule.
+    if (job.type === JOB_TYPES.SYNC)
+        job.trigger.mode = TRIGGER_MODES.REALTIME;
     job.trigger.intervalMinutes = Math.max(1, toNumber(job.trigger.intervalMinutes, 60));
     job.trigger.intervalValue = Math.max(1, toNumber(job.trigger.intervalValue, 1));
     job.trigger.intervalUnit = ['minutes', 'hours', 'days'].includes(job.trigger.intervalUnit)

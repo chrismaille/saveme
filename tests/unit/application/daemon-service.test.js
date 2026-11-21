@@ -806,7 +806,7 @@ export default suite('application/daemon-service', [
         assertEqual(imported.type, 'sync');
         assertEqual(imported.enabled, false);
         assertEqual(imported.destinationLayout, 'saveMe');
-        assertEqual(imported.trigger.mode, 'manual');
+        assertEqual(imported.trigger.mode, 'realtime');
     }),
     test('runs and logs use the state/read adapter', () => {
         const ctx = makeService();

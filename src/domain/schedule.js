@@ -1,3 +1,5 @@
+import {sunsetTime} from './sun.js';
+
 export const INTERVAL_UNITS = ['minutes', 'hours', 'days'];
 export const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -73,7 +75,7 @@ export function nextRunDelay(trigger = {}, nowMs = Date.now()) {
     case 'monthly':
         return nextMonthly(trigger, now);
     case 'dusk':
-        return nextDaily(trigger, now, '18:00');
+        return nextDaily(now, duskTime(trigger, now));
     case 'startup':
     case 'realtime':
     case 'manual':
@@ -83,8 +85,8 @@ export function nextRunDelay(trigger = {}, nowMs = Date.now()) {
     }
 }
 
-function nextDaily(trigger, now, fallbackTime) {
-    const candidate = atTime(now, trigger.time || fallbackTime);
+function nextDaily(now, time) {
+    const candidate = atTime(now, time);
     if (candidate.getTime() <= now.getTime())
         candidate.setDate(candidate.getDate() + 1);
     return candidate.getTime() - now.getTime();
@@ -123,7 +125,7 @@ export function previousRunMs(trigger = {}, nowMs = Date.now()) {
         return candidate.getTime();
     }
     case 'dusk': {
-        const candidate = atTime(now, trigger.time || '18:00');
+        const candidate = atTime(now, duskTime(trigger, now));
         if (candidate.getTime() > now.getTime())
             candidate.setDate(candidate.getDate() - 1);
         return candidate.getTime();
@@ -140,6 +142,17 @@ export function isRunOverdue(trigger, lastRunMs, nowMs = Date.now()) {
     return previous !== null && previous > lastRunMs;
 }
 
+function duskTime(trigger, date = new Date()) {
+    if (trigger.duskAutomatic &&
+        Number.isFinite(Number(trigger.duskLatitude)) &&
+        Number.isFinite(Number(trigger.duskLongitude))) {
+        const time = sunsetTime(trigger.duskLatitude, trigger.duskLongitude, date);
+        if (time)
+            return time;
+    }
+    return trigger.time || '18:00';
+}
+
 export function triggerLabel(trigger = {}) {
     switch (trigger.mode) {
     case 'realtime': return 'Real-time';
@@ -153,7 +166,7 @@ export function triggerLabel(trigger = {}) {
     case 'weekly': return `${WEEKDAYS[trigger.dayOfWeek ?? 1]} at ${trigger.time || '18:00'}`;
     case 'monthly': return `Day ${trigger.dayOfMonth || 1} at ${trigger.time || '18:00'}`;
     case 'startup': return 'At computer startup';
-    case 'dusk': return `At dusk (${trigger.time || '18:00'})`;
+    case 'dusk': return `At dusk (${duskTime(trigger)})`;
     case 'manual': return 'Manual';
     default: return 'Manual';
     }

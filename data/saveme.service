@@ -9,6 +9,7 @@ StartLimitBurst=5
 Type=dbus
 BusName=io.github.chrismaille.SaveMe.Daemon
 ExecStart=/usr/bin/saveme-daemon
+TimeoutStopSec=10
 Restart=on-failure
 RestartSec=2
 

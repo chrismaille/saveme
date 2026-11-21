@@ -20,8 +20,7 @@ ACTION="install"
 PURGE=0
 YES=0
 DRY_RUN=0
-WITH_EXTENSION=1
-START_DAEMON=1
+WITH_EXTENSION=0
 FORCE_REMOTE=0
 VERSION=""
 DEB_OVERRIDE=""
@@ -40,17 +39,18 @@ Usage:
   install.sh [options]
   install.sh --uninstall [options]
 
-The default action installs or updates SaveMe automatically. User data is
-preserved. Use --uninstall to remove it.
+The default action installs or updates the SaveMe package. It does not stop
+the app, restart the daemon or change the running session. User data is
+preserved. Use --uninstall to remove the package.
 
 Options:
   --purge              With --uninstall: also remove config, tokens, logs and history
   --yes                Do not prompt for confirmation
   --dry-run            Print the plan without changing anything
-  --with-extension     Install/update the GNOME Shell extension (default)
-  --no-extension       Do not install or update the GNOME Shell extension
+  --with-extension     Also install/update the GNOME Shell extension (opt-in)
+  --no-extension       Kept for compatibility; skipped by default
   --app-only           Alias for --no-extension
-  --no-start           Do not start the daemon after installation
+  --no-start           Kept for compatibility; no service is started
   --version VERSION    Install a specific release (e.g. 1.0.0)
   --deb PATH           Use a local .deb
   --extension PATH     Use a local extension zip (implies extension)
@@ -75,7 +75,7 @@ while [ $# -gt 0 ]; do
         --dry-run) DRY_RUN=1; shift ;;
         --no-extension|--app-only) WITH_EXTENSION=0; shift ;;
         --with-extension) WITH_EXTENSION=1; shift ;;
-        --no-start) START_DAEMON=0; shift ;;
+        --no-start) shift ;; # Kept for compatibility; services are never started.
         --remote) FORCE_REMOTE=1; shift ;;
         --version) VERSION="${2:-}"; shift 2 ;;
         --deb) DEB_OVERRIDE="${2:-}"; shift 2 ;;
@@ -99,19 +99,37 @@ say() {
     fi
 }
 
+with_timeout() {
+    seconds="$1"
+    shift
+    if command -v timeout >/dev/null 2>&1; then
+        timeout "$seconds" "$@"
+    else
+        "$@"
+    fi
+}
+
 run() {
     if [ "$DRY_RUN" -eq 1 ]; then
         say "+ $*"
         return 0
     fi
     say "+ $*"
+    started="$(date +%s)"
     tmp="$(mktemp)"
-    "$@" >"$tmp" 2>&1
-    status=$?
+    if "$@" >"$tmp" 2>&1; then
+        status=0
+    else
+        status=$?
+    fi
     if [ -s "$tmp" ]; then
         cat "$tmp" | tee -a "$LOG_FILE"
     fi
     rm -f "$tmp"
+    elapsed=$(( $(date +%s) - started ))
+    if [ "$elapsed" -ge 3 ]; then
+        say "  ↳ took ${elapsed}s"
+    fi
     return $status
 }
 
@@ -121,15 +139,23 @@ run_sudo() {
         return 0
     fi
     say "+ sudo $*"
+    started="$(date +%s)"
     tmp="$(mktemp)"
     # The temp file belongs to the unprivileged user; sudo only runs the command.
     # shellcheck disable=SC2024
-    sudo "$@" >"$tmp" 2>&1
-    status=$?
+    if sudo "$@" >"$tmp" 2>&1; then
+        status=0
+    else
+        status=$?
+    fi
     if [ -s "$tmp" ]; then
         cat "$tmp" | tee -a "$LOG_FILE"
     fi
     rm -f "$tmp"
+    elapsed=$(( $(date +%s) - started ))
+    if [ "$elapsed" -ge 3 ]; then
+        say "  ↳ took ${elapsed}s"
+    fi
     return $status
 }
 
@@ -376,7 +402,8 @@ stop_daemon() {
         if [ "$DRY_RUN" -eq 1 ]; then
             say "+ systemctl --user stop saveme.service"
         else
-            systemctl --user stop saveme.service >/dev/null 2>&1 || true
+            with_timeout 15 systemctl --user stop saveme.service \
+                >/dev/null 2>&1 || true
         fi
     fi
     if command -v pkill >/dev/null 2>&1; then
@@ -401,34 +428,6 @@ stop_app() {
     fi
 }
 
-start_daemon() {
-    if command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1; then
-        run systemctl --user daemon-reload || true
-        if ! run systemctl --user enable --now saveme.service; then
-            say "systemd service failed to start; collecting diagnostics"
-            if [ "$DRY_RUN" -eq 0 ]; then
-                {
-                    systemctl --user status saveme.service --no-pager || true
-                    journalctl --user -u saveme.service -n 100 --no-pager || true
-                } 2>&1 | tee -a "$LOG_FILE"
-            fi
-        fi
-        if [ "$DRY_RUN" -eq 0 ]; then
-            sleep 1
-        fi
-    fi
-    if command -v pgrep >/dev/null 2>&1 &&
-        pgrep -f '/usr/lib/saveme/bin/saveme-daemon.js' >/dev/null 2>&1; then
-        say "Daemon is running."
-        return 0
-    fi
-    if [ "$DRY_RUN" -eq 1 ]; then
-        say "+ nohup saveme-daemon >/dev/null 2>&1 &"
-    else
-        nohup saveme-daemon >/dev/null 2>&1 &
-    fi
-}
-
 install_extension() {
     [ "$WITH_EXTENSION" -eq 1 ] || return 0
     if [ ! -f "$EXT" ]; then
@@ -440,8 +439,8 @@ install_extension() {
         say "  /usr/share/saveme/extension.zip"
         return 0
     fi
-    run gnome-extensions install --force "$EXT" || true
-    run gnome-extensions enable "$UUID" || true
+    run with_timeout 20 gnome-extensions install --force "$EXT" || true
+    run with_timeout 10 gnome-extensions enable "$UUID" || true
     say "If the extension does not appear, log out and log back in."
 }
 
@@ -508,7 +507,7 @@ do_install() {
     if [ "$WITH_EXTENSION" -eq 1 ]; then
         say "  extension: $EXT"
     else
-        say "  extension: skipped (--no-extension)"
+        say "  extension: skipped (the app installs/updates it on launch)"
     fi
     say ""
     if [ "$DRY_RUN" -eq 0 ] && ! sudo -v; then
@@ -516,9 +515,6 @@ do_install() {
         exit 1
     fi
 
-    stop_daemon
-    stop_app
-    mask_daemon
     case "$DEB" in
         /*) DEB_INSTALL="$DEB" ;;
         *) DEB_INSTALL="$(pwd)/$DEB" ;;
@@ -533,22 +529,18 @@ do_install() {
         say "Check the apt output above and the package dependencies."
         exit 1
     fi
-    unmask_daemon
-    install_extension
-    if [ "$START_DAEMON" -eq 1 ]; then
-        start_daemon
+    if [ "$WITH_EXTENSION" -eq 1 ]; then
+        install_extension
     fi
 
     if [ "$DRY_RUN" -eq 0 ]; then
         say ""
-        say "Installation check:"
-        saveme doctor || true
-        if [ "$WITH_EXTENSION" -eq 1 ] && command -v gnome-extensions >/dev/null 2>&1; then
-            gnome-extensions info "$UUID" 2>/dev/null || true
-        fi
-        if [ "$WITH_EXTENSION" -eq 0 ]; then
-            say "GNOME extension: not installed (use --with-extension to add it)."
-        fi
+        say "SaveMe installed/updated."
+        say "Running app, daemon and extension keep their current version until restarted."
+        say ""
+        say "To apply the update now (this interrupts running jobs):"
+        say "  systemctl --user restart saveme.service"
+        say "The GNOME extension is refreshed by the app on next launch."
         say ""
         say "Open the app with: saveme"
         say "Installation log: $LOG_FILE"

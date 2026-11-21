@@ -715,6 +715,7 @@ const CATALOGS = {
         'Opening restore': 'Abrindo restauração',
         'Restore ready.': 'Restauração pronta.',
         'Cannot prepare restore: {message}': 'Não foi possível preparar a restauração: {message}',
+        'Already imported': 'Já importado',
     },
     es: {
         'Jobs': 'Tareas', 'Accounts': 'Cuentas', 'Settings': 'Configuración',

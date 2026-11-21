@@ -46,6 +46,7 @@ ACTION="install"
 PURGE=0
 YES=0
 NO_START=0
+RELOAD_EXTENSION=0
 DRY_RUN=0
 
 usage() {
@@ -65,8 +66,10 @@ Options:
   --uninstall    Remove the development build
   --purge        With --uninstall: also remove dev config, state and cache
   --yes          Do not ask for confirmation on uninstall
-  --no-start     Install the daemon service but do not start it
-  --dry-run      Show the plan without changing anything
+  --no-start          Install the daemon service but do not start it
+  --reload-extension  Reload the GNOME extension after updating it
+                     (the Shell can pause briefly while it reloads)
+  --dry-run           Show the plan without changing anything
   -h, --help     Show this help
 
 Environment overrides:
@@ -81,6 +84,7 @@ while [ $# -gt 0 ]; do
         --purge) PURGE=1; shift ;;
         --yes|-y) YES=1; shift ;;
         --no-start) NO_START=1; shift ;;
+        --reload-extension) RELOAD_EXTENSION=1; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
         --help|-h) usage; exit 0 ;;
         *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
@@ -96,13 +100,33 @@ say() {
     printf '%s\n' "$*"
 }
 
+with_timeout() {
+    seconds="$1"
+    shift
+    if command -v timeout >/dev/null 2>&1; then
+        timeout "$seconds" "$@"
+    else
+        "$@"
+    fi
+}
+
 run() {
     if [ "$DRY_RUN" -eq 1 ]; then
         say "+ $*"
         return 0
     fi
     say "+ $*"
-    "$@"
+    started="$(date +%s)"
+    if "$@"; then
+        status=0
+    else
+        status=$?
+    fi
+    elapsed=$(( $(date +%s) - started ))
+    if [ "$elapsed" -ge 3 ]; then
+        say "  ↳ took ${elapsed}s"
+    fi
+    return "$status"
 }
 
 write_file() {
@@ -121,9 +145,16 @@ has_user_systemd() {
         systemctl --user show-environment >/dev/null 2>&1
 }
 
+extension_enabled() {
+    command -v gnome-extensions >/dev/null 2>&1 &&
+        gnome-extensions list --enabled 2>/dev/null |
+            grep -qx "$EXTENSION_UUID"
+}
+
 stop_dev_daemon() {
     if [ "${SAVEME_DEV_SKIP_SYSTEMD:-0}" != 1 ] && has_user_systemd; then
-        run systemctl --user stop "$UNIT_NAME" >/dev/null 2>&1 || true
+        run with_timeout 15 systemctl --user stop "$UNIT_NAME" \
+            >/dev/null 2>&1 || true
     fi
     run pkill -TERM -f "$PREFIX/bin/saveme-daemon.js" >/dev/null 2>&1 || true
 }
@@ -162,13 +193,15 @@ uninstall_dev() {
     run rm -rf "$PREFIX"
 
     if [ "${SAVEME_DEV_SKIP_SYSTEMD:-0}" != 1 ] && has_user_systemd; then
-        run systemctl --user daemon-reload >/dev/null 2>&1 || true
+        run with_timeout 10 systemctl --user daemon-reload >/dev/null 2>&1 || true
     fi
     if command -v update-desktop-database >/dev/null 2>&1; then
-        run update-desktop-database "$APPLICATIONS_DIR" >/dev/null 2>&1 || true
+        run with_timeout 20 update-desktop-database "$APPLICATIONS_DIR" \
+            >/dev/null 2>&1 || true
     fi
     if command -v gtk-update-icon-cache >/dev/null 2>&1; then
-        run gtk-update-icon-cache -f -t "$DATA_HOME/icons/hicolor" >/dev/null 2>&1 || true
+        run with_timeout 20 gtk-update-icon-cache -f -t "$DATA_HOME/icons/hicolor" \
+            >/dev/null 2>&1 || true
     fi
 
     if [ "$PURGE" -eq 1 ]; then
@@ -229,6 +262,9 @@ say "  extension:  $EXTENSION_UUID"
 say "  config:     $CONFIG_DIR"
 say "  state:      $STATE_DIR"
 say "  production: untouched"
+say ""
+say "Stopping SaveMe Dev. Running jobs are interrupted and resume when the daemon"
+say "starts again. The daemon restart is needed to load the new code."
 
 stop_dev_daemon
 
@@ -348,6 +384,7 @@ StartLimitBurst=5
 Type=dbus
 BusName=$DAEMON_ID
 ExecStart=$BIN_DIR/saveme-dev-daemon
+TimeoutStopSec=10
 Restart=on-failure
 RestartSec=2
 
@@ -388,34 +425,48 @@ X-GNOME-Autostart-enabled=true
 EOF
 
 if [ "${SAVEME_DEV_SKIP_SYSTEMD:-0}" != 1 ] && has_user_systemd; then
-    run systemctl --user daemon-reload >/dev/null 2>&1 || true
+    run with_timeout 10 systemctl --user daemon-reload >/dev/null 2>&1 || true
 fi
 
 if command -v update-desktop-database >/dev/null 2>&1; then
-    run update-desktop-database "$APPLICATIONS_DIR" >/dev/null 2>&1 || true
+    run with_timeout 20 update-desktop-database "$APPLICATIONS_DIR" \
+        >/dev/null 2>&1 || true
 fi
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then
-    run gtk-update-icon-cache -f -t "$DATA_HOME/icons/hicolor" >/dev/null 2>&1 || true
+    run with_timeout 20 gtk-update-icon-cache -f -t "$DATA_HOME/icons/hicolor" \
+        >/dev/null 2>&1 || true
 fi
 
 if [ "${SAVEME_DEV_SKIP_EXTENSION:-0}" = 1 ]; then
     say "GNOME extension install skipped (SAVEME_DEV_SKIP_EXTENSION=1)."
 elif command -v gnome-extensions >/dev/null 2>&1; then
     if [ "$DRY_RUN" -eq 1 ]; then
-        say "+ gnome-extensions install --force $PREFIX/extension.zip"
-        say "+ gnome-extensions disable $EXTENSION_UUID"
-        say "+ gnome-extensions enable $EXTENSION_UUID"
+        say "+ with_timeout 20 gnome-extensions install --force $PREFIX/extension.zip"
+        if [ "$RELOAD_EXTENSION" -eq 1 ]; then
+            say "+ with_timeout 10 gnome-extensions disable $EXTENSION_UUID"
+            say "+ with_timeout 10 gnome-extensions enable $EXTENSION_UUID"
+        elif extension_enabled; then
+            say "+ extension already enabled; no reload"
+        else
+            say "+ with_timeout 10 gnome-extensions enable $EXTENSION_UUID"
+        fi
     else
-        if ! gnome-extensions install --force "$PREFIX/extension.zip"; then
+        if ! with_timeout 20 gnome-extensions install --force "$PREFIX/extension.zip"; then
             say "Could not install the development GNOME extension now."
             say "To open SaveMe Dev, use: $BIN_DIR/saveme-dev"
+        elif [ "$RELOAD_EXTENSION" -eq 1 ]; then
+            say "Reloading the GNOME extension; the Shell can pause briefly…"
+            with_timeout 10 gnome-extensions disable "$EXTENSION_UUID" \
+                >/dev/null 2>&1 || true
+            with_timeout 10 gnome-extensions enable "$EXTENSION_UUID" \
+                >/dev/null 2>&1 || true
+        elif extension_enabled; then
+            say "Extension files updated. The running panel keeps the old version;"
+            say "use --reload-extension or log out and back in to load it."
         else
-            # Reload an already-enabled extension so code and icon changes
-            # take effect without requiring a full session restart.
-            gnome-extensions disable "$EXTENSION_UUID" >/dev/null 2>&1 || true
+            with_timeout 10 gnome-extensions enable "$EXTENSION_UUID" \
+                >/dev/null 2>&1 || true
         fi
-        gnome-extensions enable "$EXTENSION_UUID" >/dev/null 2>&1 ||
-            say "The extension will be enabled when you open SaveMe Dev."
     fi
 else
     say "gnome-extensions is unavailable; the app will try to install it on first launch."
@@ -431,7 +482,7 @@ elif [ "${SAVEME_DEV_SKIP_SYSTEMD:-0}" = 1 ] || ! has_user_systemd; then
         nohup "$BIN_DIR/saveme-dev-daemon" >"$STATE_DIR/daemon.stdout.log" 2>&1 &
         say "Daemon started in the background (PID $!)."
     fi
-elif ! run systemctl --user enable --now "$UNIT_NAME"; then
+elif ! run with_timeout 20 systemctl --user enable --now "$UNIT_NAME"; then
     say "The systemd user service could not be started."
     if [ "$DRY_RUN" -eq 0 ]; then
         mkdir -p "$STATE_DIR"

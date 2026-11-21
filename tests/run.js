@@ -25,6 +25,7 @@ import includeFilterSuite from './unit/domain/include-filter.test.js';
 import remoteNameSuite from './unit/domain/remote-name.test.js';
 import remoteFolderSuite from './unit/domain/remote-folder.test.js';
 import scheduleSuite from './unit/domain/schedule.test.js';
+import sunSuite from './unit/domain/sun.test.js';
 import syncServiceSuite from './unit/application/sync-service.test.js';
 import backupServiceSuite from './unit/application/backup-service.test.js';
 import restoreServiceSuite from './unit/application/restore-service.test.js';
@@ -91,6 +92,7 @@ const suites = [
     remoteNameSuite,
     remoteFolderSuite,
     scheduleSuite,
+    sunSuite,
     syncServiceSuite,
     backupServiceSuite,
     restoreServiceSuite,

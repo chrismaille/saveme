@@ -146,6 +146,7 @@ export const RecoverDialog = GObject.registerClass({
         locationGroup.add(this.statusRow);
         page.add(locationGroup);
         this.resultsGroup = new Adw.PreferencesGroup({title: t('Jobs')});
+        this.resultRows = [];
         page.add(this.resultsGroup);
         return page;
     }
@@ -185,12 +186,14 @@ export const RecoverDialog = GObject.registerClass({
     }
 
     _clearResults() {
-        let child = this.resultsGroup.get_first_child();
-        while (child) {
-            const next = child.get_next_sibling();
-            this.resultsGroup.remove(child);
-            child = next;
-        }
+        for (const row of this.resultRows || [])
+            this.resultsGroup.remove(row);
+        this.resultRows = [];
+    }
+
+    _addResultRow(row) {
+        this.resultsGroup.add(row);
+        this.resultRows.push(row);
     }
 
     async _inspect(path) {
@@ -241,6 +244,9 @@ export const RecoverDialog = GObject.registerClass({
                     subtitle += ` · ${t('sources found')}`;
                 if (entry.idMismatch)
                     subtitle += ` · ${t('id differs from the folder name')}`;
+                const existing = this.mode === 'import' &&
+                    (this.parentWindow.snapshot?.jobs || [])
+                        .some(item => item.id === entry.id);
                 const row = new Adw.ActionRow({
                     title: job.name || entry.id,
                     subtitle,
@@ -254,14 +260,19 @@ export const RecoverDialog = GObject.registerClass({
                     valign: Gtk.Align.CENTER,
                     css_classes: ['suggested-action'],
                 });
-                if (this.mode === 'restore' && job.type === 'backup')
+                if (existing) {
+                    action.label = t('Already imported');
+                    action.sensitive = false;
+                    action.remove_css_class('suggested-action');
+                } else if (this.mode === 'restore' && job.type === 'backup') {
                     action.connect('clicked', () => this._restoreEntry(entry, result));
-                else if (this.mode === 'restore')
+                } else if (this.mode === 'restore') {
                     action.connect('clicked', () => this._openCurrent(entry));
-                else
+                } else {
                     action.connect('clicked', () => this._confirmImport(entry, result));
+                }
                 row.add_suffix(action);
-                this.resultsGroup.add(row);
+                this._addResultRow(row);
                 continue;
             }
             const row = new Adw.ActionRow({
@@ -283,7 +294,7 @@ export const RecoverDialog = GObject.registerClass({
                 open.connect('clicked', () => this._openCurrent(entry));
                 row.add_suffix(open);
             }
-            this.resultsGroup.add(row);
+            this._addResultRow(row);
         }
     }
 
